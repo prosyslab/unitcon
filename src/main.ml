@@ -1,19 +1,32 @@
-open Language
+module F = Format
+module MethodMap = Language.MethodMap
 
-let parse_node n = failwith "not implemented"
-
-let parse_edge n = failwith "not implemented"
-
-(* parse call_graph.json *)
 let parse_json filename =
   let json = Yojson.Safe.from_file filename in
-  match json with
-  | `Assoc l ->
-    List.fold_left
-      (fun graph (fd, value) ->
-        match fd with
-        | "node" -> { graph with Callgraph.node = parse_node value }
-        | "edge" -> { graph with edge = parse_edge value}
-        | _ -> failwith "Invalid input" )
-      Callgraph.empty l
-  | _ -> failwith "Invalid input"
+  let method_map = Yojson.Safe.Util.member "node" json |> MethodMap.of_json in
+  let call_graph = Yojson.Safe.Util.member "edge" json |> Callgraph.of_json in
+  (method_map, call_graph)
+
+let print_callgraph call_graph =
+  let oc = open_out (Filename.concat !Cmdline.out_dir "callgraph.dot") in
+  Callgraph.Graphviz.output_graph oc call_graph
+
+let initialize () =
+  (try Unix.mkdir !Cmdline.out_dir 0o775
+   with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+  print_endline ("Logging to " ^ !Cmdline.out_dir);
+  Filename.concat !Cmdline.out_dir "log.txt" |> Logger.from_file
+
+let synthesize method_map call_graph =
+  (* generate Spoon class here *)
+  ()
+
+let main () =
+  let usage = "Usage: unitgen [options] input" in
+  Arg.parse Cmdline.options Cmdline.parse_arg usage;
+  initialize ();
+  let method_map, call_graph = parse_json !Cmdline.input_file in
+  if !Cmdline.print_callgraph then print_callgraph call_graph;
+  synthesize method_map call_graph
+
+let _ = main ()

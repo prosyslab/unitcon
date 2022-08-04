@@ -22,5 +22,6 @@ else
 fi
 
 eval $(SHELL=bash opam config env --switch=$UNITGEN_OPAM_SWITCH)
-opam install -j $NCPU yojson
+opam pin add git@github.com:prosyslab/logger.git
+opam install -j $NCPU ocamlgraph yojson logger ppx_compare
 make

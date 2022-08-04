@@ -1,18 +1,22 @@
 {
-    "node": [
-        {"node1": {
-            "method_name": "hello",
-            "modifier": "private",
-            "param": ["Int", "String"]
-        }},
-        {"node2": {
-            "method_name": "sum",
-            "modifier": "public",
-            "param": ["Int", "Int"]
-        }}
-    ],
-    "edge": [
-        {"node1": ["node2", "node3"]},
-        {"node2": ["node3"]}
-    ]
+ "node": [{
+   "name": "hello",
+   "modifier": "private",
+   "param": ["Int", "String"]
+  },
+  {
+   "name": "sum",
+   "modifier": "public",
+   "param": ["Int", "Int"]
+  },
+  {
+   "name": "good",
+   "modifier": "public",
+   "param": ["Int"]
+  }
+ ],
+ "edge": {
+  "hello": ["sum", "good"],
+  "sum": ["good"]
+ }
 }

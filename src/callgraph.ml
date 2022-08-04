@@ -1,32 +1,38 @@
-type info = {
-  method_name : string;
-  modifier : string;
-  param : string list;
-}
+module Json = Yojson.Safe
+module JsonUtil = Yojson.Safe.Util
 
 module Node = struct
-  include Map.Make (struct
-    type t = info
+  include String
 
-    let compare = compare
-  end)
+  let hash = Hashtbl.hash
 end
 
-module Callee = struct
-  include Map.Make (struct
-    type t = string
+module G = struct
+  include Graph.Persistent.Digraph.ConcreteBidirectional (Node)
 
-    let compare = compare
-  end)
+  let graph_attributes _ = []
+
+  let default_vertex_attributes _ = []
+
+  let vertex_name v = v
+
+  let vertex_attributes _ = []
+
+  let get_subgraph _ = None
+
+  let default_edge_attributes _ = []
+
+  let edge_attributes _ = []
 end
 
-type t = {
-  node : string list Node.t;
-  edge : string list Callee.t;
-}
+let of_json json =
+  JsonUtil.to_assoc json
+  |> List.fold_left
+       (fun g (caller, callees) ->
+         JsonUtil.to_list callees
+         |> List.map JsonUtil.to_string
+         |> List.fold_left (fun g callee -> G.add_edge g caller callee) g)
+       G.empty
 
-let empty =
-{
-  node = Node.empty;
-  edge = Callee.empty;
-}
+module Graphviz = Graph.Graphviz.Dot (G)
+include G
