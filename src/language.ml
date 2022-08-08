@@ -12,6 +12,8 @@ let modifier_of_json json =
   | "protected" -> Protected
   | s -> failwith ("Unknown modifier " ^ s)
 
+let param_of_json json = List.map JsonUtil.to_string json
+
 type args = var list
 
 type exp =
@@ -39,7 +41,10 @@ module Method = struct
     let modifier =
       Yojson.Safe.Util.member "modifier" json |> modifier_of_json
     in
-    let param = [] in
+    let param =
+      Yojson.Safe.Util.member "param" json
+      |> Yojson.Safe.Util.to_list |> param_of_json
+    in
     { name; modifier; param }
 end
 
