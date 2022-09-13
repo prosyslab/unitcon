@@ -1,0 +1,212 @@
+[
+  {
+    "Main.<init>()": [
+      {
+        "visited": [
+          "16"
+        ],
+        "precond": [
+          "this = val$1:"
+        ],
+        "postcond": [
+          "return = val$2:",
+          "this = val$1:"
+        ]
+      }
+    ]
+  },
+  {
+    "Obj.<init>()": [
+      {
+        "visited": [
+          "7"
+        ],
+        "precond": [
+          "this = val$1:"
+        ],
+        "postcond": [
+          "return = val$2:",
+          "this = val$1:"
+        ]
+      }
+    ]
+  },
+  {
+    "void State.execute()": [
+      {
+        "visited": [
+          "2",
+          "4"
+        ],
+        "precond": [
+          "this = val$1:"
+        ],
+        "postcond": [
+          "return = val$2:",
+          "this = val$1:"
+        ]
+      }
+    ]
+  },
+  {
+    "State.<init>()": [
+      {
+        "visited": [
+          "1"
+        ],
+        "precond": [
+          "this = val$1:"
+        ],
+        "postcond": [
+          "return = val$2:",
+          "this = val$1:"
+        ]
+      }
+    ]
+  },
+  {
+    "State Obj.getState(int)": [
+      {
+        "visited": [
+          "8",
+          "9",
+          "10",
+          "12"
+        ],
+        "precond": [
+          "i = 0:",
+          "this = val$1:"
+        ],
+        "postcond": [
+          "MEMne<new:10>(return)",
+          "i = 0:",
+          "return = val$2:",
+          "this = val$1:",
+          "return|->{}:"
+        ]
+      },
+      {
+        "visited": [
+          "8",
+          "9",
+          "12"
+        ],
+        "precond": [
+          "i != 0",
+          "i = val$2:",
+          "this = val$1:"
+        ],
+        "postcond": [
+          "i != 0",
+          "i = val$2:",
+          "return = null:",
+          "this = val$1:"
+        ]
+      }
+    ]
+  },
+  {
+    "void Main.f(Obj,int)": [
+      {
+        "visited": [
+          "17",
+          "18",
+          "19",
+          "20"
+        ],
+        "precond": [
+          "i = 0:",
+          "this = val$2:",
+          "o = val$1:",
+          "o|->{}:"
+        ],
+        "postcond": [
+          "i = 0:",
+          "return = val$3:",
+          "this = val$2:",
+          "o = val$1:",
+          "o|->{}:"
+        ]
+      }
+    ]
+  },
+  {
+    "int Object.hashCode()": [
+      {
+        "visited": [
+          "20",
+          "21"
+        ],
+        "precond": [
+          "this = val$1:"
+        ],
+        "postcond": [
+          "UND<int InferUndefined.int_undefined()>:21(return)",
+          "return = val$2:",
+          "this = val$1:"
+        ]
+      }
+    ]
+  },
+  {
+    "Class Object.getClass()": [
+      {
+        "visited": [
+          "14",
+          "15",
+          "16",
+          "17"
+        ],
+        "precond": [
+          "this = val$1:"
+        ],
+        "postcond": [
+          "val$3 != 0",
+          "MEMne<new:15>(return)",
+          "UND<Object InferUndefined.object_undefined()>:16(val$3)",
+          "return = val$2:",
+          "this = val$1:",
+          "val$3|->{}:",
+          "return|->{name:val$3}:"
+        ]
+      }
+    ]
+  },
+  {
+    "Class Class.getPrimitiveClass(String)": [
+      {
+        "visited": [
+          "26",
+          "27",
+          "28",
+          "29"
+        ],
+        "precond": [
+          "name = val$1:"
+        ],
+        "postcond": [
+          "MEMne<new:27>(return)",
+          "name = val$1:",
+          "return = val$2:",
+          "return|->{name:name}:"
+        ]
+      }
+    ]
+  },
+  {
+    "Object.<init>()": [
+      {
+        "visited": [
+          "12"
+        ],
+        "precond": [
+          "this = val$1:"
+        ],
+        "postcond": [
+          "return = val$2:",
+          "this = val$1:"
+        ]
+      }
+    ]
+  }
+]
