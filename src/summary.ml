@@ -54,9 +54,18 @@ type postcond = Memory.t
 
 type visited = int list
 
-type t = { precond : precond; postcond : postcond; visited : visited }
+type filename = string
+
+type t = {
+  precond : precond;
+  postcond : postcond;
+  visited : visited;
+  filename : filename;
+}
 
 type summary = t list
+
+type key = { filename : filename; visited : visited }
 
 module SummaryMap = struct
   module M = Map.Make (struct
@@ -67,6 +76,17 @@ module SummaryMap = struct
   end)
 
   type t = summary M.t
+end
+
+module FindMethodMap = struct
+  module M = Map.Make (struct
+    type t = key
+
+    let compare = compare
+  end)
+
+  (* type t = Method.t M.t*)
+  type t = string M.t
 end
 
 let mk_exp exp =
@@ -86,7 +106,7 @@ let mk_field_list field =
   List.map (fun x -> mk_field x) field_list
 
 let summary_element x =
-  let item = Yojson.Safe.Util.to_string x in
+  let item = JsonUtil.to_string x in
   match item with
   | _ when String.contains item '!' ->
       let list = String.split_on_char '=' item in
@@ -142,32 +162,72 @@ let summary_element x =
       in
       let field = mk_field_list field_list in
       Predicate.Object (mk_exp expression, Exp.Field field)
-  | _ -> failwith "not implemented"
+  | _ -> failwith "summary element not implemented"
 
-let summary_split item =
+let summary_split item filename =
   let v =
-    Yojson.Safe.Util.member "visited" item
-    |> Yojson.Safe.Util.to_list
-    |> List.map (fun x -> Yojson.Safe.Util.to_string x |> int_of_string)
+    JsonUtil.member "visited" item
+    |> JsonUtil.to_list
+    |> List.map (fun x -> JsonUtil.to_string x |> int_of_string)
   in
   let pre =
-    Yojson.Safe.Util.member "precond" item
-    |> Yojson.Safe.Util.to_list
+    JsonUtil.member "precond" item
+    |> JsonUtil.to_list
     |> List.map (fun x -> summary_element x)
   in
   let post =
-    Yojson.Safe.Util.member "postcond" item
-    |> Yojson.Safe.Util.to_list
+    JsonUtil.member "postcond" item
+    |> JsonUtil.to_list
     |> List.map (fun x -> summary_element x)
   in
-  { precond = pre; postcond = post; visited = v }
+  { precond = pre; postcond = post; visited = v; filename }
 
 let name_split assoc mmap =
-  let name, summary_list = Yojson.Safe.Util.to_assoc assoc |> List.hd in
-  let summary =
-    Yojson.Safe.Util.to_list summary_list |> List.map (fun x -> summary_split x)
+  let method_name =
+    JsonUtil.member "method" assoc
+    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
   in
-  SummaryMap.M.add name summary mmap
+  let file_name =
+    JsonUtil.member "filename" assoc
+    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
+  in
+  let summary =
+    JsonUtil.member "summary" assoc
+    |> JsonUtil.to_list
+    |> List.map (fun x -> summary_split x file_name)
+  in
+  SummaryMap.M.add method_name summary mmap
 
 let from_json json =
   List.fold_left (fun mmap item -> name_split item mmap) SummaryMap.M.empty json
+
+let name_split_making_methodmap assoc mmap =
+  let method_name =
+    JsonUtil.member "method" assoc
+    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
+  in
+  let file_name =
+    JsonUtil.member "filename" assoc
+    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
+  in
+  let visited_list item =
+    JsonUtil.member "visited" item
+    |> JsonUtil.to_list
+    |> List.map (fun x -> JsonUtil.to_string x |> int_of_string)
+  in
+  let summary =
+    JsonUtil.member "summary" assoc
+    |> JsonUtil.to_list
+    |> List.map (fun x -> visited_list x)
+  in
+  List.fold_left
+    (fun mmap item ->
+      FindMethodMap.M.add
+        { filename = file_name; visited = item }
+        method_name mmap)
+    mmap summary
+
+let making_methodmap json =
+  List.fold_left
+    (fun mmap item -> name_split_making_methodmap item mmap)
+    FindMethodMap.M.empty json

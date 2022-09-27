@@ -12,6 +12,19 @@ let parse_summary filename =
   let list = Yojson.Safe.Util.to_list json in
   Summary.from_json list
 
+let parse_for_finding filename =
+  let json = Yojson.Safe.from_file filename in
+  let list = Yojson.Safe.Util.to_list json in
+  Summary.making_methodmap list
+
+let parse_trace filename =
+  let json = Yojson.Safe.from_file filename in
+  Trace.from_json json
+
+let get_target_method filename =
+  let json = Yojson.Safe.from_file filename in
+  Trace.target_method json
+
 let print_callgraph call_graph =
   let oc = open_out (Filename.concat !Cmdline.out_dir "callgraph.dot") in
   Callgraph.Graphviz.output_graph oc call_graph
@@ -32,12 +45,19 @@ let main () =
   let usage = "Usage: unitgen [options] input_files" in
   Arg.parse Cmdline.options Cmdline.parse_arg usage;
   initialize ();
+  (*
   let method_map, call_graph =
     parse_json (!Cmdline.input_files |> List.tl |> List.hd)
   in
+  *)
+  let trace = parse_trace (!Cmdline.input_files |> List.tl |> List.hd) in
+  let target_method =
+    get_target_method (!Cmdline.input_files |> List.tl |> List.hd)
+  in
   let summary = parse_summary (!Cmdline.input_files |> List.hd) in
-
-  if !Cmdline.print_callgraph then print_callgraph call_graph;
+  let for_finding = parse_for_finding (!Cmdline.input_files |> List.hd) in
+  (*if !Cmdline.print_callgraph then print_callgraph call_graph;*)
+  let _ = Calculation.calc_precond trace summary for_finding in
   if !Cmdline.parse_summary then print_summary summary
 
 let _ = main ()
