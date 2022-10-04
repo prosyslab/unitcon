@@ -6,6 +6,11 @@
 make
 ```
 
+## Run
+```
+./unitgen test/null1.json test/summary1.json
+```
+
 ## Visualize a Callgraph
 ```
 ./unitgen -print-callgraph test/example1.json
