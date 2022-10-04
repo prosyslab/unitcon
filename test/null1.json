@@ -1,0 +1,60 @@
+[
+  {
+    "bug_type": "NULL_DEREFERENCE",
+    "qualifier": "object `s` last assigned on line 18 could be null and is dereferenced at line 19.",
+    "severity": "ERROR",
+    "line": 19,
+    "column": -1,
+    "procedure": "Main.f(Obj,int):void",
+    "procedure_start_line": 17,
+    "file": "Main.java",
+    "bug_trace": [
+      {
+        "level": 0,
+        "filename": "Main.java",
+        "line_number": 17,
+        "column_number": -1,
+        "description": "void Main.f(Obj,int)"
+      },
+      {
+        "level": 0,
+        "filename": "Main.java",
+        "line_number": 18,
+        "column_number": -1,
+        "description": "void Main.f(Obj,int)"
+      },
+      {
+        "level": 1,
+        "filename": "Main.java",
+        "line_number": 8,
+        "column_number": -1,
+        "description": "State Obj.getState(int)"
+      },
+      {
+        "level": 1,
+        "filename": "Main.java",
+        "line_number": 9,
+        "column_number": -1,
+        "description": "State Obj.getState(int)"
+      },
+      {
+        "level": 1,
+        "filename": "Main.java",
+        "line_number": 12,
+        "column_number": -1,
+        "description": "State Obj.getState(int)"
+      },
+      {
+        "level": 0,
+        "filename": "Main.java",
+        "line_number": 19,
+        "column_number": -1,
+        "description": "void Main.f(Obj,int)"
+      }
+    ],
+    "key": "Main.java|f|NULL_DEREFERENCE",
+    "node_key": "b0ed25eec6c25e7c4348974d51cf6b89",
+    "hash": "df0e57e567ab5fa4290d73f822e4c090",
+    "bug_type_hum": "Null Dereference"
+  }
+]

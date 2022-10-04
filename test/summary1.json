@@ -1,6 +1,15 @@
 [
   {
-    "Main.<init>()": [
+    "method": [
+      "Main.<init>()"
+    ],
+    "param": [
+      "this:Main*"
+    ],
+    "filename": [
+      "Main.java"
+    ],
+    "summary": [
       {
         "visited": [
           "16"
@@ -16,7 +25,16 @@
     ]
   },
   {
-    "Obj.<init>()": [
+    "method": [
+      "Obj.<init>()"
+    ],
+    "param": [
+      "this:Obj*"
+    ],
+    "filename": [
+      "Main.java"
+    ],
+    "summary": [
       {
         "visited": [
           "7"
@@ -32,7 +50,16 @@
     ]
   },
   {
-    "void State.execute()": [
+    "method": [
+      "void State.execute()"
+    ],
+    "param": [
+      "this:State*"
+    ],
+    "filename": [
+      "Main.java"
+    ],
+    "summary": [
       {
         "visited": [
           "2",
@@ -49,7 +76,16 @@
     ]
   },
   {
-    "State.<init>()": [
+    "method": [
+      "State.<init>()"
+    ],
+    "param": [
+      "this:State*"
+    ],
+    "filename": [
+      "Main.java"
+    ],
+    "summary": [
       {
         "visited": [
           "1"
@@ -65,7 +101,17 @@
     ]
   },
   {
-    "State Obj.getState(int)": [
+    "method": [
+      "State Obj.getState(int)"
+    ],
+    "param": [
+      "this:Obj*",
+      "i:int"
+    ],
+    "filename": [
+      "Main.java"
+    ],
+    "summary": [
       {
         "visited": [
           "8",
@@ -106,16 +152,25 @@
     ]
   },
   {
-    "void Main.f(Obj,int)": [
+    "method": [
+      "void Main.f(Obj,int)"
+    ],
+    "param": [
+      "this:Main*",
+      "o:Obj*",
+      "i:int"
+    ],
+    "filename": [
+      "Main.java"
+    ],
+    "summary": [
       {
         "visited": [
           "17",
           "18",
-          "19",
-          "20"
+          "19"
         ],
         "precond": [
-          "i = 0:",
           "this = val$2:",
           "o = val$1:",
           "o|->{}:"
@@ -131,7 +186,16 @@
     ]
   },
   {
-    "int Object.hashCode()": [
+    "method": [
+      "int Object.hashCode()"
+    ],
+    "param": [
+      "this:java.lang.Object*"
+    ],
+    "filename": [
+      "java/src/java/lang/Object.java"
+    ],
+    "summary": [
       {
         "visited": [
           "20",
@@ -149,7 +213,16 @@
     ]
   },
   {
-    "Class Object.getClass()": [
+    "method": [
+      "Class Object.getClass()"
+    ],
+    "param": [
+      "this:java.lang.Object*"
+    ],
+    "filename": [
+      "java/src/java/lang/Object.java"
+    ],
+    "summary": [
       {
         "visited": [
           "14",
@@ -173,7 +246,16 @@
     ]
   },
   {
-    "Class Class.getPrimitiveClass(String)": [
+    "method": [
+      "Class Class.getPrimitiveClass(String)"
+    ],
+    "param": [
+      "name:java.lang.String*"
+    ],
+    "filename": [
+      "java/src/java/lang/Class.java"
+    ],
+    "summary": [
       {
         "visited": [
           "26",
@@ -194,7 +276,16 @@
     ]
   },
   {
-    "Object.<init>()": [
+    "method": [
+      "Object.<init>()"
+    ],
+    "param": [
+      "this:java.lang.Object*"
+    ],
+    "filename": [
+      "java/src/java/lang/Object.java"
+    ],
+    "summary": [
       {
         "visited": [
           "12"
