@@ -1,6 +1,6 @@
 (executable
  (name main)
- (modules main language callgraph cmdline summary trace calculation)
+ (modules main language callgraph cmdline summary trace calculation makeTC)
  (libraries logger ocamlgraph unix yojson str core z3)
  (preprocess
   (pps ppx_compare)))

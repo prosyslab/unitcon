@@ -6,7 +6,7 @@ module FindMethodMap = Summary.FindMethodMap
 
 module TraceMap = struct
   module M = Map.Make (struct
-    type t = int
+    type t = string
 
     let compare = compare
   end)
@@ -17,18 +17,21 @@ end
 
 let bug_trace assoc mmap =
   let file_name = JsonUtil.member "filename" assoc |> JsonUtil.to_string in
-  let level = JsonUtil.member "level" assoc |> JsonUtil.to_int in
+  let method_name = JsonUtil.member "description" assoc |> JsonUtil.to_string in
   let line = JsonUtil.member "line_number" assoc |> JsonUtil.to_int in
-  if TraceMap.M.mem level mmap then
-    let key = TraceMap.M.find level mmap in
+  if TraceMap.M.mem method_name mmap then
+    let key = TraceMap.M.find method_name mmap in
     let file_name = key.Summary.filename in
     let line_list = key.Summary.visited in
-    TraceMap.M.add level
+    TraceMap.M.add method_name
       { Summary.filename = file_name; Summary.visited = line :: line_list }
       mmap
   else
-    TraceMap.M.add level
-      { Summary.filename = file_name; Summary.visited = [ line ] }
+    TraceMap.M.add method_name
+      {
+        Summary.filename = Summary.Filename file_name;
+        Summary.visited = [ line ];
+      }
       mmap
 
 let from_json json =
@@ -45,16 +48,4 @@ let target_method json =
     |> JsonUtil.member "procedure"
     |> JsonUtil.to_string
   in
-  let method_sig = String.split_on_char ':' json |> List.hd in
-  let method_and_param = String.split_on_char '(' method_sig in
-  let class_and_method =
-    method_and_param |> List.hd |> String.split_on_char '.' |> List.rev
-  in
-  let method_name = class_and_method |> List.hd in
-  let class_name = class_and_method |> List.tl |> List.hd in
-  let param =
-    method_and_param |> List.tl |> List.hd |> String.split_on_char ')'
-    |> List.hd
-  in
-  let param_list = param |> String.split_on_char ',' in
-  (class_name, method_name, param_list)
+  String.split_on_char ':' json |> List.hd

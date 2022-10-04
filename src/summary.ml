@@ -54,13 +54,18 @@ type postcond = Memory.t
 
 type visited = int list
 
-type filename = string
+type filename = Filename of string
+
+type typ = Typ of string
+
+type param = typ * Exp.t
 
 type t = {
   precond : precond;
   postcond : postcond;
   visited : visited;
   filename : filename;
+  param : param list;
 }
 
 type summary = t list
@@ -164,7 +169,7 @@ let summary_element x =
       Predicate.Object (mk_exp expression, Exp.Field field)
   | _ -> failwith "summary element not implemented"
 
-let summary_split item filename =
+let summary_split item filename param =
   let v =
     JsonUtil.member "visited" item
     |> JsonUtil.to_list
@@ -180,21 +185,40 @@ let summary_split item filename =
     |> JsonUtil.to_list
     |> List.map (fun x -> summary_element x)
   in
-  { precond = pre; postcond = post; visited = v; filename }
+  { precond = pre; postcond = post; visited = v; filename; param }
+
+let param_split param =
+  let var_and_typ = String.split_on_char ':' param in
+  let var = var_and_typ |> List.hd in
+  let typ = var_and_typ |> List.tl |> List.hd in
+  let typ =
+    if String.contains typ '*' then String.sub typ 0 (String.length typ - 1)
+    else typ
+  in
+  (Typ typ, Exp.Var var)
+
+let param_list list =
+  List.map (fun x -> JsonUtil.to_string x |> param_split) list
 
 let name_split assoc mmap =
   let method_name =
     JsonUtil.member "method" assoc
     |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
   in
+  let method_name =
+    if String.contains method_name ' ' then
+      method_name |> String.split_on_char ' ' |> List.tl |> List.hd
+    else method_name
+  in
   let file_name =
     JsonUtil.member "filename" assoc
     |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
   in
+  let param = JsonUtil.member "param" assoc |> JsonUtil.to_list |> param_list in
   let summary =
     JsonUtil.member "summary" assoc
     |> JsonUtil.to_list
-    |> List.map (fun x -> summary_split x file_name)
+    |> List.map (fun x -> summary_split x (Filename file_name) param)
   in
   SummaryMap.M.add method_name summary mmap
 
@@ -205,6 +229,11 @@ let name_split_making_methodmap assoc mmap =
   let method_name =
     JsonUtil.member "method" assoc
     |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
+  in
+  let method_name =
+    if String.contains method_name ' ' then
+      method_name |> String.split_on_char ' ' |> List.tl |> List.hd
+    else method_name
   in
   let file_name =
     JsonUtil.member "filename" assoc
@@ -223,7 +252,7 @@ let name_split_making_methodmap assoc mmap =
   List.fold_left
     (fun mmap item ->
       FindMethodMap.M.add
-        { filename = file_name; visited = item }
+        { filename = Filename file_name; visited = item }
         method_name mmap)
     mmap summary
 

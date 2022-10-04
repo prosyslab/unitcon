@@ -23,10 +23,7 @@ let mk_z3_exp pred =
       let var = Z3.Arithmetic.Integer.mk_const_s z3ctx _var in
       let i = Z3.Arithmetic.Integer.mk_numeral_i z3ctx _i in
       Z3.Boolean.mk_eq z3ctx var i |> Z3.Boolean.mk_not z3ctx
-  | Eq (Var _var, String _str) ->
-      let var = Z3.Arithmetic.Integer.mk_const_s z3ctx _var in
-      let str = Z3.Arithmetic.Integer.mk_const_s z3ctx _str in
-      Z3.Boolean.mk_eq z3ctx var str
+  | Eq (Var _var, String _str) -> Z3.Boolean.mk_true z3ctx
   | Eq (Var _, Symbol _) -> Z3.Boolean.mk_true z3ctx
   | Object _ -> Z3.Boolean.mk_true z3ctx
   | _ -> failwith "mk_z3_exp not implement"
@@ -56,5 +53,4 @@ let calc_precond trace summary for_finding =
   let z3_exp = List.map mk_z3_exp precond in
   Z3.Solver.add solver z3_exp;
   Z3.Solver.check solver [] |> Z3.Solver.string_of_status |> print_endline;
-  Z3.Solver.get_model solver |> Option.get |> Z3.Model.to_string
-  |> print_endline
+  Z3.Solver.get_model solver |> Option.get

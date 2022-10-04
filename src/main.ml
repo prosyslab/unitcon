@@ -57,7 +57,8 @@ let main () =
   let summary = parse_summary (!Cmdline.input_files |> List.hd) in
   let for_finding = parse_for_finding (!Cmdline.input_files |> List.hd) in
   (*if !Cmdline.print_callgraph then print_callgraph call_graph;*)
-  let _ = Calculation.calc_precond trace summary for_finding in
+  let precond = Calculation.calc_precond trace summary for_finding in
+  MakeTC.mk_testcase target_method summary precond |> print_endline;
   if !Cmdline.parse_summary then print_summary summary
 
 let _ = main ()
