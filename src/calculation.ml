@@ -37,7 +37,8 @@ let find_precond tuple summary for_finding =
   let rec precond (summary : Summary.summary) =
     match summary with
     | hd :: tl ->
-        if (hd.Summary.visited : int list) = visited then hd.Summary.precond
+      let new_tuple = Summary.{filename=file_name; visited=hd.Summary.visited} in
+        if (Summary.equal_key new_tuple tuple) = 0 then hd.Summary.precond
         else precond tl
     | _ -> failwith "not found precond"
   in

@@ -72,6 +72,22 @@ type summary = t list
 
 type key = { filename : filename; visited : visited }
 
+let rec visited_equal list1 list2 =
+  match list1, list2 with
+  | hd1::tl1, hd2::tl2 -> 
+    if hd1 <> hd2 then 1 else visited_equal tl1 tl2
+  | [], _::_ ->
+    0
+  | _::_, [] -> 
+    0
+  | [], [] ->
+    0
+
+let equal_key {filename=filename1; visited=visited1} {filename=filename2; visited=visited2} =
+  match compare filename1 filename2 with
+  | 0 -> visited_equal visited1 visited2
+  | c -> c
+
 module SummaryMap = struct
   module M = Map.Make (struct
     (* type t = Method.t *)
@@ -86,8 +102,24 @@ end
 module FindMethodMap = struct
   module M = Map.Make (struct
     type t = key
+    let rec list_compare list1 list2 =
+      match list1, list2 with
+      | hd1::tl1, hd2::tl2 -> 
+        if hd1 <> hd2 then 1 else list_compare tl1 tl2
+      | [], _::_ ->
+        0
+      | _::_, [] -> 
+        0
+      | [], [] ->
+        0
 
-    let compare = compare
+    let compare_list = list_compare
+
+    let compare {filename=filename1; visited=visited1} {filename=filename2; visited=visited2} =
+      match compare filename1 filename2 with
+      | 0 -> compare_list visited1 visited2
+      | c -> c
+
   end)
 
   (* type t = Method.t M.t*)
