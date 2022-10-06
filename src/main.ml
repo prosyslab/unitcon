@@ -12,11 +12,6 @@ let parse_summary filename =
   let list = Yojson.Safe.Util.to_list json in
   Summary.from_json list
 
-let parse_for_finding filename =
-  let json = Yojson.Safe.from_file filename in
-  let list = Yojson.Safe.Util.to_list json in
-  Summary.making_methodmap list
-
 let parse_trace filename =
   let json = Yojson.Safe.from_file filename in
   Trace.from_json json
@@ -55,9 +50,8 @@ let main () =
     get_target_method (!Cmdline.input_files |> List.tl |> List.hd)
   in
   let summary = parse_summary (!Cmdline.input_files |> List.hd) in
-  let for_finding = parse_for_finding (!Cmdline.input_files |> List.hd) in
   (*if !Cmdline.print_callgraph then print_callgraph call_graph;*)
-  let precond = Calculation.calc_precond trace summary for_finding in
+  let precond = Calculation.calc_precond trace summary in
   MakeTC.mk_testcase target_method summary precond |> print_endline;
   if !Cmdline.parse_summary then print_summary summary
 

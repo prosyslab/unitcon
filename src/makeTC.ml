@@ -6,9 +6,8 @@ let rm_char str =
   Str.replace_first (Str.regexp ", +$") "" str
 
 let get_param_var param =
-  let Summary.Typ typ, Summary.Exp.Var var = param in
-  if String.equal var "this" then ""
-  else var
+  let Summary.Param_Typ typ, Summary.Exp.Var var = param in
+  if String.equal var "this" then "" else var
 
 let get_param_var_list param_list =
   let var_list = List.map (fun x -> get_param_var x) param_list in
@@ -31,18 +30,16 @@ let get_target target_method param_list =
   ^ ");\n"
 
 let return_statement param precond =
-  let Summary.Typ typ, Summary.Exp.Var var = param in
+  let Summary.Param_Typ typ, Summary.Exp.Var var = param in
   let _var = Z3.Arithmetic.Integer.mk_const_s Calculation.z3ctx var in
   let value = Z3.Model.eval precond _var false in
   match value with
   | Some v ->
-    if String.equal (_var |> Z3.Expr.to_string) (v |> Z3.Expr.to_string) then 
-      (if String.equal var "this" then ""
-      else
-      typ ^ " " ^ var ^ " = new " ^ typ ^ "();\n")
-  else typ ^ " " ^ var ^ " = " ^ (v |> Z3.Expr.to_string) ^ ";\n"
-  | None ->
-      ""
+      if String.equal (_var |> Z3.Expr.to_string) (v |> Z3.Expr.to_string) then
+        if String.equal var "this" then ""
+        else typ ^ " " ^ var ^ " = new " ^ typ ^ "();\n"
+      else typ ^ " " ^ var ^ " = " ^ (v |> Z3.Expr.to_string) ^ ";\n"
+  | None -> ""
 
 let precond_cat param_list precond =
   let statement_list =

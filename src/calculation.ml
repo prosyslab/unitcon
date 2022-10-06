@@ -1,5 +1,4 @@
 module SummaryMap = Summary.SummaryMap
-module FindMethodMap = Summary.FindMethodMap
 module TraceMap = Trace.TraceMap
 
 let z3ctx =
@@ -28,26 +27,32 @@ let mk_z3_exp pred =
   | Object _ -> Z3.Boolean.mk_true z3ctx
   | _ -> failwith "mk_z3_exp not implement"
 
-let find_precond tuple summary for_finding =
+let find_precond method_name tuple summary =
   let file_name = tuple.Summary.filename in
   let visited = tuple.Summary.visited |> List.rev in
   let tuple = Summary.{ filename = file_name; visited } in
-  let method_name = FindMethodMap.M.find tuple for_finding in
-  let summary = SummaryMap.M.find method_name summary in
-  let rec precond (summary : Summary.summary) =
-    match summary with
-    | hd :: tl ->
-      let new_tuple = Summary.{filename=file_name; visited=hd.Summary.visited} in
-        if (Summary.equal_key new_tuple tuple) = 0 then hd.Summary.precond
-        else precond tl
-    | _ -> failwith "not found precond"
-  in
-  precond summary
+  if SummaryMap.M.mem method_name summary |> not then []
+  else
+    let _summary = SummaryMap.M.find method_name summary in
+    let rec precond (summary : Summary.summary) =
+      match summary with
+      | hd :: tl ->
+          let new_tuple =
+            Summary.{ filename = file_name; visited = hd.Summary.visited }
+          in
+          if Summary.equal_key new_tuple tuple = 0 then hd.Summary.precond
+          else precond tl
+      | _ ->
+          let hd_precond = _summary |> List.hd in
+          hd_precond.Summary.precond
+    in
+    precond _summary
 
-let calc_precond trace summary for_finding =
+let calc_precond trace summary =
   let precond =
     TraceMap.M.fold
-      (fun _ value list -> find_precond value summary for_finding :: list)
+      (fun method_name value list ->
+        find_precond method_name value summary :: list)
       trace []
   in
   let precond = List.concat precond in

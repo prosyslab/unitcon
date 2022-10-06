@@ -107,30 +107,6 @@ module SummaryMap = struct
   type t = summary M.t
 end
 
-module FindMethodMap = struct
-  module M = Map.Make (struct
-    type t = key
-
-    let rec list_compare list1 list2 =
-      match (list1, list2) with
-      | hd1 :: tl1, hd2 :: tl2 -> if hd1 <> hd2 then 1 else list_compare tl1 tl2
-      | [], _ :: _ -> 0
-      | _ :: _, [] -> 0
-      | [], [] -> 0
-
-    let compare_list = list_compare
-
-    let compare { filename = filename1; visited = visited1 }
-        { filename = filename2; visited = visited2 } =
-      match compare filename1 filename2 with
-      | 0 -> compare_list visited1 visited2
-      | c -> c
-  end)
-
-  (* type t = Method.t M.t*)
-  type t = string M.t
-end
-
 let is_le str = String.contains str '<' && String.contains str '='
 
 let is_lt str = String.contains str '<'
@@ -323,7 +299,8 @@ let param_split param =
   if List.length var_and_typ = 1 then (Param_Typ "None", Exp.Var "_")
   else
     let var = var_and_typ |> List.hd in
-    let typ = var_and_typ |> List.tl |> List.hd in
+    let typ = var_and_typ |> List.tl |> List.hd |> String.split_on_char '.' in
+    let typ = List.nth typ (List.length typ - 1) in
     let typ =
       if String.contains typ '*' then String.sub typ 0 (String.length typ - 1)
       else typ
@@ -353,45 +330,20 @@ let name_split assoc mmap =
     |> JsonUtil.to_list
     |> List.map (fun x -> summary_split x (Filename file_name) param)
   in
+  let summary =
+    if summary = [] then
+      [
+        {
+          precond = [];
+          postcond = [];
+          visited = [];
+          filename = Filename file_name;
+          param;
+        };
+      ]
+    else summary
+  in
   SummaryMap.M.add method_name summary mmap
 
 let from_json json =
   List.fold_left (fun mmap item -> name_split item mmap) SummaryMap.M.empty json
-
-let name_split_making_methodmap assoc mmap =
-  let method_name =
-    JsonUtil.member "method" assoc
-    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
-  in
-  let method_name =
-    if String.contains method_name ' ' then
-      method_name |> String.split_on_char ' ' |> List.tl |> List.hd
-    else method_name
-  in
-  let file_name =
-    JsonUtil.member "filename" assoc
-    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
-  in
-  let visited_list item =
-    JsonUtil.member "visited" item
-    |> JsonUtil.to_list
-    |> List.map (fun x ->
-           let _str = JsonUtil.to_string x in
-           try int_of_string _str with _ -> 0)
-  in
-  let summary =
-    JsonUtil.member "summary" assoc
-    |> JsonUtil.to_list
-    |> List.map (fun x -> visited_list x)
-  in
-  List.fold_left
-    (fun mmap item ->
-      FindMethodMap.M.add
-        { filename = Filename file_name; visited = item }
-        method_name mmap)
-    mmap summary
-
-let making_methodmap json =
-  List.fold_left
-    (fun mmap item -> name_split_making_methodmap item mmap)
-    FindMethodMap.M.empty json
