@@ -1,0 +1,263 @@
+[
+  {
+    "bug_type": "NULL_DEREFERENCE",
+    "qualifier": "object `r` last assigned on line 4473 could be null and is dereferenced at line 4493.",
+    "severity": "ERROR",
+    "line": 4493,
+    "column": -1,
+    "procedure": "org.jfree.chart.plot.XYPlot.getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+    "procedure_start_line": 4425,
+    "file": "org/jfree/chart/plot/XYPlot.java",
+    "bug_trace": [
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4425,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4427,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4428,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4429,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4430,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4433,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4383,
+        "column_number": -1,
+        "description": "int XYPlot.getDomainAxisIndex(ValueAxis)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4384,
+        "column_number": -1,
+        "description": "int ObjectList.indexOf(Object)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4385,
+        "column_number": -1,
+        "description": "int XYPlot.getDomainAxisIndex(ValueAxis)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4387,
+        "column_number": -1,
+        "description": "Plot Plot.getParent()"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4388,
+        "column_number": -1,
+        "description": "int XYPlot.getDomainAxisIndex(ValueAxis)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4393,
+        "column_number": -1,
+        "description": "int XYPlot.getDomainAxisIndex(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4434,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4451,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4405,
+        "column_number": -1,
+        "description": "int XYPlot.getRangeAxisIndex(ValueAxis)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4406,
+        "column_number": -1,
+        "description": "int ObjectList.indexOf(Object)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4407,
+        "column_number": -1,
+        "description": "int XYPlot.getRangeAxisIndex(ValueAxis)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4409,
+        "column_number": -1,
+        "description": "Plot Plot.getParent()"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4410,
+        "column_number": -1,
+        "description": "int XYPlot.getRangeAxisIndex(ValueAxis)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4415,
+        "column_number": -1,
+        "description": "int XYPlot.getRangeAxisIndex(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4452,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4469,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4470,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4471,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4472,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4473,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 1743,
+        "column_number": -1,
+        "description": "XYItemRenderer XYPlot.getRendererForDataset(XYDataset)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 1744,
+        "column_number": -1,
+        "description": "XYItemRenderer XYPlot.getRendererForDataset(XYDataset)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 1745,
+        "column_number": -1,
+        "description": "XYItemRenderer XYPlot.getRendererForDataset(XYDataset)"
+      },
+      {
+        "level": 1,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 1754,
+        "column_number": -1,
+        "description": "XYItemRenderer XYPlot.getRendererForDataset(XYDataset)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4474,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4475,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4480,
+        "column_number": -1,
+        "description": "Range DatasetUtilities.findDomainBounds(XYDataset)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4479,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      },
+      {
+        "level": 0,
+        "filename": "org/jfree/chart/plot/XYPlot.java",
+        "line_number": 4493,
+        "column_number": -1,
+        "description": "Range XYPlot.getDataRange(ValueAxis)"
+      }
+    ],
+    "key": "XYPlot.java|getDataRange|NULL_DEREFERENCE",
+    "node_key": "77e04267c7224733a50bf1fa26ba7e80",
+    "hash": "62a2c9c4d3400135bc73b38edff0449d",
+    "bug_type_hum": "Null Dereference"
+  }
+]
