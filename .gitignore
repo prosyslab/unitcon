@@ -12,6 +12,12 @@
 # ocamlbuild working directory
 _build/
 
+# infer-out
+infer-out/
+
+# java bytecode
+*.class
+
 # ocamlbuild targets
 *.byte
 *.native
