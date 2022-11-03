@@ -1,5 +1,6 @@
 module SummaryMap = Summary.SummaryMap
 module TraceMap = Trace.TraceMap
+module ErrorSummaryMap = ErrorSummary.ErrorSummaryMap
 
 let z3ctx =
   Z3.mk_context
@@ -27,11 +28,14 @@ let mk_z3_exp pred =
   | Object _ -> Z3.Boolean.mk_true z3ctx
   | _ -> failwith "mk_z3_exp not implement"
 
-let find_precond method_name tuple summary =
+let find_precond method_name target_method tuple summary error_summary =
   let file_name = tuple.Summary.filename in
   let visited = tuple.Summary.visited |> List.rev in
   let tuple = Summary.{ filename = file_name; visited } in
   if SummaryMap.M.mem method_name summary |> not then []
+  else if method_name = target_method then
+    let prop_record = ErrorSummaryMap.M.find method_name error_summary in
+    prop_record.ErrorSummary.prop
   else
     let _summary = SummaryMap.M.find method_name summary in
     let rec precond (summary : Summary.summary) =
@@ -48,11 +52,12 @@ let find_precond method_name tuple summary =
     in
     precond _summary
 
-let calc_precond trace summary =
+let calc_precond trace target_method summary error_summary =
   let precond =
     TraceMap.M.fold
       (fun method_name value list ->
-        find_precond method_name value summary :: list)
+        find_precond method_name target_method value summary error_summary
+        :: list)
       trace []
   in
   let precond = List.concat precond in

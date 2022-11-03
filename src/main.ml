@@ -12,6 +12,11 @@ let parse_summary filename =
   let list = Yojson.Safe.Util.to_list json in
   Summary.from_json list
 
+let parse_error_summary filename =
+  let json = Yojson.Safe.from_file filename in
+  let list = Yojson.Safe.Util.to_list json in
+  ErrorSummary.from_json list
+
 let parse_trace filename =
   let json = Yojson.Safe.from_file filename in
   Trace.from_json json
@@ -29,8 +34,8 @@ let print_summary summary = ()
 let initialize () =
   (try Unix.mkdir !Cmdline.out_dir 0o775
    with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
-  print_endline ("Logging to " ^ !Cmdline.out_dir);
-  Filename.concat !Cmdline.out_dir "log.txt" |> Logger.from_file
+  print_endline ("Logging to " ^ !Cmdline.out_dir)
+(* Filename.concat !Cmdline.out_dir "log.txt" |> Logger.from_file *)
 
 let synthesize method_map call_graph =
   (* generate Spoon class here *)
@@ -45,13 +50,20 @@ let main () =
     parse_json (!Cmdline.input_files |> List.tl |> List.hd)
   in
   *)
-  let trace = parse_trace (!Cmdline.input_files |> List.tl |> List.hd) in
+  let trace =
+    parse_trace (!Cmdline.input_files |> List.tl |> List.tl |> List.hd)
+  in
   let target_method =
-    get_target_method (!Cmdline.input_files |> List.tl |> List.hd)
+    get_target_method (!Cmdline.input_files |> List.tl |> List.tl |> List.hd)
   in
   let summary = parse_summary (!Cmdline.input_files |> List.hd) in
   (*if !Cmdline.print_callgraph then print_callgraph call_graph;*)
-  let precond = Calculation.calc_precond trace summary in
+  let error_summary =
+    parse_error_summary (!Cmdline.input_files |> List.tl |> List.hd)
+  in
+  let precond =
+    Calculation.calc_precond trace target_method summary error_summary
+  in
   MakeTC.mk_testcase target_method summary precond |> print_endline;
   if !Cmdline.parse_summary then print_summary summary
 
