@@ -7,6 +7,7 @@ let rm_char str =
 
 let get_param_var param =
   let Summary.Param_Typ typ, Summary.Exp.Var var = param in
+  print_endline var;
   if String.equal var "this" then "" else var
 
 let get_param_var_list param_list =
@@ -14,6 +15,7 @@ let get_param_var_list param_list =
   let var =
     List.fold_left (fun statement x -> statement ^ x ^ ", ") "" var_list
   in
+  print_endline var;
   rm_char var
 
 let get_target target_method param_list =
@@ -28,6 +30,44 @@ let get_target target_method param_list =
   ^ "." ^ method_name ^ "("
   ^ get_param_var_list param_list
   ^ ");\n"
+
+(* target: one paramter *)
+let compare_field param precond_obj init_method postcond =
+  (* iteration according to # of fields *)
+  let rec is_eq_field field postcond = 
+    match postcond with
+    | [] -> false
+    | hd::tl ->
+      match field, hd with
+      | (Var field_var, Int field_intValue), (Var hd_var, Int hd_intValue) ->
+        if hd_var = field_var && hd_intValue = field_intValue then true false else is_eq_field field tl
+      in
+  match precond_obj with
+  | Summary.Predicatre.Obj (Var _var, Field _field) when _var = param ->
+    List.fold_left (fun init x -> is_eq_field x postcond && init) true precond_obj
+  | _ -> failwith "not?"
+
+let mk_object param precond_obj summary =
+  let reg param =
+    let _type, _var =
+      match param with
+      | Param_Typ _type, Var _var -> (_type, _var)
+      | _ -> ("", "")
+    in
+    Str.regexp_string (_type ^ ".<init>")
+  in
+  let initial param =
+    let regexp_param = reg param in
+    SummaryMap.fold
+      (fun k value list ->
+        if Str.string_match regexp_param k 0 then 
+          let postcond = SummaryMap.find k summary in
+          let post = postcond.Summary.postcond in
+
+          k :: list else list)
+      summary []
+  in
+  List.map (fun x -> inital x) param
 
 let return_statement param precond =
   let Summary.Param_Typ typ, Summary.Exp.Var var = param in
@@ -47,12 +87,14 @@ let precond_cat param_list precond =
   in
   List.fold_left (fun statement x -> String.cat statement x) "" statement_list
 
-let mk_testcase target_method summary precond =
+let mk_testcase target_method summary precond precond_obj =
   let target_method_summary =
     SummaryMap.M.find target_method summary |> List.hd
   in
+  print_endline target_method;
   let param_list = target_method_summary.Summary.param in
   let precond_statements = precond_cat param_list precond in
+  let precond_obj_statements = mk_object param_list precond_obj summary in
   let target_statements = get_target target_method param_list in
   let _start = "public void test() { \n" in
   let _end = "}\n" in

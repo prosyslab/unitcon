@@ -272,7 +272,7 @@ let summary_element x =
   | _ when String.equal item "" -> Predicate.None
   | _ ->
       "summary element " ^ item |> print_endline;
-      failwith "summary element not implemented"
+      Predicate.None
 
 let summary_split item filename param =
   let v =

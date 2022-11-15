@@ -14,6 +14,9 @@ module TraceMap = struct
   type t = Summary.key M.t
 end
 
+let rm_char str =
+  Str.replace_first (Str.regexp ",$") "" str
+
 let bug_trace assoc mmap =
   let file_name = JsonUtil.member "filename" assoc |> JsonUtil.to_string in
   let method_name = JsonUtil.member "description" assoc |> JsonUtil.to_string in
@@ -61,8 +64,15 @@ let target_method json =
     ^ "."
     ^ List.nth procname (List.length procname - 1)
   in
-  let param =
-    procname_and_param |> List.tl |> List.hd |> String.split_on_char '.'
+  "trace. procname: " ^ procname |> print_endline;
+  let param_list =
+    procname_and_param |> List.tl |> List.hd |> String.split_on_char ','
   in
-  let param = List.nth param (List.length param - 1) in
-  procname ^ "(" ^ param
+  let param_list =
+    List.map (fun x -> 
+      let param = String.split_on_char '.' x in
+      List.nth param (List.length param - 1))
+    param_list
+    in
+  let param = List.fold_left (fun statement x -> statement ^ x ^ ",") (procname ^ "(") param_list in
+  rm_char param
