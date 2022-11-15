@@ -12,7 +12,7 @@ let z3ctx =
     ]
 
 let solver = Z3.Solver.mk_solver z3ctx None
-let mk_object_list pred_list =
+let rec mk_object_list pred_list =
   let mk_object pred =
     match pred with
     | Summary.Predicate.Eq (Var _, String _) -> pred
