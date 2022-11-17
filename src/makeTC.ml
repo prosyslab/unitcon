@@ -213,7 +213,7 @@ let mk_object param precond_obj summary =
       else stat ^ execute_constructor var constructor summary)
     "" constructor_list
 
-let get_primitive_statement param precond =
+let get_precond_statement param precond precond_obj summary =
   let typ, var =
     match param with
     | Summary.Param_Typ p, Summary.Exp.Var v -> (p, v)
@@ -224,13 +224,13 @@ let get_primitive_statement param precond =
   match value with
   | Some v ->
       if String.equal (_var |> Z3.Expr.to_string) (v |> Z3.Expr.to_string) then
-        ""
+        mk_object [param] precond_obj summary
       else typ ^ " " ^ var ^ " = " ^ (v |> Z3.Expr.to_string) ^ ";\n"
   | None -> ""
 
-let mk_primitive param_list precond =
+let mk_precond_statement param_list precond precond_obj summary =
   let statement_list =
-    List.map (fun x -> get_primitive_statement x precond) param_list
+    List.map (fun x -> get_precond_statement x precond precond_obj summary) param_list
   in
   List.fold_left (fun statement x -> String.cat statement x) "" statement_list
 
@@ -241,10 +241,9 @@ let mk_testcase target_method summary precond precond_obj =
   let param_list =
     target_method_summary.Summary.param |> remove_this |> List.rev
   in
-  let precond_pri_statements = mk_primitive param_list precond in
-  let precond_obj_statements = mk_object param_list precond_obj summary in
+  let precond_statements = mk_precond_statement param_list precond precond_obj summary in
   let target_statements = get_target target_method param_list in
   let _start = "public void test() { \n" in
   let _end = "}\n" in
-  _start ^ precond_pri_statements ^ precond_obj_statements ^ target_statements
+  _start ^ precond_statements ^ target_statements
   ^ _end

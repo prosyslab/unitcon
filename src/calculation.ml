@@ -17,7 +17,6 @@ let rec mk_object_list pred_list =
   let mk_object pred =
     match pred with
     | Summary.Predicate.Eq (Var _, Var _) -> pred
-    | Summary.Predicate.Eq (Var _, Int _) -> pred
     | Summary.Predicate.Object (Var _, Field _) -> pred
     | _ -> None
   in
