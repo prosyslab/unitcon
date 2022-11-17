@@ -13,6 +13,5 @@ test: all
 	$(DUNE) test
 
 clean:
-	$(MAKE) -C test clean
 	$(DUNE) clean
 	$(RM) -rf $(EXE)
