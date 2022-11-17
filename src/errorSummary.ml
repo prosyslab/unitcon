@@ -61,8 +61,12 @@ let rec mk_exp exp =
         Exp.Div
           ( exp_list |> List.hd |> String.trim |> mk_exp,
             exp_list |> List.tl |> List.hd |> String.trim |> mk_exp )
-    | _ when String.contains exp '$' -> Exp.Symbol exp
-    | _ -> Exp.Var exp)
+    | _ ->
+        let regexp1 = Str.regexp_string "val$" in
+        let regrexp2 = Str.regexp_string "@f$" in
+        if Str.string_match regexp1 exp 0 || Str.string_match regrexp2 exp 0
+        then Exp.Symbol exp
+        else Exp.Var exp)
 
 let mk_field element =
   let var_and_value = String.split_on_char ':' element in

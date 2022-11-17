@@ -12,16 +12,18 @@ let z3ctx =
     ]
 
 let solver = Z3.Solver.mk_solver z3ctx None
+
 let rec mk_object_list pred_list =
   let mk_object pred =
     match pred with
-    | Summary.Predicate.Eq (Var _, String _) -> pred
+    | Summary.Predicate.Eq (Var _, Var _) -> pred
+    | Summary.Predicate.Eq (Var _, Int _) -> pred
     | Summary.Predicate.Object (Var _, Field _) -> pred
     | _ -> None
   in
   match pred_list with
   | [] -> []
-  | hd::tl -> mk_object hd::mk_object_list tl
+  | hd :: tl -> mk_object hd :: mk_object_list tl
 
 let mk_z3_exp pred =
   match pred with
@@ -36,9 +38,8 @@ let mk_z3_exp pred =
   | Eq (Var _var, String _str) -> Z3.Boolean.mk_true z3ctx
   | Eq (Var _, Symbol _) -> Z3.Boolean.mk_true z3ctx
   | Object _ -> Z3.Boolean.mk_true z3ctx
-  | _ -> 
-    Z3.Boolean.mk_true z3ctx
-    (* failwith "mk_z3_exp not implement" *)
+  | _ -> Z3.Boolean.mk_true z3ctx
+(* failwith "mk_z3_exp not implement" *)
 
 let find_precond method_name target_method tuple summary error_summary =
   let file_name = tuple.Summary.filename in

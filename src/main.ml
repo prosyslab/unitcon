@@ -56,13 +56,12 @@ let main () =
   let target_method =
     get_target_method (!Cmdline.input_files |> List.tl |> List.tl |> List.hd)
   in
-  "target_method: " ^ target_method |> print_endline;
   let summary = parse_summary (!Cmdline.input_files |> List.hd) in
   (*if !Cmdline.print_callgraph then print_callgraph call_graph;*)
   let error_summary =
     parse_error_summary (!Cmdline.input_files |> List.tl |> List.hd)
   in
-  let (precond, precond_obj) =
+  let precond, precond_obj =
     Calculation.calc_precond trace target_method summary error_summary
   in
   MakeTC.mk_testcase target_method summary precond precond_obj |> print_endline;

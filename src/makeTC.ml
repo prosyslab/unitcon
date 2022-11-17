@@ -1,13 +1,29 @@
 module SummaryMap = Summary.SummaryMap
 (*when making precond, Pred shape*)
 
+type return = OBJ | NULL | NONE
+
 let rm_char str =
   let str = Str.replace_first (Str.regexp "^, +") "" str in
   Str.replace_first (Str.regexp ", +$") "" str
 
+let remove_this param : Summary.param list =
+  List.fold_left
+    (fun list x ->
+      let var =
+        match x with
+        | Summary.Param_Typ _, Summary.Exp.Var v -> v
+        | _ -> failwith ""
+      in
+      if String.equal var "this" then list else x :: list)
+    [] param
+
 let get_param_var param =
-  let Summary.Param_Typ typ, Summary.Exp.Var var = param in
-  print_endline var;
+  let var =
+    match param with
+    | Summary.Param_Typ _, Summary.Exp.Var v -> v
+    | _ -> failwith ""
+  in
   if String.equal var "this" then "" else var
 
 let get_param_var_list param_list =
@@ -15,8 +31,20 @@ let get_param_var_list param_list =
   let var =
     List.fold_left (fun statement x -> statement ^ x ^ ", ") "" var_list
   in
-  print_endline var;
   rm_char var
+
+let execute_constructor val_name constructor summary = 
+  let class_method =
+    constructor |> String.split_on_char '(' |> List.hd
+    |> String.split_on_char '.'
+  in
+  let class_name = List.nth class_method (List.length class_method - 2) in
+try
+  let param_list = SummaryMap.M.find constructor summary |> List.hd in
+  let param_list = param_list.Summary.param |> remove_this in
+  class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "(" ^ get_param_var_list param_list ^ ");\n"
+with Not_found -> class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "();\n"
+  
 
 let get_target target_method param_list =
   let class_method =
@@ -26,46 +54,102 @@ let get_target target_method param_list =
   let method_name = List.nth class_method (List.length class_method - 1) in
   let class_name = List.nth class_method (List.length class_method - 2) in
   let val_name = "obj1" in
-  class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "();\n" ^ val_name
+  let regexp = Str.regexp_string "<init>" in
+  if Str.string_match regexp method_name 0 then
+    class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "(" ^ get_param_var_list param_list ^ ");\n"
+  else
+    class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "();\n" ^ val_name
   ^ "." ^ method_name ^ "("
   ^ get_param_var_list param_list
   ^ ");\n"
+  
+  
 
-(* target: one paramter *)
-let compare_field param precond_obj init_method postcond =
+(* compare_prop -> target: one paramter, postcond: all postcondition *)
+let compare_prop param precond_obj postcond =
   (* iteration according to # of fields *)
-  let rec is_eq_field field postcond =
-    match postcond with
-    | [] -> false
+  let rec is_eq_field field post_field =
+    match post_field with
+    | [] -> true (*not found is null, so true*)
     | hd :: tl -> (
         match (field, hd) with
         | ( (Summary.Exp.Var field_var, Summary.Exp.Int field_intValue),
-            Summary.Predicate.Eq (Summary.Exp.Var hd_var, Summary.Exp.Int hd_intValue) ) ->
+            (Summary.Exp.Var hd_var, Summary.Exp.Int hd_intValue) ) ->
             if hd_var = field_var && hd_intValue = field_intValue then true
             else is_eq_field field tl
         | ( (Summary.Exp.Var field_var, Summary.Exp.String field_stringValue),
-            Summary.Predicate.Eq (Summary.Exp.Var hd_var, Summary.Exp.String hd_stringValue) ) ->
-            if hd_var = field_var && hd_stringValue = field_stringValue then true
-            else is_eq_field field tl)
+            (Summary.Exp.Var hd_var, Summary.Exp.String hd_stringValue) ) ->
+            if hd_var = field_var && hd_stringValue = field_stringValue then
+              true
+            else is_eq_field field tl
+        | _ -> is_eq_field field tl)
   in
-  let precond_obj_one precond_obj =
-    match (precond_obj, param) with
-    | Summary.Predicate.Object (Var obj_var, Field obj_field),
-        (Summary.Param_Typ param_type, Summary.Exp.Var param_var) ->
-        List.fold_left
-          (fun init x -> is_eq_field x postcond && init)
-          true obj_field
-    | _ -> false
+  let rec precond_obj_one precond_obj postcond =
+    match postcond with
+    | [] -> NONE
+    | hd :: tl -> (
+        match (precond_obj, hd) with
+        | ( Summary.Predicate.Object (Var _, _),
+            Summary.Predicate.Object (Var _, _) ) -> (
+            match (precond_obj, param) with
+            | ( Summary.Predicate.Object (Var obj_var, Field obj_field),
+                (Summary.Param_Typ _, Summary.Exp.Var param_var) )
+              when obj_var = param_var ->
+                let cmp_result =
+                  let _, post_field =
+                    match hd with
+                    | Summary.Predicate.Object (Var post_var, Field post_field)
+                      ->
+                        (post_var, post_field)
+                    | Summary.Predicate.Object
+                        (String post_var, Field post_field) ->
+                        (post_var, post_field)
+                    | _ -> failwith "???"
+                  in
+                  List.fold_left
+                    (fun init x -> is_eq_field x post_field && init)
+                    true obj_field
+                in
+                if cmp_result then OBJ else NONE
+            | _ -> precond_obj_one precond_obj tl)
+        | ( Summary.Predicate.Object (Var _, _),
+            Summary.Predicate.Object (Symbol _, _) ) ->
+            precond_obj_one precond_obj tl
+        | Summary.Predicate.Eq _, Summary.Predicate.Eq _ -> (
+            match (precond_obj, param) with
+            | ( Summary.Predicate.Eq (Var eq_var, Var eq_value),
+                (Summary.Param_Typ _, Summary.Exp.Var param_var) )
+              when eq_var = param_var ->
+                if eq_value = "null" then NULL else NONE
+            | _ -> precond_obj_one precond_obj tl)
+        | _ -> precond_obj_one precond_obj tl)
   in
   let rec comp precond_obj =
     match precond_obj with
-    | [] -> false
-    | hd :: tl -> if precond_obj_one hd then true else comp tl
+    | [] -> NONE
+    | hd :: tl ->
+        let result = precond_obj_one hd postcond in
+        if result <> NONE then result else comp tl
   in
   comp precond_obj
 
-(*param: parameter one, precond_obj: one obj precond*)
-let get_object_initial param precond_obj summary =
+let rec compare_prop_null param precond_obj =
+  let param_var =
+    match param with
+    | Summary.Param_Typ _, Summary.Exp.Var v -> v
+    | _ -> failwith ""
+  in
+  match precond_obj with
+  | [] -> NONE
+  | hd :: tl -> (
+      match hd with
+      | Summary.Predicate.Eq (Var eq_var, Var eq_value) when eq_var = param_var
+        ->
+          if eq_value = "null" then NULL else NONE
+      | _ -> compare_prop_null param tl)
+
+(*param: parameter one, precond_obj: all obj precond*)
+let rec get_object_constructor param precond_obj summary =
   let reg param =
     let _type, _var =
       match param with
@@ -76,48 +160,77 @@ let get_object_initial param precond_obj summary =
   in
   let initial param =
     let regexp_param = reg param in
-    let init_method = SummaryMap.M.fold
-      (fun k _ list ->
-        if Str.string_match regexp_param k 0 then
-          (let postcond = SummaryMap.M.find k summary |> List.hd in
-          let post = postcond.Summary.postcond in
-          if compare_field param precond_obj k post then [(param, k)]
+    let constructor =
+      SummaryMap.M.fold
+        (fun k _ list ->
+          if Str.string_match regexp_param k 0 then
+            let postcond = SummaryMap.M.find k summary |> List.hd in
+            let post = postcond.Summary.postcond in
+            match compare_prop param precond_obj post with
+            | OBJ ->
+                let sub_param = SummaryMap.M.find k summary |> List.hd in
+                let sub_param = sub_param.Summary.param |> remove_this in
+                if List.length sub_param <> 0 then
+                  (List.append
+                     (List.rev_append
+                        (List.concat
+                           (get_object_constructor sub_param precond_obj summary))
+                        [ (param, k) ]))
+                    list
+                else List.rev_append [ (param, k) ] list
+            | NULL -> List.rev_append [ (param, "null") ] list
+            | NONE -> list
           else list)
-        else list)
-      summary []
+        summary []
+    in
+    try
+      let _ = List.hd constructor in
+      constructor
+    with Failure _ ->
+      let _typ, _var =
+        match param with
+        | Summary.Param_Typ p, Summary.Exp.Var v -> (p, v)
+        | _ -> failwith ""
       in
-      try let _ = List.hd init_method in init_method with Failure _ -> [(param, "null")] 
+      [ (param, _typ^".<init>()") ]
+    (*default constructor*)
   in
   List.map (fun x -> initial x) param
 
 let mk_object param precond_obj summary =
-  let initial_method = get_object_initial param precond_obj summary in
+  let constructor_list =
+    get_object_constructor param precond_obj summary |> List.concat
+  in
   List.fold_left
     (fun stat x ->
-      let x = List.hd x in
-      let x, init_method = x in
-      let Summary.Param_Typ typ, Summary.Exp.Var var = x in
-      if init_method = "null" then stat ^ typ ^ " " ^ var ^ " = null;\n"
-      else
-      stat ^ typ ^ " " ^ var ^ " = new " ^ init_method ^ "();\n"
-      )
-    "" initial_method
+      let x, constructor = x in
+      let typ, var =
+        match x with
+        | Summary.Param_Typ p, Summary.Exp.Var v -> (p, v)
+        | _ -> failwith ""
+      in
+      if constructor = "null" then stat ^ typ ^ " " ^ var ^ " = null;\n"
+      else stat ^ execute_constructor var constructor summary)
+    "" constructor_list
 
-let return_statement param precond =
-  let Summary.Param_Typ typ, Summary.Exp.Var var = param in
+let get_primitive_statement param precond =
+  let typ, var =
+    match param with
+    | Summary.Param_Typ p, Summary.Exp.Var v -> (p, v)
+    | _ -> failwith ""
+  in
   let _var = Z3.Arithmetic.Integer.mk_const_s Calculation.z3ctx var in
   let value = Z3.Model.eval precond _var false in
   match value with
   | Some v ->
       if String.equal (_var |> Z3.Expr.to_string) (v |> Z3.Expr.to_string) then
-        if String.equal var "this" then ""
-        else typ ^ " " ^ var ^ " = new " ^ typ ^ "();\n"
+        ""
       else typ ^ " " ^ var ^ " = " ^ (v |> Z3.Expr.to_string) ^ ";\n"
   | None -> ""
 
-let precond_cat param_list precond =
+let mk_primitive param_list precond =
   let statement_list =
-    List.map (fun x -> return_statement x precond) param_list
+    List.map (fun x -> get_primitive_statement x precond) param_list
   in
   List.fold_left (fun statement x -> String.cat statement x) "" statement_list
 
@@ -125,11 +238,13 @@ let mk_testcase target_method summary precond precond_obj =
   let target_method_summary =
     SummaryMap.M.find target_method summary |> List.hd
   in
-  print_endline target_method;
-  let param_list = target_method_summary.Summary.param in
-  let precond_statements = precond_cat param_list precond in
+  let param_list =
+    target_method_summary.Summary.param |> remove_this |> List.rev
+  in
+  let precond_pri_statements = mk_primitive param_list precond in
   let precond_obj_statements = mk_object param_list precond_obj summary in
   let target_statements = get_target target_method param_list in
   let _start = "public void test() { \n" in
   let _end = "}\n" in
-  _start ^ precond_obj_statements ^ target_statements ^ _end
+  _start ^ precond_pri_statements ^ precond_obj_statements ^ target_statements
+  ^ _end
