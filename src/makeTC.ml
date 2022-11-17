@@ -225,7 +225,8 @@ let get_precond_statement param precond precond_obj summary =
   | Some v ->
       if String.equal (_var |> Z3.Expr.to_string) (v |> Z3.Expr.to_string) then
         mk_object [param] precond_obj summary
-      else typ ^ " " ^ var ^ " = " ^ (v |> Z3.Expr.to_string) ^ ";\n"
+      else
+        typ ^ " " ^ var ^ " = " ^ (v |> Z3.Arithmetic.Integer.numeral_to_string) ^ ";\n"
   | None -> ""
 
 let mk_precond_statement param_list precond precond_obj summary =
