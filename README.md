@@ -8,7 +8,7 @@ make
 
 ## Run
 ```
-./unitgen test/plain-trace.json test/plain-summary.json
+./unitgen test/summary.json test/error-summary.json test/trace.json
 ```
 
 ## Visualize a Callgraph
