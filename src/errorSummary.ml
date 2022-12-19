@@ -210,7 +210,125 @@ let name_split assoc mmap =
   let summary = if summary = [] then { prop = [] } else { prop = summary } in
   ErrorSummaryMap.M.add method_name summary mmap
 
-let from_json json =
-  List.fold_left
-    (fun mmap item -> name_split item mmap)
-    ErrorSummaryMap.M.empty json
+(*mmap: one element *)
+let replace_prop mmap =
+  let candidate_prop =
+    List.fold_left
+      (fun list prop ->
+        match prop with
+        | Predicate.Eq (Var var, Symbol sym) -> (var, sym) :: list
+        | _ -> list)
+      [] mmap
+  in
+  let props =
+    List.fold_left
+      (fun modified_props prop ->
+        match prop with
+        | Predicate.Eq (Symbol sym, value) -> (
+            let mk_prop =
+              List.fold_left
+                (fun prop candidate ->
+                  let can_var, can_sym = candidate in
+                  if sym = can_sym then
+                    Predicate.Eq (Var can_var, value) :: prop
+                  else prop)
+                [] candidate_prop
+            in
+            match mk_prop with
+            | [] -> prop :: modified_props
+            | hd :: _ -> hd :: modified_props)
+        | Predicate.Neq (Symbol sym, value) -> (
+            let mk_prop =
+              List.fold_left
+                (fun prop candidate ->
+                  let can_var, can_sym = candidate in
+                  if sym = can_sym then
+                    Predicate.Neq (Var can_var, value) :: prop
+                  else prop)
+                [] candidate_prop
+            in
+            match mk_prop with
+            | [] -> prop :: modified_props
+            | hd :: _ -> hd :: modified_props)
+        | Predicate.Gt (Symbol sym, value) -> (
+            let mk_prop =
+              List.fold_left
+                (fun prop candidate ->
+                  let can_var, can_sym = candidate in
+                  if sym = can_sym then
+                    Predicate.Gt (Var can_var, value) :: prop
+                  else prop)
+                [] candidate_prop
+            in
+            match mk_prop with
+            | [] -> prop :: modified_props
+            | hd :: _ -> hd :: modified_props)
+        | Predicate.Ge (Symbol sym, value) -> (
+            let mk_prop =
+              List.fold_left
+                (fun prop candidate ->
+                  let can_var, can_sym = candidate in
+                  if sym = can_sym then
+                    Predicate.Ge (Var can_var, value) :: prop
+                  else prop)
+                [] candidate_prop
+            in
+            match mk_prop with
+            | [] -> prop :: modified_props
+            | hd :: _ -> hd :: modified_props)
+        | Predicate.Lt (Symbol sym, value) -> (
+            let mk_prop =
+              List.fold_left
+                (fun prop candidate ->
+                  let can_var, can_sym = candidate in
+                  if sym = can_sym then
+                    Predicate.Lt (Var can_var, value) :: prop
+                  else prop)
+                [] candidate_prop
+            in
+            match mk_prop with
+            | [] -> prop :: modified_props
+            | hd :: _ -> hd :: modified_props)
+        | Predicate.Le (Symbol sym, value) -> (
+            let mk_prop =
+              List.fold_left
+                (fun prop candidate ->
+                  let can_var, can_sym = candidate in
+                  if sym = can_sym then
+                    Predicate.Le (Var can_var, value) :: prop
+                  else prop)
+                [] candidate_prop
+            in
+            match mk_prop with
+            | [] -> prop :: modified_props
+            | hd :: _ -> hd :: modified_props)
+        | Predicate.Object (Symbol sym, Field field) -> (
+            let mk_prop =
+              List.fold_left
+                (fun prop candidate ->
+                  let can_var, can_sym = candidate in
+                  if sym = can_sym then
+                    Predicate.Object (Var can_var, Field field) :: prop
+                  else prop)
+                [] candidate_prop
+            in
+            match mk_prop with
+            | [] -> prop :: modified_props
+            | hd :: _ -> hd :: modified_props)
+        | _ -> prop :: modified_props)
+      [] mmap
+  in
+  props
+
+let from_json json target_method =
+  let error_summarys =
+    List.fold_left
+      (fun mmap item -> name_split item mmap)
+      ErrorSummaryMap.M.empty json
+  in
+  ErrorSummaryMap.M.fold
+    (fun _ value init ->
+      ErrorSummaryMap.M.add target_method
+        { prop = replace_prop value.prop }
+        init)
+    error_summarys ErrorSummaryMap.M.empty

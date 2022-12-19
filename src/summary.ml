@@ -274,8 +274,7 @@ let summary_element x =
       let value = List.tl list |> List.hd |> String.trim |> mk_exp in
       Predicate.Eq (variable, value)
   | _ when String.equal item "" -> Predicate.None
-  | _ ->
-      Predicate.None
+  | _ -> Predicate.None
 
 let summary_split item filename param =
   let v =

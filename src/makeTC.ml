@@ -33,18 +33,20 @@ let get_param_var_list param_list =
   in
   rm_char var
 
-let execute_constructor val_name constructor summary = 
+let execute_constructor val_name constructor summary =
   let class_method =
     constructor |> String.split_on_char '(' |> List.hd
     |> String.split_on_char '.'
   in
   let class_name = List.nth class_method (List.length class_method - 2) in
-try
-  let param_list = SummaryMap.M.find constructor summary |> List.hd in
-  let param_list = param_list.Summary.param |> remove_this in
-  class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "(" ^ get_param_var_list param_list ^ ");\n"
-with Not_found -> class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "();\n"
-  
+  try
+    let param_list = SummaryMap.M.find constructor summary |> List.hd in
+    let param_list = param_list.Summary.param |> remove_this in
+    class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "("
+    ^ get_param_var_list param_list
+    ^ ");\n"
+  with Not_found ->
+    class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "();\n"
 
 let get_target target_method param_list =
   let class_method =
@@ -56,14 +58,14 @@ let get_target target_method param_list =
   let val_name = "obj1" in
   let regexp = Str.regexp_string "<init>" in
   if Str.string_match regexp method_name 0 then
-    class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "(" ^ get_param_var_list param_list ^ ");\n"
+    class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "("
+    ^ get_param_var_list param_list
+    ^ ");\n"
   else
     class_name ^ " " ^ val_name ^ " = new " ^ class_name ^ "();\n" ^ val_name
-  ^ "." ^ method_name ^ "("
-  ^ get_param_var_list param_list
-  ^ ");\n"
-  
-  
+    ^ "." ^ method_name ^ "("
+    ^ get_param_var_list param_list
+    ^ ");\n"
 
 (* compare_prop -> target: one paramter, postcond: all postcondition *)
 let compare_prop param precond_obj postcond =
@@ -192,7 +194,7 @@ let rec get_object_constructor param precond_obj summary =
         | Summary.Param_Typ p, Summary.Exp.Var v -> (p, v)
         | _ -> failwith ""
       in
-      [ (param, _typ^".<init>()") ]
+      [ (param, _typ ^ ".<init>()") ]
     (*default constructor*)
   in
   List.map (fun x -> initial x) param
@@ -224,14 +226,18 @@ let get_precond_statement param precond precond_obj summary =
   match value with
   | Some v ->
       if String.equal (_var |> Z3.Expr.to_string) (v |> Z3.Expr.to_string) then
-        mk_object [param] precond_obj summary
+        mk_object [ param ] precond_obj summary
       else
-        typ ^ " " ^ var ^ " = " ^ (v |> Z3.Arithmetic.Integer.numeral_to_string) ^ ";\n"
+        typ ^ " " ^ var ^ " = "
+        ^ (v |> Z3.Arithmetic.Integer.numeral_to_string)
+        ^ ";\n"
   | None -> ""
 
 let mk_precond_statement param_list precond precond_obj summary =
   let statement_list =
-    List.map (fun x -> get_precond_statement x precond precond_obj summary) param_list
+    List.map
+      (fun x -> get_precond_statement x precond precond_obj summary)
+      param_list
   in
   List.fold_left (fun statement x -> String.cat statement x) "" statement_list
 
@@ -242,9 +248,10 @@ let mk_testcase target_method summary precond precond_obj =
   let param_list =
     target_method_summary.Summary.param |> remove_this |> List.rev
   in
-  let precond_statements = mk_precond_statement param_list precond precond_obj summary in
+  let precond_statements =
+    mk_precond_statement param_list precond precond_obj summary
+  in
   let target_statements = get_target target_method param_list in
   let _start = "public void test() { \n" in
   let _end = "}\n" in
-  _start ^ precond_statements ^ target_statements
-  ^ _end
+  _start ^ precond_statements ^ target_statements ^ _end
