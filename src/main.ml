@@ -43,6 +43,7 @@ let synthesize method_map call_graph =
 let main () =
   let usage = "Usage: unitgen [options] input_files" in
   Arg.parse Cmdline.options Cmdline.parse_arg usage;
+  Cmdline.input_files := List.rev !Cmdline.input_files;
   initialize ();
   match !Cmdline.input_files with
   | [ summary_file; error_summary_file; trace_file ] ->
