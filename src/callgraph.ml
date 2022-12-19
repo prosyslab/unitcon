@@ -36,7 +36,7 @@ let of_json json =
          let callees = JsonUtil.member "callee" element |> JsonUtil.to_list in
          callees
          |> List.map JsonUtil.to_string
-         |> List.fold_left (fun g callee -> G.add_edge g caller callee) g)
+         |> List.fold_left (fun g callee -> G.add_edge g callee caller) g)
        G.empty
 
 module Graphviz = Graph.Graphviz.Dot (G)
