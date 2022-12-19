@@ -3,19 +3,20 @@ module MethodMap = Language.MethodMap
 
 let parse_json filename =
   let json = Yojson.Safe.from_file filename in
-  let method_map = Yojson.Safe.Util.member "node" json |> MethodMap.of_json in
-  let call_graph = Yojson.Safe.Util.member "edge" json |> Callgraph.of_json in
-  (method_map, call_graph)
+  (* let method_map = Yojson.Safe.Util.member "method" json |> MethodMap.of_json in *)
+  let call_graph = Callgraph.of_json json in
+  (* (method_map, call_graph) *)
+  ((), call_graph)
 
 let parse_summary filename =
   let json = Yojson.Safe.from_file filename in
   let list = Yojson.Safe.Util.to_list json in
   Summary.from_json list
 
-let parse_error_summary filename =
+let parse_error_summary filename target_method =
   let json = Yojson.Safe.from_file filename in
   let list = Yojson.Safe.Util.to_list json in
-  ErrorSummary.from_json list
+  ErrorSummary.from_json list target_method
 
 let parse_trace filename =
   let json = Yojson.Safe.from_file filename in
@@ -28,8 +29,6 @@ let get_target_method filename =
 let print_callgraph call_graph =
   let oc = open_out (Filename.concat !Cmdline.out_dir "callgraph.dot") in
   Callgraph.Graphviz.output_graph oc call_graph
-
-let print_summary summary = ()
 
 let initialize () =
   (try Unix.mkdir !Cmdline.out_dir 0o775
@@ -45,26 +44,21 @@ let main () =
   let usage = "Usage: unitgen [options] input_files" in
   Arg.parse Cmdline.options Cmdline.parse_arg usage;
   initialize ();
-  (*
-  let method_map, call_graph =
-    parse_json (!Cmdline.input_files |> List.tl |> List.hd)
-  in
-  *)
-  let trace =
-    parse_trace (!Cmdline.input_files |> List.tl |> List.tl |> List.hd)
-  in
-  let target_method =
-    get_target_method (!Cmdline.input_files |> List.tl |> List.tl |> List.hd)
-  in
-  let summary = parse_summary (!Cmdline.input_files |> List.hd) in
-  (*if !Cmdline.print_callgraph then print_callgraph call_graph;*)
-  let error_summary =
-    parse_error_summary (!Cmdline.input_files |> List.tl |> List.hd)
-  in
-  let precond, precond_obj =
-    Calculation.calc_precond trace target_method summary error_summary
-  in
-  MakeTC.mk_testcase target_method summary precond precond_obj |> print_endline;
-  if !Cmdline.parse_summary then print_summary summary
+  match !Cmdline.input_files with
+  | [ summary_file; error_summary_file; trace_file ] ->
+      let trace = parse_trace trace_file in
+      let target_method = get_target_method trace_file in
+      let summary = parse_summary summary_file in
+      let method_map, call_graph = parse_json summary_file in
+      let error_summary =
+        parse_error_summary error_summary_file target_method
+      in
+      let precond, precond_obj =
+        Calculation.calc_precond trace target_method summary error_summary
+      in
+      MakeTC.mk_testcase target_method summary precond precond_obj
+      |> print_endline;
+      if !Cmdline.print_callgraph then print_callgraph call_graph
+  | _ -> failwith "Invalid Inputs"
 
 let _ = main ()

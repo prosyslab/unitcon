@@ -26,10 +26,15 @@ module G = struct
 end
 
 let of_json json =
-  JsonUtil.to_assoc json
+  JsonUtil.to_list json
   |> List.fold_left
-       (fun g (caller, callees) ->
-         JsonUtil.to_list callees
+       (fun g element ->
+         let caller =
+           JsonUtil.member "method" element
+           |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
+         in
+         let callees = JsonUtil.member "callee" element |> JsonUtil.to_list in
+         callees
          |> List.map JsonUtil.to_string
          |> List.fold_left (fun g callee -> G.add_edge g caller callee) g)
        G.empty
