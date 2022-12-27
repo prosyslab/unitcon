@@ -21,6 +21,15 @@ else
   opam switch $UNITGEN_OPAM_SWITCH
 fi
 
+pip3 install tree_sitter
+if [ ! -d "tree-sitter-java" ]; then
+  git clone https://github.com/tree-sitter/tree-sitter-java
+fi
+
+if [ ! -d "build" ]; then
+  mkdir build
+fi
+
 eval $(SHELL=bash opam config env --switch=$UNITGEN_OPAM_SWITCH)
 opam pin add git@github.com:prosyslab/logger.git
 opam install -j $NCPU ocamlgraph yojson ppx_compare z3 core logger
