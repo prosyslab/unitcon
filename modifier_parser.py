@@ -19,7 +19,7 @@ method_query = J_LANGUAGE.query("""
     (method_declaration
       (modifiers)* @modifier
       name: (identifier) @method-name
-      parameters: (formal_parameters) @parameter)))
+      parameters: (formal_parameters) @parameters)))
 """)
 
 constructor_query = J_LANGUAGE.query("""
@@ -28,7 +28,7 @@ constructor_query = J_LANGUAGE.query("""
   body: (class_body
     (constructor_declaration
       (modifiers)* @modifier
-      parameters: (formal_parameters) @parameter)))
+      parameters: (formal_parameters) @parameters)))
 """)
 
 def get_method_info(node, src):
@@ -36,7 +36,7 @@ def get_method_info(node, src):
   class_name = ""
   modifier = ""
   method_name = ""
-  parameter = ""
+  parameters = ""
   set_modifier = False
   for i in match_list:
     text = src[i[0].start_point[0]][i[0].start_point[1]:i[0].end_point[1]]
@@ -47,27 +47,27 @@ def get_method_info(node, src):
       modifier = text
     elif i[1] == 'method-name':
       method_name = text
-    elif i[1] == 'parameter':
-      parameter = text
-      parameter = parameter[1:-1].strip().split(",")
+    elif i[1] == 'parameters':
+      parameters = text
+      parameters = [ parameter.strip() for parameter in parameters[1:-1].strip().split(",") ]
       param = ""
-      for i in parameter:
-        split_type = i.strip().split(" ")[0].strip()
+      for i in parameters:
+        split_type = i.split(" ")[0].strip()
         param = param+","+split_type
       param = param.lstrip(",")
       param = "("+param+")"
 
       if set_modifier:
-        method_info_list.append({'name': class_name+"."+method_name+param, 'modifier': modifier})
+        method_info_list.append({'name': class_name+"."+method_name+param, 'modifier': modifier, 'param': parameters})
       else:
-        method_info_list.append({'name': class_name+"."+method_name+param, 'modifier': "default"})
+        method_info_list.append({'name': class_name+"."+method_name+param, 'modifier': "default", 'param': parameters})
       set_modifier = False
 
 def get_constructor_info(node, src):
   match_list = constructor_query.captures(node)
   class_name = ""
   modifier = ""
-  parameter = ""
+  parameters = ""
   set_modifier = False
   for i in match_list:
     text = src[i[0].start_point[0]][i[0].start_point[1]:i[0].end_point[1]]
@@ -76,20 +76,20 @@ def get_constructor_info(node, src):
     elif i[1] == 'modifier':
       set_modifier = True
       modifier = text
-    elif i[1] == 'parameter':
-      parameter = text
-      parameter = parameter[1:-1].strip().split(",")
+    elif i[1] == 'parameters':
+      parameters = text
+      parameters = [ parameter.strip() for parameter in parameters[1:-1].strip().split(",") ]
       param = ""
-      for i in parameter:
+      for i in parameters:
         split_type = i.split(" ")[0].strip()
         param = param+","+split_type
       param = param.lstrip(",")
       param = "("+param+")"
 
       if set_modifier:
-        method_info_list.append({'name': class_name+"."+"<init>"+param, 'modifier': modifier})
+        method_info_list.append({'name': class_name+"."+"<init>"+param, 'modifier': modifier, 'param': parameters})
       else:
-        method_info_list.append({'name': class_name+"."+"<init>"+param, 'modifier': "default"})
+        method_info_list.append({'name': class_name+"."+"<init>"+param, 'modifier': "default", 'param': parameters})
       set_modifier = False
 
 def one_file_method_info(src):
