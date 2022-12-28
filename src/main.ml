@@ -1,30 +1,32 @@
 module F = Format
 module MethodMap = Language.MethodMap
+module Method = Language.Method
 
-let parse_json filename =
+let parse_method_list filename =
   let json = Yojson.Safe.from_file filename in
-  (* let method_map = Yojson.Safe.Util.member "method" json |> MethodMap.of_json in *)
-  let call_graph = Callgraph.of_json json in
-  (* (method_map, call_graph) *)
-  ((), call_graph)
+  Language.MethodMap.of_json json
 
-let parse_summary filename =
+let parse_callgraph filename =
   let json = Yojson.Safe.from_file filename in
-  let list = Yojson.Safe.Util.to_list json in
-  Summary.from_json list
+  Callgraph.of_json json
 
-let parse_error_summary filename target_method =
+let parse_summary filename method_map =
   let json = Yojson.Safe.from_file filename in
   let list = Yojson.Safe.Util.to_list json in
-  ErrorSummary.from_json list target_method
+  Summary.from_json list method_map
 
-let parse_trace filename =
+let parse_error_summary filename target_method method_map =
   let json = Yojson.Safe.from_file filename in
-  Trace.from_json json
+  let list = Yojson.Safe.Util.to_list json in
+  ErrorSummary.from_json list target_method method_map
 
-let get_target_method filename =
+let parse_trace filename method_map =
   let json = Yojson.Safe.from_file filename in
-  Trace.target_method json
+  Trace.from_json json method_map
+
+let get_target_method filename method_map =
+  let json = Yojson.Safe.from_file filename in
+  Trace.target_method json method_map
 
 let print_callgraph call_graph =
   let oc = open_out (Filename.concat !Cmdline.out_dir "callgraph.dot") in
@@ -46,13 +48,14 @@ let main () =
   Cmdline.input_files := List.rev !Cmdline.input_files;
   initialize ();
   match !Cmdline.input_files with
-  | [ summary_file; error_summary_file; trace_file ] ->
-      let trace = parse_trace trace_file in
-      let target_method = get_target_method trace_file in
-      let summary = parse_summary summary_file in
-      let method_map, call_graph = parse_json summary_file in
+  | [ method_list; summary_file; error_summary_file; trace_file ] ->
+      let method_map = parse_method_list method_list in
+      let trace = parse_trace trace_file method_map in
+      let target_method = get_target_method trace_file method_map in
+      let summary = parse_summary summary_file method_map in
+      let call_graph = parse_callgraph summary_file in
       let error_summary =
-        parse_error_summary error_summary_file target_method
+        parse_error_summary error_summary_file target_method method_map
       in
       let precond, precond_obj =
         Calculation.calc_precond trace target_method summary error_summary

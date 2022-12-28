@@ -1,4 +1,5 @@
 module SummaryMap = Summary.SummaryMap
+module Method = Language.Method
 (*when making precond, Pred shape*)
 
 type return = OBJ | NULL | NONE
@@ -35,7 +36,7 @@ let get_param_var_list param_list =
 
 let execute_constructor val_name constructor summary =
   let class_method =
-    constructor |> String.split_on_char '(' |> List.hd
+    constructor.Method.name |> String.split_on_char '(' |> List.hd
     |> String.split_on_char '.'
   in
   let class_name = List.nth class_method (List.length class_method - 2) in
@@ -50,7 +51,7 @@ let execute_constructor val_name constructor summary =
 
 let get_target target_method param_list =
   let class_method =
-    target_method |> String.split_on_char '(' |> List.hd
+    target_method.Method.name |> String.split_on_char '(' |> List.hd
     |> String.split_on_char '.'
   in
   let method_name = List.nth class_method (List.length class_method - 1) in
@@ -165,7 +166,7 @@ let rec get_object_constructor param precond_obj summary =
     let constructor =
       SummaryMap.M.fold
         (fun k _ list ->
-          if Str.string_match regexp_param k 0 then
+          if Str.string_match regexp_param k.Method.name 0 then
             let postcond = SummaryMap.M.find k summary |> List.hd in
             let post = postcond.Summary.postcond in
             match compare_prop param precond_obj post with
@@ -180,7 +181,7 @@ let rec get_object_constructor param precond_obj summary =
                         [ (param, k) ]))
                     list
                 else List.rev_append [ (param, k) ] list
-            | NULL -> List.rev_append [ (param, "null") ] list
+            | NULL -> List.rev_append [ (param, Language.null) ] list
             | NONE -> list
           else list)
         summary []
@@ -194,7 +195,7 @@ let rec get_object_constructor param precond_obj summary =
         | Summary.Param_Typ p, Summary.Exp.Var v -> (p, v)
         | _ -> failwith ""
       in
-      [ (param, _typ ^ ".<init>()") ]
+      [ (param, Language.default _typ) ]
     (*default constructor*)
   in
   List.map (fun x -> initial x) param
@@ -211,7 +212,8 @@ let mk_object param precond_obj summary =
         | Summary.Param_Typ p, Summary.Exp.Var v -> (p, v)
         | _ -> failwith ""
       in
-      if constructor = "null" then stat ^ typ ^ " " ^ var ^ " = null;\n"
+      if constructor.Method.name = "null" then
+        stat ^ typ ^ " " ^ var ^ " = null;\n"
       else stat ^ execute_constructor var constructor summary)
     "" constructor_list
 

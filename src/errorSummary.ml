@@ -1,4 +1,5 @@
 module Method = Language.Method
+module MethodMap = Language.MethodMap
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 module Exp = Summary.Exp
@@ -15,8 +16,7 @@ type error_summary = t list
 
 module ErrorSummaryMap = struct
   module M = Map.Make (struct
-    (* type t = Method.t *)
-    type t = string
+    type t = Method.t
 
     let compare = compare
   end)
@@ -195,13 +195,14 @@ let prop_element x =
       "prop element " ^ item |> print_endline;
       failwith "prop element not implemented"
 
-let name_split assoc mmap =
+let name_split assoc method_map mmap =
   let method_name = JsonUtil.member "method" assoc |> JsonUtil.to_string in
   let method_name =
     if String.contains method_name ' ' then
       method_name |> String.split_on_char ' ' |> List.tl |> List.hd
     else method_name
   in
+  let method_name = MethodMap.M.find method_name method_map in
   let summary =
     JsonUtil.member "prop" assoc
     |> JsonUtil.to_list
@@ -320,10 +321,10 @@ let replace_prop mmap =
   in
   props
 
-let from_json json target_method =
+let from_json json target_method method_map =
   let error_summarys =
     List.fold_left
-      (fun mmap item -> name_split item mmap)
+      (fun mmap item -> name_split item method_map mmap)
       ErrorSummaryMap.M.empty json
   in
   ErrorSummaryMap.M.fold

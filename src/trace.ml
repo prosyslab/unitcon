@@ -1,11 +1,12 @@
 module Method = Language.Method
+module MethodMap = Language.MethodMap
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 module SummaryMap = Summary.SummaryMap
 
 module TraceMap = struct
   module M = Map.Make (struct
-    type t = string
+    type t = Method.t
 
     let compare = compare
   end)
@@ -16,7 +17,7 @@ end
 
 let rm_char str = Str.replace_first (Str.regexp ",$") "" str
 
-let bug_trace assoc mmap =
+let bug_trace assoc method_map mmap =
   let file_name = JsonUtil.member "filename" assoc |> JsonUtil.to_string in
   let method_name = JsonUtil.member "description" assoc |> JsonUtil.to_string in
   let method_name =
@@ -24,6 +25,7 @@ let bug_trace assoc mmap =
       method_name |> String.split_on_char ' ' |> List.tl |> List.hd
     else method_name
   in
+  let method_name = MethodMap.M.find method_name method_map in
   let line = JsonUtil.member "line_number" assoc |> JsonUtil.to_int in
   if TraceMap.M.mem method_name mmap then
     let key = TraceMap.M.find method_name mmap in
@@ -40,15 +42,17 @@ let bug_trace assoc mmap =
       }
       mmap
 
-let from_json json =
+let from_json json method_map =
   let json =
     JsonUtil.to_list json |> List.hd
     |> JsonUtil.member "bug_trace"
     |> JsonUtil.to_list
   in
-  List.fold_left (fun mmap x -> bug_trace x mmap) TraceMap.M.empty json
+  List.fold_left
+    (fun mmap x -> bug_trace x method_map mmap)
+    TraceMap.M.empty json
 
-let target_method json =
+let target_method json method_map =
   let json =
     JsonUtil.to_list json |> List.hd
     |> JsonUtil.member "procedure"
@@ -78,4 +82,5 @@ let target_method json =
       (fun statement x -> statement ^ x ^ ",")
       (procname ^ "(") param_list
   in
-  rm_char param
+  let target_method_name = rm_char param in
+  MethodMap.M.find target_method_name method_map

@@ -1,4 +1,5 @@
 module Method = Language.Method
+module MethodMap = Language.MethodMap
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 
@@ -22,7 +23,7 @@ module Procname = struct
   type class_name = { class_name : string; package : string option }
 
   type t = {
-    method_name : string;
+    method_name : Method.t;
     parameters : Exp.t list;
     class_name : class_name;
   }
@@ -98,8 +99,7 @@ let equal_key { filename = filename1; visited = visited1 }
 
 module SummaryMap = struct
   module M = Map.Make (struct
-    (* type t = Method.t *)
-    type t = string
+    type t = Method.t
 
     let compare = compare
   end)
@@ -312,7 +312,7 @@ let param_split param =
 let param_list list =
   List.map (fun x -> JsonUtil.to_string x |> param_split) list
 
-let name_split assoc mmap =
+let name_split assoc method_map mmap =
   let method_name =
     JsonUtil.member "method" assoc
     |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
@@ -321,6 +321,11 @@ let name_split assoc mmap =
     if String.contains method_name ' ' then
       method_name |> String.split_on_char ' ' |> List.tl |> List.hd
     else method_name
+  in
+  let method_name =
+    if MethodMap.M.mem method_name method_map then
+      MethodMap.M.find method_name method_map
+    else Method.{ name = method_name; modifier = Default; param = [ "" ] }
   in
   let file_name =
     JsonUtil.member "filename" assoc
@@ -347,5 +352,7 @@ let name_split assoc mmap =
   in
   SummaryMap.M.add method_name summary mmap
 
-let from_json json =
-  List.fold_left (fun mmap item -> name_split item mmap) SummaryMap.M.empty json
+let from_json json method_map =
+  List.fold_left
+    (fun mmap item -> name_split item method_map mmap)
+    SummaryMap.M.empty json

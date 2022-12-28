@@ -3,13 +3,14 @@ module JsonUtil = Yojson.Safe.Util
 
 type var = string
 
-type modifier = Public | Private | Protected [@@deriving compare]
+type modifier = Public | Private | Protected | Default [@@deriving compare]
 
 let modifier_of_json json =
   JsonUtil.to_string json |> function
   | "public" -> Public
   | "private" -> Private
   | "protected" -> Protected
+  | "default" -> Default
   | s -> failwith ("Unknown modifier " ^ s)
 
 let param_of_json json = List.map JsonUtil.to_string json
@@ -65,3 +66,8 @@ module MethodMap = struct
            M.add m.Method.name m mmap)
          M.empty
 end
+
+let default typ =
+  Method.{ name = typ ^ ".<init>()"; modifier = Public; param = [ "" ] }
+
+let null = Method.{ name = "null"; modifier = Public; param = [ "" ] }
