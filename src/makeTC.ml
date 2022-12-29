@@ -1,5 +1,7 @@
 module SummaryMap = Summary.SummaryMap
 module Method = Language.Method
+module MethodMap = Language.MethodMap
+module G = Callgraph.G
 (*when making precond, Pred shape*)
 
 type return = OBJ | NULL | NONE
@@ -243,7 +245,30 @@ let mk_precond_statement param_list precond precond_obj summary =
   in
   List.fold_left (fun statement x -> String.cat statement x) "" statement_list
 
-let mk_testcase target_method summary precond precond_obj =
+let is_public s_method =
+  match s_method.Method.modifier with Public -> true | _ -> false
+
+let rec find_public_source_method s_method s_precond call_graph summary method_map =
+  if is_public s_method then [ (s_method, s_precond) ]
+  else
+    let caller_list = G.succ call_graph s_method.name in
+    List.fold_left
+      (fun list m ->
+        let caller = MethodMap.M.find m method_map in
+        let get_m_preconds =
+          SummaryMap.M.find caller summary
+          |> List.fold_left
+               (fun m_preconds precond ->
+                 List.rev_append
+                   (find_public_source_method caller precond call_graph summary
+                      method_map)
+                   m_preconds)
+               []
+        in
+        list @ get_m_preconds)
+      [] caller_list
+
+let mk_testcase target_method call_graph summary method_map precond precond_obj =
   let target_method_summary =
     SummaryMap.M.find target_method summary |> List.hd
   in

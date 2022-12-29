@@ -60,7 +60,8 @@ let main () =
       let precond, precond_obj =
         Calculation.calc_precond trace target_method summary error_summary
       in
-      MakeTC.mk_testcase target_method summary precond precond_obj
+      MakeTC.mk_testcase target_method call_graph summary method_map precond
+        precond_obj
       |> print_endline;
       if !Cmdline.print_callgraph then print_callgraph call_graph
   | _ -> failwith "Invalid Inputs"
