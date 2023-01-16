@@ -1,358 +1,245 @@
-module Method = Language.Method
-module MethodMap = Language.MethodMap
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
+module Relation = Language.Relation
+module Value = Language.Value
+module Condition = Language.Condition
+module MethodInfo = Language.MethodInfo
+module SummaryMap = Language.SummaryMap
 
-module Exp = struct
-  (* todo: add array type *)
-  type t =
-    | Int of int
-    | Float of float (* todo *)
-    | String of string
-    | Symbol of string
-    | Var of Language.var
-    | Field of (t * t) list
-    | Plus of t * t
-    | Minus of t * t
-    | Mul of t * t
-    | Div of t * t
-end
+let rm_exp exp str = Str.global_replace exp "" str
 
-(* todo: move to language.ml/Method *)
-module Procname = struct
-  type class_name = { class_name : string; package : string option }
+let rm_space str =
+  let str = Str.replace_first (Str.regexp "^[ \t\r\n]+") "" str in
+  Str.replace_first (Str.regexp "[ \t\r\n]+$") "" str
 
-  type t = {
-    method_name : Method.t;
-    parameters : Exp.t list;
-    class_name : class_name;
-  }
-end
-
-module PredSymb = struct
-  type mem_kind = Mnew | Mnew_array
-
-  (* pname: Method.t *)
-  type mem = { kind : mem_kind; pname : string; location : int }
-
-  type und = { pname : string; location : int }
-
-  type ret = { pname : string }
-
-  type t = MEM of mem | UND of und | RET of ret
-end
-
-module Predicate = struct
-  type t =
-    | Eq of Exp.t * Exp.t
-    | Neq of Exp.t * Exp.t
-    | Le of Exp.t * Exp.t
-    | Lt of Exp.t * Exp.t
-    | Ge of Exp.t * Exp.t
-    | Gt of Exp.t * Exp.t
-    | Pred of PredSymb.t * Exp.t list
-    | Npred of PredSymb.t * Exp.t list
-    | Object of Exp.t * Exp.t
-    | None
-end
-
-module Memory = struct
-  type t = Predicate.t list
-end
-
-type precond = Memory.t
-
-type postcond = Memory.t
-
-type visited = int list
-
-type filename = Filename of string
-
-type param_typ = Param_Typ of string
-
-type param = param_typ * Exp.t
-
-type t = {
-  precond : precond;
-  postcond : postcond;
-  visited : visited;
-  filename : filename;
-  param : param list;
-}
-
-type summary = t list
-
-type key = { filename : filename; visited : visited }
-
-let rec visited_equal list1 list2 =
-  match (list1, list2) with
-  | hd1 :: tl1, hd2 :: tl2 -> if hd1 <> hd2 then 1 else visited_equal tl1 tl2
-  | [], _ :: _ -> 0
-  | _ :: _, [] -> 0
-  | [], [] -> 0
-
-let equal_key { filename = filename1; visited = visited1 }
-    { filename = filename2; visited = visited2 } =
-  match compare filename1 filename2 with
-  | 0 -> visited_equal visited1 visited2
-  | c -> c
-
-module SummaryMap = struct
-  module M = Map.Make (struct
-    type t = Method.t
-
-    let compare = compare
-  end)
-
-  type t = summary M.t
-end
-
-let is_le str = String.contains str '<' && String.contains str '='
-
-let is_lt str = String.contains str '<'
-
-let is_ge str = String.contains str '>' && String.contains str '='
-
-let is_gt str = String.contains str '>'
-
-let is_neq str = String.contains str '!' && String.contains str '='
-
-let is_eq str = String.contains str '='
-
-let rec mk_exp exp =
-  let exp = Str.replace_first (Str.regexp ":") "" exp in
-  try Exp.Int (int_of_string exp)
-  with _ -> (
-    match exp with
-    | _ when String.contains exp '+' ->
-        let exp_list = String.split_on_char '+' exp in
-        Exp.Plus
-          ( exp_list |> List.hd |> String.trim |> mk_exp,
-            exp_list |> List.tl |> List.hd |> String.trim |> mk_exp )
-    | _ when String.contains exp '-' ->
-        let exp_list = String.split_on_char '-' exp in
-        Exp.Minus
-          ( exp_list |> List.hd |> String.trim |> mk_exp,
-            exp_list |> List.tl |> List.hd |> String.trim |> mk_exp )
-    | _ when String.contains exp '*' ->
-        let exp_list = String.split_on_char '*' exp in
-        Exp.Mul
-          ( exp_list |> List.hd |> String.trim |> mk_exp,
-            exp_list |> List.tl |> List.hd |> String.trim |> mk_exp )
-    | _ when String.contains exp '/' ->
-        let exp_list = String.split_on_char '/' exp in
-        Exp.Div
-          ( exp_list |> List.hd |> String.trim |> mk_exp,
-            exp_list |> List.tl |> List.hd |> String.trim |> mk_exp )
+let parse_param param =
+  let v_and_t = String.split_on_char ':' param in
+  let get_type t =
+    match t with
+    | "int" -> Language.Int
+    | "float" -> Language.Float
+    | "String" -> Language.String
+    | "" -> Language.None
     | _ ->
-        let regexp1 = Str.regexp_string "val$" in
-        let regrexp2 = Str.regexp_string "@f$" in
-        if Str.string_match regexp1 exp 0 || Str.string_match regrexp2 exp 0
-        then Exp.Symbol exp
-        else Exp.Var exp)
-
-let mk_field element =
-  let var_and_value = String.split_on_char ':' element in
-  if List.length var_and_value = 1 then (mk_exp "None", Exp.Var "_")
+        let class_name = String.split_on_char '.' t |> List.rev |> List.hd in
+        let class_name = Str.replace_first (Str.regexp "*") "" class_name in
+        Language.Object class_name
+  in
+  if List.length v_and_t = 1 then Language.Var (get_type "", "")
   else
-    let var = List.hd var_and_value |> String.trim in
-    let value = List.tl var_and_value |> List.hd |> String.trim in
-    (mk_exp var, mk_exp value)
+    let mk_variable var typ =
+      if var = "this" then Language.This (get_type typ)
+      else Language.Var (get_type typ, var)
+    in
+    let var = List.hd v_and_t in
+    let typ = List.tl v_and_t |> List.hd in
+    mk_variable var typ
 
-let mk_field_list field =
-  let field_list = String.split_on_char ',' field in
-  List.map (fun x -> mk_field x) field_list
-
-let summary_element x =
-  let item = JsonUtil.to_string x in
-  match item with
-  | _ when String.starts_with ~prefix:"MEMne" item ->
-      let procname_and_line =
-        item |> Str.replace_first (Str.regexp "MEMne<") ""
-      in
-      let procname_and_line = String.split_on_char ':' procname_and_line in
-      let procname = procname_and_line |> List.hd |> String.trim in
-      let line_and_exp =
-        procname_and_line |> List.tl |> List.hd |> String.split_on_char '>'
-      in
-      let line = line_and_exp |> List.hd |> int_of_string in
-      let expression =
-        line_and_exp |> List.tl |> List.hd
-        |> Str.global_replace (Str.regexp "[()]") ""
-        |> String.trim
-      in
-      let predsymb =
-        PredSymb.MEM
-          { PredSymb.kind = PredSymb.Mnew; pname = procname; location = line }
-      in
-      Predicate.Pred (predsymb, [ mk_exp expression ])
-  | _ when String.starts_with ~prefix:"UND" item ->
-      let list =
-        item
-        |> Str.replace_first (Str.regexp "UND<") ""
-        |> String.split_on_char ':'
-      in
-      let procname =
-        List.hd list |> Str.replace_first (Str.regexp ">") "" |> String.trim
-      in
-      let line_and_exp = List.tl list |> List.hd |> String.split_on_char '(' in
-      let line = List.hd line_and_exp |> int_of_string in
-      let expression =
-        List.tl line_and_exp |> List.hd
-        |> Str.replace_first (Str.regexp ")") ""
-        |> String.trim
-      in
-      let predsymb = PredSymb.UND { pname = procname; location = line } in
-      Predicate.Pred (predsymb, [ mk_exp expression ])
-  | _ when String.starts_with ~prefix:"RET" item ->
-      let list =
-        item
-        |> Str.replace_first (Str.regexp "RET<") ""
+let parse_boitv boitv =
+  let remove_bk str = Str.global_replace (Str.regexp "{}") "" str in
+  let relation_list = remove_bk boitv |> String.split_on_char ',' in
+  List.fold_left
+    (fun mmap relation ->
+      let relation =
+        Str.global_replace (Str.regexp "-") "" relation
         |> String.split_on_char '>'
       in
-      let procname = list |> List.hd |> String.trim in
-      let var =
-        list |> List.tl |> List.hd
-        |> Str.global_replace (Str.regexp "[()]") ""
-        |> String.trim
+      let check_relation head tail =
+        match int_of_string_opt tail with
+        | Some _ -> false
+        | None -> if head = tail then false else true
       in
-      let predsymb = PredSymb.RET { pname = procname } in
-      Predicate.Pred (predsymb, [ mk_exp var ])
-  | _ when String.contains item '|' ->
-      let list = String.split_on_char '|' item in
-      let expression = List.hd list |> String.trim in
-      let field_list =
-        List.tl list |> List.hd
-        |> Str.global_replace (Str.regexp "[->{}]") ""
-        |> String.trim
-      in
-      let field = mk_field_list field_list in
-      Predicate.Object (mk_exp expression, Exp.Field field)
-  | _ when is_neq item ->
-      let list = String.split_on_char '=' item in
-      let variable =
-        Exp.Var
-          (List.hd list |> Str.replace_first (Str.regexp "!") "" |> String.trim)
-      in
-      let value = List.tl list |> List.hd |> String.trim |> mk_exp in
-      Predicate.Neq (variable, value)
-  | _ when is_le item ->
-      let item =
-        item |> Str.global_replace (Str.regexp "[()=]") "" |> String.trim
-      in
-      let list = String.split_on_char '<' item in
-      let left_var = List.hd list |> String.trim |> mk_exp in
-      let right_var = List.tl list |> List.hd |> String.trim |> mk_exp in
-      Predicate.Le (left_var, right_var)
-  | _ when is_ge item ->
-      let item =
-        item |> Str.global_replace (Str.regexp "[()=]") "" |> String.trim
-      in
-      let list = String.split_on_char '>' item in
-      let left_var = List.hd list |> String.trim |> mk_exp in
-      let right_var = List.tl list |> List.hd |> String.trim |> mk_exp in
-      Predicate.Ge (left_var, right_var)
-  | _ when is_lt item ->
-      let item =
-        item |> Str.global_replace (Str.regexp "[()=]") "" |> String.trim
-      in
-      let list = String.split_on_char '<' item in
-      let left_var = List.hd list |> String.trim |> mk_exp in
-      let right_var = List.tl list |> List.hd |> String.trim |> mk_exp in
-      Predicate.Lt (left_var, right_var)
-  | _ when is_gt item ->
-      let item =
-        item |> Str.global_replace (Str.regexp "[()=]") "" |> String.trim
-      in
-      let list = String.split_on_char '>' item in
-      let left_var = List.hd list |> String.trim |> mk_exp in
-      let right_var = List.tl list |> List.hd |> String.trim |> mk_exp in
-      Predicate.Gt (left_var, right_var)
-  | _ when is_eq item ->
-      let list = String.split_on_char '=' item in
-      let variable = Exp.Var (List.hd list |> String.trim) in
-      let value = List.tl list |> List.hd |> String.trim |> mk_exp in
-      Predicate.Eq (variable, value)
-  | _ when String.equal item "" -> Predicate.None
-  | _ -> Predicate.None
+      let head = List.hd relation |> rm_space in
+      let tail = List.tl relation |> List.hd |> rm_space in
+      if check_relation head tail then Relation.M.add head tail mmap else mmap)
+    Relation.M.empty relation_list
 
-let summary_split item filename param =
-  let v =
-    JsonUtil.member "visited" item
-    |> JsonUtil.to_list
-    |> List.map (fun x ->
-           let _str = JsonUtil.to_string x in
-           try int_of_string _str with _ -> 0)
+let parse_citv citv =
+  let remove_bk str = rm_exp (Str.regexp "[{}]") str in
+  let value_list = remove_bk citv |> String.split_on_char ',' in
+  List.map
+    (fun mapping_value ->
+      let mapping_value =
+        Str.replace_first (Str.regexp ">") "" mapping_value
+        |> String.split_on_char '-'
+      in
+      let head = List.hd mapping_value |> rm_space in
+      let tail = List.tl mapping_value |> List.hd |> rm_space in
+      if Value.is_eq tail then
+        let value = rm_exp (Str.regexp "=") tail in
+        match int_of_string_opt value with
+        | Some v -> Value.Eq (head, Int v)
+        | None ->
+            if value = "null" then Value.Eq (head, Null)
+            else Value.Eq (head, String value)
+      else if Value.is_neq tail then
+        let value = rm_exp (Str.regexp "!=") tail in
+        match int_of_string_opt value with
+        | Some v -> Value.Neq (head, Int v)
+        | None ->
+            if value = "null" then Value.Neq (head, Null)
+            else Value.Neq (head, String value)
+      else if Value.is_ge tail then
+        let value = rm_exp (Str.regexp ">=") tail in
+        match int_of_string_opt value with
+        | Some v -> Value.Ge (head, Int v)
+        | None -> failwith ("Ge: " ^ value)
+      else if Value.is_gt tail then
+        let value = rm_exp (Str.regexp ">") tail in
+        match int_of_string_opt value with
+        | Some v -> Value.Gt (head, Int v)
+        | None -> failwith ("Gt: " ^ value)
+      else if Value.is_le tail then
+        let value = rm_exp (Str.regexp "<=") tail in
+        match int_of_string_opt value with
+        | Some v -> Value.Le (head, Int v)
+        | None -> failwith ("Le: " ^ value)
+      else if Value.is_lt tail then
+        let value = rm_exp (Str.regexp "<") tail in
+        match int_of_string_opt value with
+        | Some v -> Value.Lt (head, Int v)
+        | None -> failwith ("Lt: " ^ value)
+      else if Value.is_between tail then
+        let values =
+          rm_exp (Str.regexp "[in_N\\[\\]]") tail |> String.split_on_char ' '
+        in
+        let min_value = List.hd values in
+        let max_value = List.tl values |> List.hd in
+        match int_of_string_opt min_value with
+        | Some v -> Value.Between (head, Int v, Int (int_of_string max_value))
+        | None -> Value.Between (head, MinusInf, PlusInf)
+      else if Value.is_outside tail then
+        let values =
+          rm_exp (Str.regexp "[not_in\\[\\]]") tail |> String.split_on_char ' '
+        in
+        let min_value = List.hd values in
+        let max_value = List.tl values |> List.hd in
+        match int_of_string_opt min_value with
+        | Some v -> Value.Outside (head, Int v, Int (int_of_string max_value))
+        | None -> failwith ("Outside: " ^ min_value)
+      else failwith "parse_citv error")
+    value_list
+
+let parse_condition condition =
+  let v_and_m = String.split_on_char ';' condition in
+  let var_list =
+    List.hd v_and_m
+    |> rm_exp (Str.regexp "Stack=")
+    |> rm_exp (Str.regexp "[&{}]")
+    |> String.split_on_char ','
   in
-  let pre =
-    JsonUtil.member "precond" item
-    |> JsonUtil.to_list
-    |> List.map (fun x -> summary_element x)
+  let mem =
+    List.tl v_and_m |> List.hd
+    |> rm_exp (Str.regexp "Heap=")
+    |> rm_exp (Str.regexp "[ >{}]")
+    |> String.split_on_char ','
   in
-  let post =
-    JsonUtil.member "postcond" item
-    |> JsonUtil.to_list
-    |> List.map (fun x -> summary_element x)
+  let variables =
+    List.fold_left
+      (fun mmap var ->
+        let i_and_s = String.split_on_char '=' var in
+        let id = List.hd i_and_s in
+        let symbol = List.tl i_and_s |> List.hd in
+        Condition.M.add symbol (Condition.RH_Var id) mmap)
+      Condition.M.empty var_list
   in
-  { precond = pre; postcond = post; visited = v; filename; param }
+  let rec mk_ref_list ref_trace =
+    match ref_trace with
+    | hd :: tl ->
+        let check_symbol v = Str.string_match (Str.regexp "^v[0-9]$") v 0 in
+        if check_symbol hd then Condition.RH_Symbol hd :: mk_ref_list tl
+        else Condition.RH_Var hd :: mk_ref_list tl
+    | [] -> []
+  in
+  let memory =
+    List.fold_left
+      (fun mmap ref ->
+        let ref_trace = String.split_on_char '-' ref in
+        let head = List.hd ref_trace in
+        let trace = List.tl ref_trace |> mk_ref_list in
+        Condition.M.add head trace mmap)
+      Condition.M.empty mem
+  in
+  (variables, memory)
 
-let param_split param =
-  let var_and_typ = String.split_on_char ':' param in
-  if List.length var_and_typ = 1 then (Param_Typ "None", Exp.Var "_")
-  else
-    let var = var_and_typ |> List.hd in
-    let typ = var_and_typ |> List.tl |> List.hd |> String.split_on_char '.' in
-    let typ = List.nth typ (List.length typ - 1) in
-    let typ =
-      if String.contains typ '*' then String.sub typ 0 (String.length typ - 1)
-      else typ
-    in
-    (Param_Typ typ, Exp.Var var)
+let parse_summary summary =
+  let relation =
+    JsonUtil.member "BoItv" summary |> JsonUtil.to_string |> parse_boitv
+  in
+  let value =
+    JsonUtil.member "CItv" summary |> JsonUtil.to_string |> parse_citv
+  in
+  let pre_var, pre_mem =
+    JsonUtil.member "Precond" summary |> JsonUtil.to_string |> parse_condition
+  in
+  let post_var, post_mem =
+    JsonUtil.member "Postcond" summary |> JsonUtil.to_string |> parse_condition
+  in
+  Language.
+    {
+      relation;
+      value;
+      precond = (pre_var, pre_mem);
+      postcond = (post_var, post_mem);
+    }
 
-let param_list list =
-  List.map (fun x -> JsonUtil.to_string x |> param_split) list
-
-let name_split assoc method_map mmap =
+let get_method_name assoc =
+  let split_name name =
+    if String.contains name ' ' then
+      name |> String.split_on_char ' ' |> List.tl |> List.hd
+    else name
+  in
   let method_name =
     JsonUtil.member "method" assoc
-    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
+    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> split_name
   in
-  let method_name =
-    if String.contains method_name ' ' then
-      method_name |> String.split_on_char ' ' |> List.tl |> List.hd
-    else method_name
-  in
-  let method_name =
-    if MethodMap.M.mem method_name method_map then
-      MethodMap.M.find method_name method_map
-    else Method.{ name = method_name; modifier = Default; param = [ "" ] }
-  in
-  let file_name =
-    JsonUtil.member "filename" assoc
-    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
-  in
-  let param = JsonUtil.member "param" assoc |> JsonUtil.to_list |> param_list in
-  let summary =
-    JsonUtil.member "summary" assoc
-    |> JsonUtil.to_list
-    |> List.map (fun x -> summary_split x (Filename file_name) param)
-  in
-  let summary =
-    if summary = [] then
-      [
-        {
-          precond = [];
-          postcond = [];
-          visited = [];
-          filename = Filename file_name;
-          param;
-        };
-      ]
-    else summary
-  in
-  SummaryMap.M.add method_name summary mmap
+  method_name
 
-let from_json json method_map =
+let mapping_method_info method_info mmap =
+  let method_name = get_method_name method_info in
+  let modifier =
+    JsonUtil.member "modifier" method_info |> Language.modifier_of_json
+  in
+  let formal_params =
+    JsonUtil.member "param" method_info
+    |> JsonUtil.to_list
+    |> List.map (fun param -> JsonUtil.to_string param |> parse_param)
+  in
+  let filename =
+    JsonUtil.member "filename" method_info
+    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
+  in
+  let info = MethodInfo.{ modifier; formal_params; filename } in
+  MethodInfo.M.add method_name info mmap
+
+let mapping_summary method_summarys mmap =
+  let method_name = get_method_name method_summarys in
+  let summarys =
+    JsonUtil.member "summary" method_summarys
+    |> JsonUtil.to_list
+    |> List.map (fun summary -> parse_summary summary)
+  in
+  let summarys =
+    if summarys = [] then
+      [
+        Language.
+          {
+            relation = Relation.M.empty;
+            value = [];
+            precond = (Condition.M.empty, Condition.M.empty);
+            postcond = (Condition.M.empty, Condition.M.empty);
+          };
+      ]
+    else summarys
+  in
+  SummaryMap.M.add method_name summarys mmap
+
+let from_method_json json =
   List.fold_left
-    (fun mmap item -> name_split item method_map mmap)
+    (fun mmap method_info -> mapping_method_info method_info mmap)
+    MethodInfo.M.empty json
+
+let from_summary_json json =
+  List.fold_left
+    (fun mmap method_summarys -> mapping_summary method_summarys mmap)
     SummaryMap.M.empty json
