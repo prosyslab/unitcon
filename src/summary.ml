@@ -37,13 +37,7 @@ let parse_param param =
 
 let parse_boitv boitv =
   let remove_bk str = Str.global_replace (Str.regexp "[{}]") "" str in
-  let relation_list = remove_bk boitv |> Str.split (Str.regexp ", v") in
-  let relation_list =
-    if List.length relation_list = 1 then relation_list
-    else
-      List.hd relation_list
-      :: (List.tl relation_list |> List.map (fun elem -> "v" ^ elem))
-  in
+  let relation_list = remove_bk boitv |> Str.split (Str.regexp ",") in
   List.fold_left
     (fun mmap relation ->
       let relation = Str.split (Str.regexp "->") relation in
@@ -53,8 +47,17 @@ let parse_boitv boitv =
         | None -> if head = tail then false else true
       in
       let head = List.hd relation |> rm_space in
-      let tail = List.tl relation |> List.hd |> rm_space in
-      if check_relation head tail then Relation.M.add head tail mmap else mmap)
+      let value_list =
+        List.tl relation |> List.hd |> String.split_on_char ' '
+      in
+      List.fold_left
+        (fun mmap tail ->
+          let tail =
+            rm_exp (Str.regexp "[max|min|(|)|\\[|\\]]") tail |> rm_space
+          in
+          if check_relation head tail then Relation.M.add head tail mmap
+          else mmap)
+        mmap value_list)
     Relation.M.empty relation_list
 
 let parse_citv citv =
