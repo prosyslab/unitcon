@@ -36,14 +36,17 @@ let parse_param param =
     mk_variable var typ
 
 let parse_boitv boitv =
-  let remove_bk str = Str.global_replace (Str.regexp "{}") "" str in
-  let relation_list = remove_bk boitv |> String.split_on_char ',' in
+  let remove_bk str = Str.global_replace (Str.regexp "[{}]") "" str in
+  let relation_list = remove_bk boitv |> Str.split (Str.regexp ", v") in
+  let relation_list =
+    if List.length relation_list = 1 then relation_list
+    else
+      List.hd relation_list
+      :: (List.tl relation_list |> List.map (fun elem -> "v" ^ elem))
+  in
   List.fold_left
     (fun mmap relation ->
-      let relation =
-        Str.global_replace (Str.regexp "-") "" relation
-        |> String.split_on_char '>'
-      in
+      let relation = Str.split (Str.regexp "->") relation in
       let check_relation head tail =
         match int_of_string_opt tail with
         | Some _ -> false
@@ -59,10 +62,7 @@ let parse_citv citv =
   let value_list = remove_bk citv |> String.split_on_char ',' in
   List.map
     (fun mapping_value ->
-      let mapping_value =
-        Str.replace_first (Str.regexp ">") "" mapping_value
-        |> String.split_on_char '-'
-      in
+      let mapping_value = Str.split (Str.regexp "->") mapping_value in
       let head = List.hd mapping_value |> rm_space in
       let tail = List.tl mapping_value |> List.hd |> rm_space in
       if Value.is_eq tail then
@@ -101,7 +101,8 @@ let parse_citv citv =
         | None -> failwith ("Lt: " ^ value)
       else if Value.is_between tail then
         let values =
-          rm_exp (Str.regexp "[in_N\\[\\]]") tail |> String.split_on_char ' '
+          rm_exp (Str.regexp "(in_N)|(in[\\[\\]])") tail
+          |> String.split_on_char ' '
         in
         let min_value = List.hd values in
         let max_value = List.tl values |> List.hd in
@@ -110,7 +111,7 @@ let parse_citv citv =
         | None -> Value.Between (head, MinusInf, PlusInf)
       else if Value.is_outside tail then
         let values =
-          rm_exp (Str.regexp "[not_in\\[\\]]") tail |> String.split_on_char ' '
+          rm_exp (Str.regexp "not_in[\\[\\]]") tail |> String.split_on_char ' '
         in
         let min_value = List.hd values in
         let max_value = List.tl values |> List.hd in
@@ -131,7 +132,7 @@ let parse_condition condition =
   let mem =
     List.tl v_and_m |> List.hd
     |> rm_exp (Str.regexp "Heap=")
-    |> rm_exp (Str.regexp "[ >{}]")
+    |> rm_exp (Str.regexp "[ {}]")
     |> String.split_on_char ','
   in
   let variables =
@@ -154,7 +155,7 @@ let parse_condition condition =
   let memory =
     List.fold_left
       (fun mmap ref ->
-        let ref_trace = String.split_on_char '-' ref in
+        let ref_trace = Str.split (Str.regexp "->") ref in
         let head = List.hd ref_trace in
         let trace = List.tl ref_trace |> mk_ref_list in
         Condition.M.add head trace mmap)
