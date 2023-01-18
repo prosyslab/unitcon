@@ -64,15 +64,23 @@ module Value = struct
     | MinusInf
     | Null
 
-  type t =
-    | Eq of symbol * value
-    | Neq of symbol * value
-    | Le of symbol * value
-    | Lt of symbol * value
-    | Ge of symbol * value
-    | Gt of symbol * value
-    | Between of symbol * value * value
-    | Outside of symbol * value * value
+  type op =
+    | Eq of value
+    | Neq of value
+    | Le of value
+    | Lt of value
+    | Ge of value
+    | Gt of value
+    | Between of value * value
+    | Outside of value * value
+
+  module M = Map.Make (struct
+    type t = symbol
+
+    let compare = compare
+  end)
+
+  type t = op M.t
 
   let is_le str = String.contains str '<' && String.contains str '='
 
@@ -118,7 +126,7 @@ end
 
 type summary = {
   relation : Relation.t;
-  value : Value.t list;
+  value : Value.t;
   precond : Condition.t;
   postcond : Condition.t;
 }

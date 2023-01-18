@@ -40,44 +40,44 @@ let parse_boitv boitv =
 let parse_citv citv =
   let remove_bk str = rm_exp (Str.regexp "[{}]") str in
   let value_list = remove_bk citv |> String.split_on_char ',' in
-  List.map
-    (fun mapping_value ->
+  List.fold_left
+    (fun mmap mapping_value ->
       let mapping_value = Str.split (Str.regexp "->") mapping_value in
       let head = List.hd mapping_value |> rm_space in
       let tail = List.tl mapping_value |> List.hd |> rm_space in
       if Value.is_eq tail then
         let value = rm_exp (Str.regexp "=") tail in
         match int_of_string_opt value with
-        | Some v -> Value.Eq (head, Int v)
+        | Some v -> Value.M.add head (Value.Eq (Int v)) mmap
         | None ->
-            if value = "null" then Value.Eq (head, Null)
-            else Value.Eq (head, String value)
+            if value = "null" then Value.M.add head (Value.Eq Null) mmap
+            else Value.M.add head (Value.Eq (String value)) mmap
       else if Value.is_neq tail then
         let value = rm_exp (Str.regexp "!=") tail in
         match int_of_string_opt value with
-        | Some v -> Value.Neq (head, Int v)
+        | Some v -> Value.M.add head (Value.Neq (Int v)) mmap
         | None ->
-            if value = "null" then Value.Neq (head, Null)
-            else Value.Neq (head, String value)
+            if value = "null" then Value.M.add head (Value.Neq Null) mmap
+            else Value.M.add head (Value.Neq (String value)) mmap
       else if Value.is_ge tail then
         let value = rm_exp (Str.regexp ">=") tail in
         match int_of_string_opt value with
-        | Some v -> Value.Ge (head, Int v)
+        | Some v -> Value.M.add head (Value.Ge (Int v)) mmap
         | None -> failwith ("Ge: " ^ value)
       else if Value.is_gt tail then
         let value = rm_exp (Str.regexp ">") tail in
         match int_of_string_opt value with
-        | Some v -> Value.Gt (head, Int v)
+        | Some v -> Value.M.add head (Value.Gt (Int v)) mmap
         | None -> failwith ("Gt: " ^ value)
       else if Value.is_le tail then
         let value = rm_exp (Str.regexp "<=") tail in
         match int_of_string_opt value with
-        | Some v -> Value.Le (head, Int v)
+        | Some v -> Value.M.add head (Value.Le (Int v)) mmap
         | None -> failwith ("Le: " ^ value)
       else if Value.is_lt tail then
         let value = rm_exp (Str.regexp "<") tail in
         match int_of_string_opt value with
-        | Some v -> Value.Lt (head, Int v)
+        | Some v -> Value.M.add head (Value.Lt (Int v)) mmap
         | None -> failwith ("Lt: " ^ value)
       else if Value.is_between tail then
         let values =
@@ -87,8 +87,11 @@ let parse_citv citv =
         let min_value = List.hd values in
         let max_value = List.tl values |> List.hd in
         match int_of_string_opt min_value with
-        | Some v -> Value.Between (head, Int v, Int (int_of_string max_value))
-        | None -> Value.Between (head, MinusInf, PlusInf)
+        | Some v ->
+            Value.M.add head
+              (Value.Between (Int v, Int (int_of_string max_value)))
+              mmap
+        | None -> Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap
       else if Value.is_outside tail then
         let values =
           rm_exp (Str.regexp "not_in[\\[\\]]") tail |> String.split_on_char ' '
@@ -96,10 +99,13 @@ let parse_citv citv =
         let min_value = List.hd values in
         let max_value = List.tl values |> List.hd in
         match int_of_string_opt min_value with
-        | Some v -> Value.Outside (head, Int v, Int (int_of_string max_value))
+        | Some v ->
+            Value.M.add head
+              (Value.Outside (Int v, Int (int_of_string max_value)))
+              mmap
         | None -> failwith ("Outside: " ^ min_value)
       else failwith "parse_citv error")
-    value_list
+    Value.M.empty value_list
 
 let parse_condition condition =
   let v_and_m = String.split_on_char ';' condition in
