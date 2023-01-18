@@ -140,3 +140,22 @@ module SummaryMap = struct
 
   type t = summary list M.t
 end
+
+type callprop = {
+  relation : Relation.t;
+  value : Value.t;
+  precond : Condition.t;
+  postcond : Condition.t;
+  args : symbol list;
+}
+
+module CallPropMap = struct
+  module M = Map.Make (struct
+    (* (caller * callee) *)
+    type t = method_name * method_name
+
+    let compare = compare
+  end)
+
+  type t = callprop list M.t
+end
