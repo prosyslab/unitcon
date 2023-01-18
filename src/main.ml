@@ -1,32 +1,34 @@
 module F = Format
-module MethodMap = Language.MethodMap
-module Method = Language.Method
-
-let parse_method_list filename =
-  let json = Yojson.Safe.from_file filename in
-  Language.MethodMap.of_json json
+module Json = Yojson.Safe
+module JsonUtil = Yojson.Safe.Util
 
 let parse_callgraph filename =
-  let json = Yojson.Safe.from_file filename in
+  let json = Json.from_file filename in
   Callgraph.of_json json
 
-let parse_summary filename method_map =
-  let json = Yojson.Safe.from_file filename in
-  let list = Yojson.Safe.Util.to_list json in
-  Summary.from_json list method_map
+let parse_summary filename =
+  let json = Json.from_file filename in
+  let list = JsonUtil.to_list json in
+  Summary.from_summary_json list
 
-let parse_error_summary filename target_method method_map =
-  let json = Yojson.Safe.from_file filename in
-  let list = Yojson.Safe.Util.to_list json in
-  ErrorSummary.from_json list target_method method_map
+let parse_method_info filename =
+  let json = Json.from_file filename in
+  let list = JsonUtil.to_list json in
+  Summary.from_method_json list
 
-let parse_trace filename method_map =
-  let json = Yojson.Safe.from_file filename in
-  Trace.from_json json method_map
+let parse_error_summary source_method filename =
+  let json = Json.from_file filename in
+  let list = JsonUtil.to_list json in
+  ErrorSummary.from_error_summary_json source_method list
 
-let get_target_method filename method_map =
+let parse_callprop filename =
+  let json = Json.from_file filename in
+  let list = JsonUtil.to_list json in
+  CallProposition.from_callprop_json list
+
+let get_source_method filename =
   let json = Yojson.Safe.from_file filename in
-  Trace.target_method json method_map
+  ErrorSummary.source_method json
 
 let print_callgraph call_graph =
   let oc = open_out (Filename.concat !Cmdline.out_dir "callgraph.dot") in
@@ -48,20 +50,17 @@ let main () =
   Cmdline.input_files := List.rev !Cmdline.input_files;
   initialize ();
   match !Cmdline.input_files with
-  | [ method_list; summary_file; error_summary_file; trace_file ] ->
-      let method_map = parse_method_list method_list in
-      let trace = parse_trace trace_file method_map in
-      let target_method = get_target_method trace_file method_map in
-      let summary = parse_summary summary_file method_map in
+  | [ summary_file; error_summary_file; call_proposition_file ] ->
+      let source_method = get_source_method error_summary_file in
+      let method_info = parse_method_info summary_file in
+      let summary = parse_summary summary_file in
+      let call_prop_map = parse_callprop call_proposition_file in
       let call_graph = parse_callgraph summary_file in
       let error_summary =
-        parse_error_summary error_summary_file target_method method_map
+        parse_error_summary source_method error_summary_file
       in
-      let precond, precond_obj =
-        Calculation.calc_precond trace target_method summary error_summary
-      in
-      MakeTC.mk_testcase target_method call_graph summary method_map precond
-        precond_obj
+      MakeTC.mk_testcase source_method error_summary call_graph summary
+        call_prop_map method_info
       |> print_endline;
       if !Cmdline.print_callgraph then print_callgraph call_graph
   | _ -> failwith "Invalid Inputs"
