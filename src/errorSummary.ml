@@ -13,99 +13,106 @@ let rm_space str =
   Str.replace_first (Str.regexp "[ \t\r\n]+$") "" str
 
 let parse_boitv boitv =
-  let remove_bk str = Str.global_replace (Str.regexp "[{}]") "" str in
+  let remove_bk str =
+    Str.global_replace (Str.regexp "[{}]") "" str |> rm_space
+  in
   let relation_list = remove_bk boitv |> Str.split (Str.regexp ",") in
-  List.fold_left
-    (fun mmap relation ->
-      let relation = Str.split (Str.regexp "->") relation in
-      let check_relation head tail =
-        match int_of_string_opt tail with
-        | Some _ -> false
-        | None -> if head = tail then false else true
-      in
-      let head = List.hd relation |> rm_space in
-      let value_list =
-        List.tl relation |> List.hd |> String.split_on_char ' '
-      in
-      List.fold_left
-        (fun mmap tail ->
-          let tail =
-            rm_exp (Str.regexp "[max|min|(|)|\\[|\\]]") tail |> rm_space
-          in
-          if check_relation head tail then Relation.M.add head tail mmap
-          else mmap)
-        mmap value_list)
-    Relation.M.empty relation_list
+  if List.length relation_list = 0 then Relation.M.empty
+  else
+    List.fold_left
+      (fun mmap relation ->
+        let relation = Str.split (Str.regexp "->") relation in
+        let check_relation head tail =
+          match int_of_string_opt tail with
+          | Some _ -> false
+          | None -> if head = tail then false else true
+        in
+        let head = List.hd relation |> rm_space in
+        let value_list =
+          List.tl relation |> List.hd |> String.split_on_char ' '
+        in
+        List.fold_left
+          (fun mmap tail ->
+            let tail =
+              rm_exp (Str.regexp "[max|min|(|)|\\[|\\]]") tail |> rm_space
+            in
+            if check_relation head tail then Relation.M.add head tail mmap
+            else mmap)
+          mmap value_list)
+      Relation.M.empty relation_list
 
 let parse_citv citv =
-  let remove_bk str = rm_exp (Str.regexp "[{}]") str in
-  let value_list = remove_bk citv |> String.split_on_char ',' in
-  List.fold_left
-    (fun mmap mapping_value ->
-      let mapping_value = Str.split (Str.regexp "->") mapping_value in
-      let head = List.hd mapping_value |> rm_space in
-      let tail = List.tl mapping_value |> List.hd |> rm_space in
-      if Value.is_eq tail then
-        let value = rm_exp (Str.regexp "=") tail in
-        match int_of_string_opt value with
-        | Some v -> Value.M.add head (Value.Eq (Int v)) mmap
-        | None ->
-            if value = "null" then Value.M.add head (Value.Eq Null) mmap
-            else Value.M.add head (Value.Eq (String value)) mmap
-      else if Value.is_neq tail then
-        let value = rm_exp (Str.regexp "!=") tail in
-        match int_of_string_opt value with
-        | Some v -> Value.M.add head (Value.Neq (Int v)) mmap
-        | None ->
-            if value = "null" then Value.M.add head (Value.Neq Null) mmap
-            else Value.M.add head (Value.Neq (String value)) mmap
-      else if Value.is_ge tail then
-        let value = rm_exp (Str.regexp ">=") tail in
-        match int_of_string_opt value with
-        | Some v -> Value.M.add head (Value.Ge (Int v)) mmap
-        | None -> failwith ("Ge: " ^ value)
-      else if Value.is_gt tail then
-        let value = rm_exp (Str.regexp ">") tail in
-        match int_of_string_opt value with
-        | Some v -> Value.M.add head (Value.Gt (Int v)) mmap
-        | None -> failwith ("Gt: " ^ value)
-      else if Value.is_le tail then
-        let value = rm_exp (Str.regexp "<=") tail in
-        match int_of_string_opt value with
-        | Some v -> Value.M.add head (Value.Le (Int v)) mmap
-        | None -> failwith ("Le: " ^ value)
-      else if Value.is_lt tail then
-        let value = rm_exp (Str.regexp "<") tail in
-        match int_of_string_opt value with
-        | Some v -> Value.M.add head (Value.Lt (Int v)) mmap
-        | None -> failwith ("Lt: " ^ value)
-      else if Value.is_between tail then
-        let values =
-          rm_exp (Str.regexp "(in_N)|(in[\\[\\]])") tail
-          |> String.split_on_char ' '
-        in
-        let min_value = List.hd values in
-        let max_value = List.tl values |> List.hd in
-        match int_of_string_opt min_value with
-        | Some v ->
-            Value.M.add head
-              (Value.Between (Int v, Int (int_of_string max_value)))
-              mmap
-        | None -> Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap
-      else if Value.is_outside tail then
-        let values =
-          rm_exp (Str.regexp "not_in[\\[\\]]") tail |> String.split_on_char ' '
-        in
-        let min_value = List.hd values in
-        let max_value = List.tl values |> List.hd in
-        match int_of_string_opt min_value with
-        | Some v ->
-            Value.M.add head
-              (Value.Outside (Int v, Int (int_of_string max_value)))
-              mmap
-        | None -> failwith ("Outside: " ^ min_value)
-      else failwith "parse_citv error")
-    Value.M.empty value_list
+  let remove_bk str = rm_exp (Str.regexp "[{}]") str |> rm_space in
+  let value_list = remove_bk citv |> Str.split (Str.regexp ",") in
+  if List.length value_list = 0 then Value.M.empty
+  else
+    List.fold_left
+      (fun mmap mapping_value ->
+        let mapping_value = Str.split (Str.regexp "->") mapping_value in
+        let head = List.hd mapping_value |> rm_space in
+        let tail = List.tl mapping_value |> List.hd |> rm_space in
+        if Value.is_eq tail then
+          let value = rm_exp (Str.regexp "=") tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Eq (Int v)) mmap
+          | None ->
+              if value = "null" then Value.M.add head (Value.Eq Null) mmap
+              else Value.M.add head (Value.Eq (String value)) mmap
+        else if Value.is_neq tail then
+          let value = rm_exp (Str.regexp "!=") tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Neq (Int v)) mmap
+          | None ->
+              if value = "null" then Value.M.add head (Value.Neq Null) mmap
+              else Value.M.add head (Value.Neq (String value)) mmap
+        else if Value.is_ge tail then
+          let value = rm_exp (Str.regexp ">=") tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Ge (Int v)) mmap
+          | None -> failwith ("Ge: " ^ value)
+        else if Value.is_gt tail then
+          let value = rm_exp (Str.regexp ">") tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Gt (Int v)) mmap
+          | None -> failwith ("Gt: " ^ value)
+        else if Value.is_le tail then
+          let value = rm_exp (Str.regexp "<=") tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Le (Int v)) mmap
+          | None -> failwith ("Le: " ^ value)
+        else if Value.is_lt tail then
+          let value = rm_exp (Str.regexp "<") tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Lt (Int v)) mmap
+          | None -> failwith ("Lt: " ^ value)
+        else if Value.is_between tail then
+          let values =
+            rm_exp (Str.regexp "(in_N)|(in[\\[\\]])") tail
+            |> String.split_on_char ' '
+          in
+          let min_value = List.hd values in
+          let max_value = List.tl values |> List.hd in
+          match int_of_string_opt min_value with
+          | Some v ->
+              Value.M.add head
+                (Value.Between (Int v, Int (int_of_string max_value)))
+                mmap
+          | None -> Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap
+        else if Value.is_outside tail then
+          let values =
+            rm_exp (Str.regexp "not_in[\\[\\]]") tail
+            |> String.split_on_char ' '
+          in
+          let min_value = List.hd values in
+          let max_value = List.tl values |> List.hd in
+          match int_of_string_opt min_value with
+          | Some v ->
+              Value.M.add head
+                (Value.Outside (Int v, Int (int_of_string max_value)))
+                mmap
+          | None -> failwith ("Outside: " ^ min_value)
+        else failwith "parse_citv error")
+      Value.M.empty value_list
 
 let parse_condition condition =
   let v_and_m = String.split_on_char ';' condition in
@@ -125,8 +132,8 @@ let parse_condition condition =
     List.fold_left
       (fun mmap var ->
         let i_and_s = String.split_on_char '=' var in
-        let id = List.hd i_and_s in
-        let symbol = List.tl i_and_s |> List.hd in
+        let id = List.hd i_and_s |> rm_space in
+        let symbol = List.tl i_and_s |> List.hd |> rm_space in
         Condition.M.add symbol (Condition.RH_Var id) mmap)
       Condition.M.empty var_list
   in
@@ -168,6 +175,7 @@ let parse_summary summary =
       value;
       precond = (pre_var, pre_mem);
       postcond = (post_var, post_mem);
+      args = [];
     }
 
 let mapping_error_summary source_method error_summary mmap =
