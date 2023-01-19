@@ -6,6 +6,19 @@ module SummaryMap = Language.SummaryMap
 module CallPropMap = Language.CallPropMap
 module G = Callgraph.G
 
+let z3ctx =
+  Z3.mk_context
+    [
+      ("model", "true");
+      ("proof", "true");
+      ("dump_models", "true");
+      ("unsat_core", "true");
+    ]
+
+let solver = Z3.Solver.mk_solver z3ctx None
+
+let rm_exp exp str = Str.global_replace exp "" str
+
 let rec find_relation given_symbol relation =
   match Relation.M.find_opt given_symbol relation with
   | Some find_symbol -> find_relation find_symbol relation
@@ -243,31 +256,26 @@ let match_precond callee_method callee_summary call_prop method_info =
   in
   if List.length intersect_value <> 0 then false else true
 
-let is_public source_method method_info =
-  let source_method_info = MethodInfo.M.find source_method method_info in
-  match source_method_info.MethodInfo.modifier with
-  | Public -> true
-  | _ -> false
+let is_public s_method method_info =
+  let s_method_info = MethodInfo.M.find s_method method_info in
+  match s_method_info.MethodInfo.modifier with Public -> true | _ -> false
 
-let rec find_public_source_method source_method source_summary call_graph
-    summary call_prop_map method_info =
-  if is_public source_method method_info then
-    [ (source_method, source_summary.Language.precond) ]
+let rec find_ps_method s_method source_summary call_graph summary call_prop_map
+    method_info =
+  if is_public s_method method_info then [ (s_method, source_summary) ]
   else
-    let caller_list = G.succ call_graph source_method in
+    let caller_list = G.succ call_graph s_method in
     List.fold_left
       (fun list caller_method ->
         let caller_prop_list =
-          CallPropMap.M.find (caller_method, source_method) call_prop_map
+          CallPropMap.M.find (caller_method, s_method) call_prop_map
           |> List.fold_left
                (fun caller_preconds call_prop ->
-                 if
-                   match_precond source_method source_summary call_prop
-                     method_info
+                 if match_precond s_method source_summary call_prop method_info
                  then
                    List.rev_append
-                     (find_public_source_method caller_method call_prop
-                        call_graph summary call_prop_map method_info)
+                     (find_ps_method caller_method call_prop call_graph summary
+                        call_prop_map method_info)
                      caller_preconds
                  else caller_preconds)
                []
@@ -275,6 +283,288 @@ let rec find_public_source_method source_method source_summary call_graph
         list @ caller_prop_list)
       [] caller_list
 
-let mk_testcase source_method error_summary call_graph summary call_prop_map
+let calc_z3 id z3exp =
+  let solver = Z3.Solver.mk_solver z3ctx None in
+  Z3.Solver.add solver z3exp;
+  let _ = Z3.Solver.check solver [] in
+  let model = Z3.Solver.get_model solver |> Option.get in
+  let value = Z3.Model.eval model id false in
+  match value with
+  | Some v ->
+      if Z3.Arithmetic.is_real v then Z3.Arithmetic.Real.numeral_to_string v
+      else Z3.Arithmetic.Integer.numeral_to_string v
+  | None -> ""
+
+let get_value id summary =
+  let variables, mem = summary.Language.precond in
+  let target_variable =
+    Condition.M.fold
+      (fun symbol variable find_variable ->
+        match variable with
+        | Condition.RH_Var var -> if var = id then symbol else find_variable
+        | _ -> find_variable)
+      variables ""
+  in
+  let target_variable =
+    Condition.M.fold
+      (fun symbol symbol_trace find_variable ->
+        if symbol = target_variable then
+          let variable = List.rev symbol_trace |> List.hd in
+          match variable with
+          | Condition.RH_Symbol sym -> sym
+          | _ -> find_variable
+        else find_variable)
+      mem ""
+  in
+  let values = summary.Language.value in
+  let find_value =
+    Value.M.fold
+      (fun symbol value find_value ->
+        if symbol = target_variable then value else find_value)
+      values (Value.Eq Null)
+  in
+  let value =
+    match find_value with
+    | Value.Eq v -> (
+        match v with
+        | Int i ->
+            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+            let z3exp = Z3.Boolean.mk_eq z3ctx var value in
+            calc_z3 var [ z3exp ]
+        | Float f ->
+            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+            let value =
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            in
+            let z3exp = Z3.Boolean.mk_eq z3ctx var value in
+            calc_z3 var [ z3exp ]
+        | String s -> s
+        | Null -> "null"
+        | _ -> "not implemented")
+    | Value.Neq v -> (
+        match v with
+        | Int i ->
+            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+            let z3exp =
+              Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
+            in
+            calc_z3 var [ z3exp ]
+        | Float f ->
+            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+            let value =
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            in
+            let z3exp =
+              Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
+            in
+            calc_z3 var [ z3exp ]
+        | _ -> "not implemented")
+    | Value.Le v -> (
+        match v with
+        | Int i ->
+            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+            let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
+            calc_z3 var [ z3exp ]
+        | Float f ->
+            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+            let value =
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            in
+            let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
+            calc_z3 var [ z3exp ]
+        | _ -> "not implemented")
+    | Value.Lt v -> (
+        match v with
+        | Int i ->
+            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+            let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
+            calc_z3 var [ z3exp ]
+        | Float f ->
+            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+            let value =
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            in
+            let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
+            calc_z3 var [ z3exp ]
+        | _ -> "not implemented")
+    | Value.Ge v -> (
+        match v with
+        | Int i ->
+            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+            let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
+            calc_z3 var [ z3exp ]
+        | Float f ->
+            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+            let value =
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            in
+            let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
+            calc_z3 var [ z3exp ]
+        | _ -> "not implemented")
+    | Value.Gt v -> (
+        match v with
+        | Int i ->
+            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+            let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
+            calc_z3 var [ z3exp ]
+        | Float f ->
+            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+            let value =
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            in
+            let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
+            calc_z3 var [ z3exp ]
+        | _ -> "not implemented")
+    | Value.Between (v1, v2) -> (
+        match (v1, v2) with
+        | Int i1, Int i2 ->
+            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+            let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
+            let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
+            let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
+            let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
+            calc_z3 var [ z3exp1; z3exp2 ]
+        | Float f1, Float f2 ->
+            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+            let value1 =
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
+            in
+            let value2 =
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
+            in
+            let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
+            let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
+
+            calc_z3 var [ z3exp1; z3exp2 ]
+        | _ -> "not implemented")
+    | Value.Outside (v1, v2) -> (
+        match (v1, v2) with
+        | Int i1, Int i2 ->
+            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+            let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
+            let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
+            let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
+            let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
+            calc_z3 var [ z3exp1; z3exp2 ]
+        | Float f1, Float f2 ->
+            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+            let value1 =
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
+            in
+            let value2 =
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
+            in
+            let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
+            let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
+            calc_z3 var [ z3exp1; z3exp2 ]
+        | _ -> "not implemented")
+  in
+  value
+
+let rec get_statement param target_summary summary method_info =
+  let get_constructor class_name id target_summary summary method_info =
+    let constructor_list =
+      MethodInfo.M.fold
+        (fun method_name _ method_list ->
+          if
+            Str.string_match
+              (class_name ^ ".<init>" |> Str.regexp)
+              method_name 0
+          then method_name :: method_list
+          else method_list)
+        method_info []
+    in
+    let constructor = List.hd constructor_list in
+    let constructor_info = MethodInfo.M.find constructor method_info in
+    let constructor_params = constructor_info.MethodInfo.formal_params in
+    let constructor_summary =
+      SummaryMap.M.find constructor summary |> List.hd
+    in
+    let constructor = Str.replace_first (Str.regexp ".<init>") "" constructor in
+    if List.length constructor_params = 1 then
+      class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";"
+    else
+      List.fold_left
+        (fun constructor_code param ->
+          get_statement param constructor_summary summary method_info
+          ^ "\n" ^ constructor_code)
+        (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";")
+        (List.tl constructor_params)
+  in
+
+  match param with
+  | Language.This typ -> (
+      match typ with
+      | Int -> get_constructor "int" "gen1" target_summary summary method_info
+      | Float ->
+          get_constructor "float" "gen1" target_summary summary method_info
+      | String ->
+          get_constructor "String" "gen1" target_summary summary method_info
+      | Object name ->
+          get_constructor name "gen1" target_summary summary method_info
+      | _ -> failwith "not allowed type")
+  | Language.Var (typ, id) -> (
+      match typ with
+      | Int -> "int " ^ id ^ " = " ^ get_value id target_summary ^ ";"
+      | Float -> "float " ^ id ^ " = " ^ get_value id target_summary ^ ";"
+      | String -> "String " ^ id ^ " = " ^ get_value id target_summary ^ ";"
+      | Object name ->
+          get_constructor name id target_summary summary method_info
+      | _ -> failwith "not allowed type")
+
+let mk_testcase all_param ps_method method_info =
+  let start = "@Test\nvoid test() {\n" in
+  let codes =
+    List.fold_left (fun code param -> code ^ param ^ "\n") start all_param
+  in
+  let execute_ps id ps_method =
+    let ps_info = MethodInfo.M.find ps_method method_info in
+    let ps_params = ps_info.MethodInfo.formal_params in
+    let str_params =
+      List.fold_left
+        (fun str_params variable ->
+          match variable with
+          | Language.Var (_, id) -> str_params ^ "," ^ id
+          | _ -> str_params)
+        "" ps_params
+      |> rm_exp (Str.regexp "^,")
+    in
+    let str_params = "(" ^ str_params ^ ")" in
+    let ps_method =
+      Str.split (Str.regexp "\\.") ps_method
+      |> List.tl |> List.hd
+      |> Str.split (Str.regexp "(")
+      |> List.hd
+      |> rm_exp (Str.regexp "init")
+    in
+    id ^ ps_method ^ str_params
+  in
+
+  codes ^ execute_ps "gen1." ps_method ^ ";\n}\n\n"
+
+let find_all_parameter ps_method ps_method_summary summary method_info =
+  let ps_method_info = MethodInfo.M.find ps_method method_info in
+  let ps_method_params = ps_method_info.MethodInfo.formal_params in
+  let param_codes =
+    List.map
+      (fun param -> get_statement param ps_method_summary summary method_info)
+      ps_method_params
+  in
+  mk_testcase param_codes ps_method method_info
+
+let mk_testcases s_method error_summary call_graph summary call_prop_map
     method_info =
-  failwith "not implemented"
+  let ps_methods =
+    find_ps_method s_method error_summary call_graph summary call_prop_map
+      method_info
+  in
+  List.fold_left
+    (fun tests (ps_method, ps_method_summary) ->
+      tests ^ find_all_parameter ps_method ps_method_summary summary method_info)
+    "" ps_methods

@@ -58,11 +58,14 @@ let main () =
       let call_graph = parse_callgraph summary_file in
       let error_summary =
         parse_error_summary source_method error_summary_file
+        |> Language.SummaryMap.M.find source_method
       in
-      MakeTC.mk_testcase source_method error_summary call_graph summary
+      MakeTC.mk_testcases source_method error_summary call_graph summary
         call_prop_map method_info
       |> print_endline;
       if !Cmdline.print_callgraph then print_callgraph call_graph
   | _ -> failwith "Invalid Inputs"
 
-let _ = main ()
+let _ =
+  Printexc.record_backtrace true;
+  main ()
