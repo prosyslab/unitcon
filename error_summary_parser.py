@@ -39,24 +39,24 @@ for i in content:
         is_precond = False
         is_start = False
         continue
-    elif "procname" in i:
+    elif "procname:" in i:
         _name = i.split(':')
         _name = _name[1].strip()
         name = _name
-    elif "BoItv" in i:
+    elif "BoItv:" in i:
         _boitv = i.split(':')
         _boitv = _boitv[1].strip()
         boitv = _boitv
-    elif "CItv" in i:
+    elif "CItv:" in i:
         _citv = i.split(':')
         _citv = _citv[1].strip()
         citv = _citv
-    elif "Precond" in i:
+    elif "Precond:" in i:
         is_precond = True
         _precond = i.split(':')
         _precond = _precond[1].strip()
         precond = _precond
-    elif "Postcond" in i:
+    elif "Postcond:" in i:
         is_postcond = True
         _postcond = i.split(':')
         _postcond = _postcond[1].strip()

@@ -45,33 +45,36 @@ for i in content:
         is_postcond = False
         is_precond = False
         is_start = False
-    elif "caller" in i:
+    elif "caller:" in i:
         _name = i.split(':')
         _name = _name[1].strip()
         caller_name = _name
-    elif "callee" in i:
+    elif "callee:" in i:
         _name = i.split(':')
         _name = _name[1].strip()
         callee_name = _name
-    elif "BoItv" in i:
+    elif "BoItv:" in i:
         _boitv = i.split(':')
-        _boitv = _boitv[2].strip()
+        if "BoItv" in _boitv[1]:
+            _boitv = _boitv[2].strip()
+        else:
+            _boitv = _boitv[1].strip()
         boitv = _boitv
-    elif "CItv" in i:
+    elif "CItv:" in i:
         _citv = i.split(':')
         _citv = _citv[1].strip()
         citv = _citv
-    elif "Precond" in i:
+    elif "Precond:" in i:
         is_precond = True
         _precond = i.split(':')
         _precond = _precond[1].strip()
         precond = _precond
-    elif "Postcond" in i:
+    elif "Postcond:" in i:
         is_postcond = True
         _postcond = i.split(':')
         _postcond = _postcond[1].strip()
         postcond = _postcond
-    elif "actual" in i:
+    elif "actual:" in i:
         _args = i.split(':')
         arg_list = [arg.strip() for arg in _args[1].strip().split("  ")]
     elif is_precond and (not is_postcond):
