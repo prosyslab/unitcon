@@ -31,6 +31,6 @@ if [ ! -d "build" ]; then
 fi
 
 eval $(SHELL=bash opam config env --switch=$UNITGEN_OPAM_SWITCH)
-opam pin add git@github.com:prosyslab/logger.git
+opam pin add git+https://github.com/prosyslab/logger.git
 opam install -j $NCPU ocamlgraph yojson ppx_compare z3 core logger
 make
