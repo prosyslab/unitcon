@@ -87,20 +87,33 @@ let parse_citv citv =
           | None -> failwith ("Lt: " ^ value)
         else if Value.is_between tail then
           let values =
-            rm_exp (Str.regexp "(in_N)|(in[\\[\\]])") tail
+            rm_exp (Str.regexp "in_N") tail
+            |> rm_exp (Str.regexp "in\\[")
+            |> rm_exp (Str.regexp "\\]")
             |> String.split_on_char ' '
           in
-          let min_value = List.hd values in
-          let max_value = List.tl values |> List.hd in
-          match int_of_string_opt min_value with
-          | Some v ->
-              Value.M.add head
-                (Value.Between (Int v, Int (int_of_string max_value)))
-                mmap
-          | None -> Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap
+          if List.length values = 1 then
+            Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap
+          else
+            let min_value = List.hd values in
+            let max_value = List.tl values |> List.hd in
+            match int_of_string_opt min_value with
+            | Some v1 -> (
+                match int_of_string_opt max_value with
+                | Some v2 ->
+                    Value.M.add head (Value.Between (Int v1, Int v2)) mmap
+                | None ->
+                    Value.M.add head (Value.Between (Int v1, PlusInf)) mmap)
+            | None -> (
+                match int_of_string_opt max_value with
+                | Some v2 ->
+                    Value.M.add head (Value.Between (MinusInf, Int v2)) mmap
+                | None ->
+                    Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap)
         else if Value.is_outside tail then
           let values =
-            rm_exp (Str.regexp "not_in[\\[\\]]") tail
+            rm_exp (Str.regexp "not_in\\[") tail
+            |> rm_exp (Str.regexp "\\]")
             |> String.split_on_char ' '
           in
           let min_value = List.hd values in
@@ -125,7 +138,7 @@ let parse_condition condition =
   let mem =
     List.tl v_and_m |> List.hd
     |> rm_exp (Str.regexp "Heap=")
-    |> rm_exp (Str.regexp "[ {}]")
+    |> rm_exp (Str.regexp "[{}]")
     |> String.split_on_char ','
   in
   let variables =
@@ -133,8 +146,10 @@ let parse_condition condition =
       (fun mmap var ->
         let i_and_s = String.split_on_char '=' var in
         let id = List.hd i_and_s |> rm_space in
-        let symbol = List.tl i_and_s |> List.hd |> rm_space in
-        Condition.M.add symbol (Condition.RH_Var id) mmap)
+        if String.length id = 0 then mmap
+        else
+          let symbol = List.tl i_and_s |> List.hd |> rm_space in
+          Condition.M.add symbol (Condition.RH_Var id) mmap)
       Condition.M.empty var_list
   in
   let rec mk_ref_list ref_trace =
@@ -149,9 +164,11 @@ let parse_condition condition =
     List.fold_left
       (fun mmap ref ->
         let ref_trace = Str.split (Str.regexp "->") ref in
-        let head = List.hd ref_trace in
-        let trace = List.tl ref_trace |> mk_ref_list in
-        Condition.M.add head trace mmap)
+        if List.length ref_trace = 0 then mmap
+        else
+          let head = List.hd ref_trace in
+          let trace = List.tl ref_trace |> mk_ref_list in
+          Condition.M.add head trace mmap)
       Condition.M.empty mem
   in
   (variables, memory)

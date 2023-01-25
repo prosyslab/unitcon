@@ -99,13 +99,10 @@ module Value = struct
     && String.contains str '<' |> not
 
   let is_between str =
-    String.contains str 'i' && String.contains str 'n'
-    && String.contains str '['
-    && String.contains str 't' |> not
+    Str.string_match (Str.regexp "in_N") str 0
+    || Str.string_match (Str.regexp "in\\[") str 0
 
-  let is_outside str =
-    String.contains str 'n' && String.contains str 'o'
-    && String.contains str 't' && String.contains str '['
+  let is_outside str = Str.string_match (Str.regexp "not_in\\[") str 0
 end
 
 module Condition = struct
