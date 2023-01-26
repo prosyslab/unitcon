@@ -46,5 +46,15 @@ test/example2
 *.log
 *.gz
 
+# python
+venv/
+build/
+dist/
+eggs/
+lib/
+lib64/
+wheels/
+__pycache__/
+
 unitgen
 unitgen-out

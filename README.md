@@ -6,6 +6,11 @@
 make
 ```
 
+## Activate Python virtual environment
+```sh
+source venv/bin/activate
+```
+
 ## Run
 ```
 ./unitgen test/summary.json test/error-summary.json test/trace.json

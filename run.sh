@@ -15,6 +15,7 @@ TRACE=test/source/report.json
 ERROR_SUMMARY=test/source/error_summarys
 SUMMARY=test/source/summary.json
 
+source venv/bin/activate
 python3 error_summary_parser.py $ERROR_SUMMARY
 ERROR_SUMMARY=$ERROR_SUMMARY.json
 
