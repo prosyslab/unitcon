@@ -4,7 +4,8 @@ module Condition = Language.Condition
 module MethodInfo = Language.MethodInfo
 module SummaryMap = Language.SummaryMap
 module CallPropMap = Language.CallPropMap
-module G = Callgraph.G
+module CG = Callgraph.G
+module HG = Hierarchy.G
 
 let z3ctx =
   Z3.mk_context
@@ -329,7 +330,7 @@ let rec find_ps_method s_method source_summary call_graph summary call_prop_map
     method_info =
   if is_public s_method method_info then [ (s_method, source_summary) ]
   else
-    let caller_list = G.succ call_graph s_method in
+    let caller_list = CG.succ call_graph s_method in
     List.fold_left
       (fun list caller_method ->
         let caller_prop_list =
@@ -549,37 +550,52 @@ let get_value id summary =
   in
   value
 
-let rec get_statement param target_summary summary method_info =
-  let get_constructor class_name id target_summary summary method_info =
-    let constructor_list =
-      MethodInfo.M.fold
-        (fun method_name _ method_list ->
+let get_constructor_list class_name method_info hierarchy_graph =
+  let class_to_find =
+    try HG.succ hierarchy_graph class_name
+    with Invalid_argument _ -> [ class_name ]
+  in
+  MethodInfo.M.fold
+    (fun method_name _ method_list ->
+      List.fold_left
+        (fun init_list class_name_to_find ->
           if
             Str.string_match
-              (class_name ^ ".<init>" |> Str.regexp)
+              (class_name_to_find ^ ".<init>" |> Str.regexp)
               method_name 0
-          then method_name :: method_list
+          then method_name :: init_list
           else method_list)
-        method_info []
-    in
-    let constructor = List.hd constructor_list in
-    let constructor_info = MethodInfo.M.find constructor method_info in
-    let constructor_params = constructor_info.MethodInfo.formal_params in
-    let constructor_summary =
-      SummaryMap.M.find constructor summary |> List.hd
-    in
-    let constructor = Str.replace_first (Str.regexp ".<init>") "" constructor in
-    if List.length constructor_params = 1 then
-      class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";"
-    else
-      List.fold_left
-        (fun constructor_code param ->
-          get_statement param constructor_summary summary method_info
-          ^ "\n" ^ constructor_code)
-        (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";")
-        (List.tl constructor_params)
-  in
+        method_list class_to_find)
+    method_info []
 
+let rec get_statement param target_summary summary method_info hierarchy_graph =
+  let get_constructor class_name id target_summary summary method_info =
+    let constructor_list =
+      get_constructor_list class_name method_info hierarchy_graph
+    in
+    if List.length constructor_list = 0 then
+      class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();"
+    else
+      let constructor = List.hd constructor_list in
+      let constructor_info = MethodInfo.M.find constructor method_info in
+      let constructor_params = constructor_info.MethodInfo.formal_params in
+      let constructor_summary =
+        SummaryMap.M.find constructor summary |> List.hd
+      in
+      let constructor =
+        Str.replace_first (Str.regexp ".<init>") "" constructor
+      in
+      if List.length constructor_params = 1 then
+        class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";"
+      else
+        List.fold_left
+          (fun constructor_code param ->
+            get_statement param constructor_summary summary method_info
+              hierarchy_graph
+            ^ "\n" ^ constructor_code)
+          (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";")
+          (List.tl constructor_params)
+  in
   match param with
   | Language.This typ -> (
       match typ with
@@ -590,7 +606,7 @@ let rec get_statement param target_summary summary method_info =
           get_constructor "String" "gen1" target_summary summary method_info
       | Object name ->
           get_constructor name "gen1" target_summary summary method_info
-      | _ -> failwith "not allowed type")
+      | _ -> failwith "not allowed type this")
   | Language.Var (typ, id) -> (
       match typ with
       | Int -> "int " ^ id ^ " = " ^ get_value id target_summary ^ ";"
@@ -598,7 +614,7 @@ let rec get_statement param target_summary summary method_info =
       | String -> "String " ^ id ^ " = " ^ get_value id target_summary ^ ";"
       | Object name ->
           get_constructor name id target_summary summary method_info
-      | _ -> failwith "not allowed type")
+      | _ -> failwith "not allowed type var" ^ id)
 
 let mk_testcase all_param ps_method method_info =
   let start = "@Test\nvoid test() {\n" in
@@ -630,23 +646,28 @@ let mk_testcase all_param ps_method method_info =
 
   codes ^ execute_ps "gen1." ps_method ^ ";\n}\n\n"
 
-let find_all_parameter ps_method ps_method_summary summary method_info =
+let find_all_parameter ps_method ps_method_summary summary method_info
+    hierarchy_graph =
   let ps_method_info = MethodInfo.M.find ps_method method_info in
   let ps_method_params = ps_method_info.MethodInfo.formal_params in
   let param_codes =
     List.map
-      (fun param -> get_statement param ps_method_summary summary method_info)
+      (fun param ->
+        get_statement param ps_method_summary summary method_info
+          hierarchy_graph)
       ps_method_params
   in
   mk_testcase param_codes ps_method method_info
 
 let mk_testcases s_method error_summary call_graph summary call_prop_map
-    method_info =
+    method_info hierarchy_graph =
   let ps_methods =
     find_ps_method s_method error_summary call_graph summary call_prop_map
       method_info
   in
   List.fold_left
     (fun tests (ps_method, ps_method_summary) ->
-      tests ^ find_all_parameter ps_method ps_method_summary summary method_info)
+      tests
+      ^ find_all_parameter ps_method ps_method_summary summary method_info
+          hierarchy_graph)
     "" ps_methods
