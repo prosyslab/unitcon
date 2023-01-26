@@ -21,10 +21,13 @@ else
   opam switch $UNITGEN_OPAM_SWITCH
 fi
 
-pip3 install tree_sitter
-if [ ! -d "tree-sitter-java" ]; then
-  git clone https://github.com/tree-sitter/tree-sitter-java
+git submodule init
+git submodule update
+if [ ! -d "venv" ]; then
+  python3 -m venv venv
 fi
+source venv/bin/activate
+pip3 install -r requirements.txt
 
 if [ ! -d "build" ]; then
   mkdir build
