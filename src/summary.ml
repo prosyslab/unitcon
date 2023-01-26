@@ -16,9 +16,11 @@ let parse_param param =
   let v_and_t = String.split_on_char ':' param in
   let get_type t =
     match t with
-    | "int" -> Language.Int
-    | "float" -> Language.Float
-    | "String" -> Language.String
+    | "int" | "unsigned short" | "signed short" -> Language.Int
+    | "float" | "double" -> Language.Float
+    | "java.lang.String*" | "java.lang.String*[_*_](*)" | "signed char[_*_](*)"
+    | "unsigned char[_*_](*)" ->
+        Language.String
     | "" -> Language.None
     | _ ->
         let class_name = String.split_on_char '.' t |> List.rev |> List.hd in
@@ -57,7 +59,10 @@ let parse_boitv boitv =
         List.fold_left
           (fun mmap tail ->
             let tail =
-              rm_exp (Str.regexp "[max|min|(|)|\\[|\\]]") tail |> rm_space
+              rm_exp (Str.regexp "max(") tail
+              |> rm_exp (Str.regexp "min(")
+              |> rm_exp (Str.regexp "[)\\[\\]]")
+              |> rm_space
             in
             if check_relation head tail then Relation.M.add head tail mmap
             else mmap)

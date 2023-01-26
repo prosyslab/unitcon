@@ -34,7 +34,10 @@ let parse_boitv boitv =
         List.fold_left
           (fun mmap tail ->
             let tail =
-              rm_exp (Str.regexp "[max|min|(|)|\\[|\\]]") tail |> rm_space
+              rm_exp (Str.regexp "max(") tail
+              |> rm_exp (Str.regexp "min(")
+              |> rm_exp (Str.regexp "[)\\[\\]]")
+              |> rm_space
             in
             if check_relation head tail then Relation.M.add head tail mmap
             else mmap)
