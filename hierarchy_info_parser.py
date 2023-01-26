@@ -48,8 +48,8 @@ def get_extends_class(node, src):
             text = text.replace('extends', '', 1)
             super_class_list = [super_class.strip() for super_class in
                                 text.split(',')]
-            extends_class_list.append({'childclass': class_name,
-                    'superclass': super_class_list})
+            extends_class_list.append({'child': class_name,
+                    'super': super_class_list})
 
 
 def get_implements_interface(node, src):
@@ -66,8 +66,8 @@ def get_implements_interface(node, src):
             super_interface_list = [super_interface.strip()
                                     for super_interface in
                                     text.split(',')]
-            implements_interface_list.append({'class': class_name,
-                    'superinterface': super_interface_list})
+            implements_interface_list.append({'child': class_name,
+                    'super': super_interface_list})
 
 
 def get_extends_interface(node, src):
@@ -84,8 +84,8 @@ def get_extends_interface(node, src):
             super_interface_list = [super_interface.strip()
                                     for super_interface in
                                     text.split(',')]
-            extends_interface_list.append({'interface': interface_name,
-                    'superinterface': super_interface_list})
+            extends_interface_list.append({'child': interface_name,
+                    'super': super_interface_list})
 
 
 def one_file_hierarchy_info(src):
