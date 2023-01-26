@@ -1,6 +1,6 @@
 (executable
  (name main)
- (modules main language callgraph cmdline summary makeTC errorSummary callProposition)
+ (modules main language callgraph cmdline summary makeTC errorSummary callProposition hierarchy)
  (libraries ocamlgraph unix yojson str core z3 logger)
  (preprocess
   (pps ppx_compare)))

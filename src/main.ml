@@ -6,6 +6,11 @@ let parse_callgraph filename =
   let json = Json.from_file filename in
   Callgraph.of_json json
 
+let parse_hierarchy filename =
+  let json = Json.from_file filename in
+  let elem = JsonUtil.to_list json |> List.hd in
+  Hierarchy.of_json elem
+
 let parse_summary filename =
   let json = Json.from_file filename in
   let list = JsonUtil.to_list json in
@@ -50,18 +55,20 @@ let main () =
   Cmdline.input_files := List.rev !Cmdline.input_files;
   initialize ();
   match !Cmdline.input_files with
-  | [ summary_file; error_summary_file; call_proposition_file ] ->
+  | [ summary_file; error_summary_file; call_proposition_file; hierarchy_file ]
+    ->
       let source_method = get_source_method error_summary_file in
       let method_info = parse_method_info summary_file in
       let summary = parse_summary summary_file in
       let call_prop_map = parse_callprop call_proposition_file in
       let call_graph = parse_callgraph summary_file in
+      let hierarchy_graph = parse_hierarchy hierarchy_file in
       let error_summary =
         parse_error_summary source_method error_summary_file
         |> Language.SummaryMap.M.find source_method
       in
       MakeTC.mk_testcases source_method error_summary call_graph summary
-        call_prop_map method_info
+        call_prop_map method_info hierarchy_graph
       |> print_endline;
       if !Cmdline.print_callgraph then print_callgraph call_graph
   | _ -> failwith "Invalid Inputs"
