@@ -72,22 +72,22 @@ let parse_citv citv =
           let value = rm_exp (Str.regexp ">=") tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Ge (Int v)) mmap
-          | None -> failwith ("Ge: " ^ value)
+          | None -> Value.M.add head (Value.Ge MinusInf) mmap
         else if Value.is_gt tail then
           let value = rm_exp (Str.regexp ">") tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Gt (Int v)) mmap
-          | None -> failwith ("Gt: " ^ value)
+          | None -> Value.M.add head (Value.Gt MinusInf) mmap
         else if Value.is_le tail then
           let value = rm_exp (Str.regexp "<=") tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Le (Int v)) mmap
-          | None -> failwith ("Le: " ^ value)
+          | None -> Value.M.add head (Value.Le PlusInf) mmap
         else if Value.is_lt tail then
           let value = rm_exp (Str.regexp "<") tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Lt (Int v)) mmap
-          | None -> failwith ("Lt: " ^ value)
+          | None -> Value.M.add head (Value.Lt PlusInf) mmap
         else if Value.is_between tail then
           let values =
             rm_exp (Str.regexp "in_N") tail
@@ -158,7 +158,8 @@ let parse_condition condition =
   let rec mk_ref_list ref_trace =
     match ref_trace with
     | hd :: tl ->
-        let check_symbol v = Str.string_match (Str.regexp "^v[0-9]$") v 0 in
+        let hd = rm_space hd in
+        let check_symbol v = Str.string_match (Str.regexp "^v[0-9]+$") v 0 in
         if check_symbol hd then Condition.RH_Symbol hd :: mk_ref_list tl
         else Condition.RH_Var hd :: mk_ref_list tl
     | [] -> []
