@@ -422,6 +422,8 @@ let get_value id summary =
             in
             let z3exp = Z3.Boolean.mk_eq z3ctx var value in
             calc_z3 var [ z3exp ]
+        | Bool b -> b |> string_of_bool
+        | Char c -> String.make 1 c
         | String s -> s
         | Null -> "null"
         | _ -> "not implemented")
@@ -568,6 +570,17 @@ let get_constructor_list class_name method_info hierarchy_graph =
         method_list class_to_find)
     method_info []
 
+let rec get_array_type typ =
+  match typ with
+  | Language.Int -> "int"
+  | Float -> "double"
+  | Bool -> "boolean"
+  | Char -> "char"
+  | String -> "String"
+  | Object name -> name
+  | Array typ -> get_array_type typ ^ "[]"
+  | _ -> failwith "not allowed type"
+
 let rec get_statement param target_summary summary method_info hierarchy_graph =
   let get_constructor class_name id target_summary summary method_info =
     let constructor_list =
@@ -601,7 +614,9 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
       match typ with
       | Int -> get_constructor "int" "gen1" target_summary summary method_info
       | Float ->
-          get_constructor "float" "gen1" target_summary summary method_info
+          get_constructor "double" "gen1" target_summary summary method_info
+      | Bool -> get_constructor "bool" "gen1" target_summary summary method_info
+      | Char -> get_constructor "char" "gen1" target_summary summary method_info
       | String ->
           get_constructor "String" "gen1" target_summary summary method_info
       | Object name ->
@@ -610,10 +625,16 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
   | Language.Var (typ, id) -> (
       match typ with
       | Int -> "int " ^ id ^ " = " ^ get_value id target_summary ^ ";"
-      | Float -> "float " ^ id ^ " = " ^ get_value id target_summary ^ ";"
+      | Float -> "double " ^ id ^ " = " ^ get_value id target_summary ^ ";"
+      | Bool -> "boolean " ^ id ^ " = " ^ get_value id target_summary ^ ";"
+      | Char -> "char " ^ id ^ " = " ^ get_value id target_summary ^ ";"
       | String -> "String " ^ id ^ " = " ^ get_value id target_summary ^ ";"
       | Object name ->
           get_constructor name id target_summary summary method_info
+      | Array _ ->
+          (* TODO: implement array constructor *)
+          let array_type = get_array_type typ in
+          array_type ^ " " ^ id ^ " = new " ^ array_type ^ ";"
       | _ -> failwith "not allowed type var" ^ id)
 
 let mk_testcase all_param ps_method method_info =

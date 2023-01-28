@@ -9,7 +9,15 @@ type file_name = string
 
 type modifier = Public | Private | Protected | Default [@@deriving compare]
 
-type typ = Int | Float | String | Object of class_name | None
+type typ =
+  | Int
+  | Float
+  | Bool
+  | Char
+  | String
+  | Object of class_name
+  | Array of typ
+  | None
 
 type id = string (*e.g. i *)
 
@@ -59,6 +67,8 @@ module Value = struct
   type value =
     | Int of int
     | Float of float
+    | Bool of bool
+    | Char of char
     | String of string
     | PlusInf
     | MinusInf

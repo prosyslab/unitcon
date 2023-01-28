@@ -14,14 +14,17 @@ let rm_space str =
 
 let parse_param param =
   let v_and_t = String.split_on_char ':' param in
-  let get_type t =
+  let rec get_type t =
     match t with
-    | "int" | "unsigned short" | "signed short" -> Language.Int
+    | "int" | "signed short" -> Language.Int
     | "float" | "double" -> Language.Float
-    | "java.lang.String*" | "java.lang.String*[_*_](*)" | "signed char[_*_](*)"
-    | "unsigned char[_*_](*)" ->
-        Language.String
+    | "_Bool" | "boolean" -> Language.Bool
+    | "unsigned short" | "signed char" | "unsigned char" -> Language.Char
+    | "java.lang.String*" -> Language.String
     | "" -> Language.None
+    | _ when Str.string_match (Str.regexp ".+\\[_\\*_\\].*") t 0 ->
+        Language.Array
+          (t |> Str.replace_first (Str.regexp "\\[_\\*_\\](\\*)") "" |> get_type)
     | _ ->
         let class_name = String.split_on_char '.' t |> List.rev |> List.hd in
         let class_name = Str.replace_first (Str.regexp "*") "" class_name in
