@@ -141,13 +141,24 @@ let parse_citv citv =
                 | Some v2 ->
                     Value.M.add head (Value.Between (Int v1, Int v2)) mmap
                 | None ->
-                    Value.M.add head (Value.Between (Int v1, PlusInf)) mmap)
+                    if max_value = "null" then
+                      Value.M.add head (Value.Between (Int v1, Int 0)) mmap
+                    else Value.M.add head (Value.Between (Int v1, PlusInf)) mmap
+                )
             | None -> (
                 match int_of_string_opt max_value with
                 | Some v2 ->
-                    Value.M.add head (Value.Between (MinusInf, Int v2)) mmap
+                    if min_value = "null" then
+                      Value.M.add head (Value.Between (Int 0, Int v2)) mmap
+                    else
+                      Value.M.add head (Value.Between (MinusInf, Int v2)) mmap
                 | None ->
-                    Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap)
+                    if min_value = "null" then
+                      Value.M.add head (Value.Between (Int 0, PlusInf)) mmap
+                    else if max_value = "null" then
+                      Value.M.add head (Value.Between (MinusInf, Int 0)) mmap
+                    else
+                      Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap)
         else if Value.is_outside tail then
           let values =
             rm_exp (Str.regexp "not_in\\[") tail
@@ -157,11 +168,27 @@ let parse_citv citv =
           let min_value = List.hd values in
           let max_value = List.tl values |> List.hd in
           match int_of_string_opt min_value with
-          | Some v ->
-              Value.M.add head
-                (Value.Outside (Int v, Int (int_of_string max_value)))
-                mmap
-          | None -> failwith ("Outside: " ^ min_value)
+          | Some v1 -> (
+              match int_of_string_opt max_value with
+              | Some v2 ->
+                  Value.M.add head (Value.Outside (Int v1, Int v2)) mmap
+              | None ->
+                  if max_value = "null" then
+                    Value.M.add head (Value.Outside (Int v1, Int 0)) mmap
+                  else Value.M.add head (Value.Outside (Int v1, PlusInf)) mmap)
+          | None -> (
+              match int_of_string_opt max_value with
+              | Some v2 ->
+                  if min_value = "null" then
+                    Value.M.add head (Value.Outside (Int 0, Int v2)) mmap
+                  else Value.M.add head (Value.Outside (MinusInf, Int v2)) mmap
+              | None ->
+                  if min_value = "null" then
+                    Value.M.add head (Value.Outside (Int 0, PlusInf)) mmap
+                  else if max_value = "null" then
+                    Value.M.add head (Value.Outside (MinusInf, Int 0)) mmap
+                  else Value.M.add head (Value.Outside (MinusInf, PlusInf)) mmap
+              )
         else failwith "parse_citv error")
       Value.M.empty value_list
 
