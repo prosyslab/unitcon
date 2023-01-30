@@ -11,6 +11,8 @@ content = list(filter(None, content))
 
 summary = []
 is_start = False
+is_boitv = False
+is_citv = False
 is_precond = False
 is_postcond = False
 boitv = ""
@@ -37,31 +39,39 @@ for i in content:
         postcond = ""
         is_postcond = False
         is_precond = False
+        is_citv = False
+        is_boitv = False
         is_start = False
         continue
     elif "procname:" in i:
         _name = i.split(':')
-        _name = _name[1].strip()
-        name = _name
+        name = _name[1].strip()
     elif "BoItv:" in i:
+        is_boitv = True
         _boitv = i.split(':')
-        _boitv = _boitv[1].strip()
-        boitv = _boitv
+        boitv = _boitv[1].strip()
     elif "CItv:" in i:
+        is_citv = True
+        is_boitv = False
         _citv = i.split(':')
-        _citv = _citv[1].strip()
-        citv = _citv
+        citv = _citv[1].strip()
     elif "Precond:" in i:
         is_precond = True
+        is_citv = False
         _precond = i.split(':')
-        _precond = _precond[1].strip()
-        precond = _precond
+        precond = _precond[1].strip()
     elif "Postcond:" in i:
         is_postcond = True
+        is_precond = False
         _postcond = i.split(':')
-        _postcond = _postcond[1].strip()
-        postcond = _postcond
-    elif is_precond and (not is_postcond):
+        postcond = _postcond[1].strip()
+    elif is_boitv:
+        next_boitv = i.strip()
+        boitv = boitv + next_boitv
+    elif is_citv:
+        next_citv = i.strip()
+        citv = citv + next_citv
+    elif is_precond:
         next_precond = i.strip()
         precond = precond + next_precond
     elif is_postcond:

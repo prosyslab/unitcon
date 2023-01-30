@@ -169,13 +169,13 @@ let parse_condition condition =
   let v_and_m = String.split_on_char ';' condition in
   let var_list =
     List.hd v_and_m
-    |> rm_exp (Str.regexp "Stack=")
+    |> Str.replace_first (Str.regexp "Stack=") ""
     |> rm_exp (Str.regexp "[&{}]")
     |> String.split_on_char ','
   in
   let mem =
     List.tl v_and_m |> List.hd
-    |> rm_exp (Str.regexp "Heap=")
+    |> Str.replace_first (Str.regexp "Heap=") ""
     |> rm_exp (Str.regexp "[{}]")
     |> String.split_on_char ','
   in

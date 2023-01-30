@@ -10,6 +10,8 @@ content = list(filter(None, content))
 
 call_prop = []
 is_start = False
+is_boitv = False
+is_citv = False
 is_precond = False
 is_postcond = False
 boitv = ""
@@ -44,16 +46,17 @@ for i in content:
         arg_list = []
         is_postcond = False
         is_precond = False
+        is_citv = False
+        is_boitv = False
         is_start = False
     elif "caller:" in i:
         _name = i.split(':')
-        _name = _name[1].strip()
-        caller_name = _name
+        caller_name = _name[1].strip()
     elif "callee:" in i:
         _name = i.split(':')
-        _name = _name[1].strip()
-        callee_name = _name
+        callee_name = _name[1].strip()
     elif "BoItv:" in i:
+        is_boitv = True
         _boitv = i.split(':')
         if "BoItv" in _boitv[1]:
             _boitv = _boitv[2].strip()
@@ -61,30 +64,36 @@ for i in content:
             _boitv = _boitv[1].strip()
         boitv = _boitv
     elif "CItv:" in i:
+        is_citv = True
+        is_boitv = False
         _citv = i.split(':')
-        _citv = _citv[1].strip()
-        citv = _citv
+        citv = _citv[1].strip()
     elif "Precond:" in i:
         is_precond = True
+        is_citv = False
         _precond = i.split(':')
-        _precond = _precond[1].strip()
-        precond = _precond
+        precond = _precond[1].strip()
     elif "Postcond:" in i:
         is_postcond = True
+        is_precond = False
         _postcond = i.split(':')
-        _postcond = _postcond[1].strip()
-        postcond = _postcond
+        postcond = _postcond[1].strip()
     elif "actual:" in i:
         _args = i.split(':')
         arg_list = [arg.strip() for arg in _args[1].strip().split("  ")]
-    elif is_precond and (not is_postcond):
+    elif is_boitv:
+        next_boitv = i.strip()
+        boitv = boitv + next_boitv
+    elif is_citv:
+        next_citv = i.strip()
+        citv = citv + next_citv
+    elif is_precond:
         next_precond = i.strip()
         precond = precond + next_precond
     elif is_postcond:
         next_postcond = i.strip()
         postcond = postcond + next_postcond
     
-
 call_prop_json = json.dumps(call_prop)
 
 with open(file_path + ".json", 'w', encoding='utf-8') as json_file:
