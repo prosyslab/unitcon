@@ -7,6 +7,12 @@ module CallPropMap = Language.CallPropMap
 module CG = Callgraph.G
 module HG = Hierarchy.G
 
+module ImportSet = Set.Make (struct
+  type t = string
+
+  let compare = compare
+end)
+
 let z3ctx =
   Z3.mk_context
     [
@@ -587,7 +593,7 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
       get_constructor_list class_name method_info hierarchy_graph
     in
     if List.length constructor_list = 0 then
-      class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();"
+      (class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();", [])
     else
       let constructor = List.hd constructor_list in
       let constructor_info = MethodInfo.M.find constructor method_info in
@@ -599,48 +605,102 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
         Str.replace_first (Str.regexp ".<init>") "" constructor
       in
       if List.length constructor_params = 1 then
-        class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";"
+        (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";", [])
       else
-        List.fold_left
-          (fun constructor_code param ->
-            get_statement param constructor_summary summary method_info
-              hierarchy_graph
-            ^ "\n" ^ constructor_code)
-          (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";")
-          (List.tl constructor_params)
+        let code, import_list =
+          List.fold_left_map
+            (fun constructor_code param ->
+              let import, code =
+                get_statement param constructor_summary summary method_info
+                  hierarchy_graph
+              in
+              (code ^ "\n" ^ constructor_code, import))
+            (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";")
+            (List.tl constructor_params)
+        in
+        (code, import_list |> List.flatten)
   in
   match param |> snd with
   | Language.This typ -> (
       match typ with
-      | Int -> get_constructor "int" "gen1" target_summary summary method_info
+      | Int ->
+          let code, import_list =
+            get_constructor "int" "gen1" target_summary summary method_info
+          in
+          ((param |> fst) :: import_list, code)
       | Float ->
-          get_constructor "double" "gen1" target_summary summary method_info
-      | Bool -> get_constructor "bool" "gen1" target_summary summary method_info
-      | Char -> get_constructor "char" "gen1" target_summary summary method_info
+          let code, import_list =
+            get_constructor "double" "gen1" target_summary summary method_info
+          in
+          ((param |> fst) :: import_list, code)
+      | Bool ->
+          let code, import_list =
+            get_constructor "bool" "gen1" target_summary summary method_info
+          in
+          ((param |> fst) :: import_list, code)
+      | Char ->
+          let code, import_list =
+            get_constructor "char" "gen1" target_summary summary method_info
+          in
+          ((param |> fst) :: import_list, code)
       | String ->
-          get_constructor "String" "gen1" target_summary summary method_info
+          let code, import_list =
+            get_constructor "String" "gen1" target_summary summary method_info
+          in
+          ((param |> fst) :: import_list, code)
       | Object name ->
-          get_constructor name "gen1" target_summary summary method_info
+          let code, import_list =
+            get_constructor name "gen1" target_summary summary method_info
+          in
+          ((param |> fst) :: import_list, code)
       | _ -> failwith "not allowed type this")
   | Language.Var (typ, id) -> (
       match typ with
-      | Int -> "int " ^ id ^ " = " ^ get_value id target_summary ^ ";"
-      | Float -> "double " ^ id ^ " = " ^ get_value id target_summary ^ ";"
-      | Bool -> "boolean " ^ id ^ " = " ^ get_value id target_summary ^ ";"
-      | Char -> "char " ^ id ^ " = " ^ get_value id target_summary ^ ";"
-      | String -> "String " ^ id ^ " = " ^ get_value id target_summary ^ ";"
+      | Int ->
+          ( [ param |> fst ],
+            "int " ^ id ^ " = " ^ get_value id target_summary ^ ";" )
+      | Float ->
+          ( [ param |> fst ],
+            "double " ^ id ^ " = " ^ get_value id target_summary ^ ";" )
+      | Bool ->
+          ( [ param |> fst ],
+            "boolean " ^ id ^ " = " ^ get_value id target_summary ^ ";" )
+      | Char ->
+          ( [ param |> fst ],
+            "char " ^ id ^ " = " ^ get_value id target_summary ^ ";" )
+      | String ->
+          ( [ param |> fst ],
+            "String " ^ id ^ " = " ^ get_value id target_summary ^ ";" )
       | Object name ->
-          get_constructor name id target_summary summary method_info
+          let code, import_list =
+            get_constructor name id target_summary summary method_info
+          in
+          ((param |> fst) :: import_list, code)
       | Array _ ->
           (* TODO: implement array constructor *)
           let array_type = get_array_type typ in
-          array_type ^ " " ^ id ^ " = new " ^ array_type ^ ";"
-      | _ -> failwith "not allowed type var" ^ id)
+          ( [ param |> fst ],
+            array_type ^ " " ^ id ^ " = new " ^ array_type ^ ";" )
+      | _ -> failwith ("not allowed type var" ^ id))
 
 let mk_testcase all_param ps_method method_info =
-  let start = "@Test\nvoid test() {\n" in
+  let imports =
+    let import_set =
+      List.fold_left
+        (fun set (import_list, _) ->
+          List.fold_left
+            (fun _set import -> ImportSet.add import _set)
+            set import_list)
+        ImportSet.empty all_param
+    in
+    ImportSet.fold
+      (fun import stm ->
+        if import = "" then stm else stm ^ "import " ^ import ^ ";\n")
+      import_set ""
+  in
+  let start = imports ^ "\n@Test\nvoid test() {\n" in
   let codes =
-    List.fold_left (fun code param -> code ^ param ^ "\n") start all_param
+    List.fold_left (fun code (_, param) -> code ^ param ^ "\n") start all_param
   in
   let execute_ps id ps_method =
     let ps_info = MethodInfo.M.find ps_method method_info in
