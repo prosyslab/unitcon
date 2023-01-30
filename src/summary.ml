@@ -16,25 +16,32 @@ let parse_param param =
   let v_and_t = String.split_on_char ':' param in
   let rec get_type t =
     match t with
-    | "int" | "signed short" -> Language.Int
-    | "float" | "double" -> Language.Float
-    | "_Bool" | "boolean" -> Language.Bool
-    | "unsigned short" | "signed char" | "unsigned char" -> Language.Char
-    | "java.lang.String*" -> Language.String
-    | "" -> Language.None
+    | "int" | "signed short" | "long" -> ("", Language.Int)
+    | "float" | "double" -> ("", Language.Float)
+    | "_Bool" | "boolean" -> ("", Language.Bool)
+    | "unsigned short" | "signed char" | "unsigned char" -> ("", Language.Char)
+    | "java.lang.String*" -> ("java.lang.String", Language.String)
+    | "" -> ("", Language.None)
     | _ when Str.string_match (Str.regexp ".+\\[_\\*_\\].*") t 0 ->
-        Language.Array
-          (t |> Str.replace_first (Str.regexp "\\[_\\*_\\](\\*)") "" |> get_type)
+        let import, typ =
+          t |> Str.replace_first (Str.regexp "\\[_\\*_\\](\\*)") "" |> get_type
+        in
+        (import, Language.Array typ)
     | _ ->
+        let import = rm_exp (Str.regexp "\\*.*$") t in
         let class_name = String.split_on_char '.' t |> List.rev |> List.hd in
         let class_name = Str.replace_first (Str.regexp "*") "" class_name in
-        Language.Object class_name
+        (import, Language.Object class_name)
   in
-  if List.length v_and_t = 1 then Language.Var (get_type "", "")
+  if List.length v_and_t = 1 then ("", Language.Var (None, ""))
   else
     let mk_variable var typ =
-      if var = "this" then Language.This (get_type typ)
-      else Language.Var (get_type typ, var)
+      if var = "this" then
+        let import, typ = get_type typ in
+        (import, Language.This typ)
+      else
+        let import, typ = get_type typ in
+        (import, Language.Var (typ, var))
     in
     let var = List.hd v_and_t in
     let typ = List.tl v_and_t |> List.hd in

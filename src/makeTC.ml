@@ -56,7 +56,7 @@ let get_param_index_list head_symbol_list (variables, _) formal_params =
       let rec get_index count params =
         match params with
         | hd :: tl -> (
-            match hd with
+            match hd |> snd with
             | Language.This _ -> get_index (count + 1) tl
             | Var (_, id) ->
                 if id = variable then count else get_index (count + 1) tl)
@@ -609,7 +609,7 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
           (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";")
           (List.tl constructor_params)
   in
-  match param with
+  match param |> snd with
   | Language.This typ -> (
       match typ with
       | Int -> get_constructor "int" "gen1" target_summary summary method_info
@@ -648,7 +648,7 @@ let mk_testcase all_param ps_method method_info =
     let str_params =
       List.fold_left
         (fun str_params variable ->
-          match variable with
+          match variable |> snd with
           | Language.Var (_, id) -> str_params ^ "," ^ id
           | _ -> str_params)
         "" ps_params

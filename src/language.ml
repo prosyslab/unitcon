@@ -23,7 +23,9 @@ type id = string (*e.g. i *)
 
 type variable = This of typ | Var of typ * id
 
-type params = variable list
+type import = string (* package.class *)
+
+type params = (import * variable) list
 
 type symbol = string (*e.g. v1 *)
 
@@ -34,8 +36,6 @@ let modifier_of_json json =
   | "Protected" -> Protected
   | "Default" -> Default
   | s -> failwith ("Unknown modifier " ^ s)
-
-let params_of_json json = List.map JsonUtil.to_string json
 
 module MethodInfo = struct
   module M = Map.Make (struct
