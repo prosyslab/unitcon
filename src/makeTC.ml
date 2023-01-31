@@ -281,11 +281,13 @@ let check_intersect_value_list caller_prop callee_summary value_symbol_list =
       | Neq _, _
       | _, Neq _ ->
           (caller_prop.Language.value, true)
-    with Not_found ->
-      let callee_value =
-        Value.M.find callee_symbol callee_summary.Language.value
-      in
-      (Value.M.add caller_symbol callee_value caller_prop.Language.value, true)
+    with Not_found -> (
+      try
+        let callee_value =
+          Value.M.find callee_symbol callee_summary.Language.value
+        in
+        (Value.M.add caller_symbol callee_value caller_prop.Language.value, true)
+      with Not_found -> (caller_prop.Language.value, false))
   in
   List.map
     (fun (caller_symbol, callee_symbol) ->
@@ -558,6 +560,54 @@ let get_value id summary =
   in
   value
 
+let check_correct_constructor method_summary id candidate_constructor summary =
+  let constructor_summarys = SummaryMap.M.find candidate_constructor summary in
+  let method_symbols, method_memory = method_summary.Language.precond in
+  let target_symbol =
+    Condition.M.fold
+      (fun symbol precond_id target ->
+        match precond_id with
+        | Condition.RH_Var pre_id when pre_id = id -> symbol
+        | _ -> target)
+      method_symbols ""
+  in
+  if target_symbol = "" then true
+  else
+    let target_symbol =
+      Condition.M.fold
+        (fun symbol symbol_list target ->
+          if symbol = target_symbol then
+            match symbol_list |> List.rev |> List.hd with
+            | Condition.RH_Symbol s -> s
+            | _ -> target
+          else target)
+        method_memory ""
+    in
+    let target_symbol =
+      find_relation target_symbol method_summary.Language.relation
+    in
+    let check_summarys =
+      List.map
+        (fun c_summary ->
+          let c_target_symbol =
+            Condition.M.fold
+              (fun symbol precond_id target ->
+                match precond_id with
+                | Condition.RH_Var pre_id when pre_id = "this" -> symbol
+                | _ -> target)
+              (c_summary.Language.precond |> fst)
+              ""
+          in
+          check_intersect_value_list method_summary c_summary
+            [ (target_symbol, c_target_symbol) ])
+        constructor_summarys
+    in
+    List.fold_left
+      (fun check_value check_summary ->
+        let check = List.filter (fun (_, c) -> c = false) check_summary in
+        if List.length check <> 0 then check_value else true)
+      false check_summarys
+
 let get_constructor_list class_name method_info hierarchy_graph =
   let class_to_find =
     try HG.succ hierarchy_graph class_name
@@ -591,6 +641,8 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
   let get_constructor class_name id target_summary summary method_info =
     let constructor_list =
       get_constructor_list class_name method_info hierarchy_graph
+      |> List.filter (fun constructor ->
+             check_correct_constructor target_summary id constructor summary)
     in
     if List.length constructor_list = 0 then
       (class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();", [])
