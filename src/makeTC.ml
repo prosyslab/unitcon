@@ -287,7 +287,7 @@ let check_intersect_value_list caller_prop callee_summary value_symbol_list =
           Value.M.find callee_symbol callee_summary.Language.value
         in
         (Value.M.add caller_symbol callee_value caller_prop.Language.value, true)
-      with Not_found -> (caller_prop.Language.value, false))
+      with Not_found -> (caller_prop.Language.value, true))
   in
   List.map
     (fun (caller_symbol, callee_symbol) ->
@@ -571,7 +571,7 @@ let check_correct_constructor method_summary id candidate_constructor summary =
         | _ -> target)
       method_symbols ""
   in
-  if target_symbol = "" then true
+  if target_symbol = "" then (true, constructor_summarys |> List.hd)
   else
     let target_symbol =
       Condition.M.fold
@@ -598,15 +598,25 @@ let check_correct_constructor method_summary id candidate_constructor summary =
               (c_summary.Language.precond |> fst)
               ""
           in
-          check_intersect_value_list method_summary c_summary
-            [ (target_symbol, c_target_symbol) ])
+          ( check_intersect_value_list method_summary c_summary
+              [ (target_symbol, c_target_symbol) ],
+            c_summary ))
         constructor_summarys
     in
     List.fold_left
-      (fun check_value check_summary ->
+      (fun check_value (check_summary, c_summary) ->
         let check = List.filter (fun (_, c) -> c = false) check_summary in
-        if List.length check <> 0 then check_value else true)
-      false check_summarys
+        if List.length check <> 0 then check_value else (true, c_summary))
+      ( false,
+        Language.
+          {
+            relation = Relation.M.empty;
+            value = Value.M.empty;
+            precond = (Condition.M.empty, Condition.M.empty);
+            postcond = (Condition.M.empty, Condition.M.empty);
+            args = [];
+          } )
+      check_summarys
 
 let get_constructor_list class_name method_info hierarchy_graph =
   let class_to_find =
@@ -639,22 +649,38 @@ let rec get_array_type typ =
 
 let rec get_statement param target_summary summary method_info hierarchy_graph =
   let get_constructor class_name id target_summary summary method_info =
-    let constructor_list =
+    let constr_summary_list =
       get_constructor_list class_name method_info hierarchy_graph
-      |> List.filter (fun constructor ->
-             check_correct_constructor target_summary id constructor summary)
+      |> List.fold_left
+           (fun list constructor ->
+             let check, summary =
+               check_correct_constructor target_summary id constructor summary
+             in
+             if check then (constructor, summary) :: list else list)
+           []
     in
-    if List.length constructor_list = 0 then
+    if List.length constr_summary_list = 0 then
       (class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();", [])
     else
-      let constructor = List.hd constructor_list in
+      let constructor = List.hd constr_summary_list |> fst in
       let constructor_info = MethodInfo.M.find constructor method_info in
       let constructor_params = constructor_info.MethodInfo.formal_params in
-      let constructor_summary =
-        SummaryMap.M.find constructor summary |> List.hd
-      in
+      let constructor_summary = List.hd constr_summary_list |> snd in
       let constructor =
-        Str.replace_first (Str.regexp ".<init>") "" constructor
+        let param_list =
+          List.fold_left
+            (fun param_code (_, param) ->
+              match param with
+              | Language.This _ -> param_code
+              | Language.Var (_, id) -> param_code ^ ", " ^ id)
+            "" constructor_params
+        in
+        let param_list = rm_exp (Str.regexp "^, ") param_list in
+        let constructor =
+          Str.replace_first (Str.regexp ".<init>") "" constructor
+          |> rm_exp (Str.regexp "(.*)$")
+        in
+        constructor ^ "(" ^ param_list ^ ")"
       in
       if List.length constructor_params = 1 then
         (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";", [])
