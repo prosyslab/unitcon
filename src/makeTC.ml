@@ -591,11 +591,11 @@ let check_correct_constructor method_summary id candidate_constructor summary =
         (fun c_summary ->
           let c_target_symbol =
             Condition.M.fold
-              (fun symbol precond_id target ->
-                match precond_id with
+              (fun symbol p_id target ->
+                match p_id with
                 | Condition.RH_Var pre_id when pre_id = "this" -> symbol
                 | _ -> target)
-              (c_summary.Language.precond |> fst)
+              (c_summary.Language.postcond |> fst)
               ""
           in
           ( check_intersect_value_list method_summary c_summary
@@ -683,7 +683,13 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
         constructor ^ "(" ^ param_list ^ ")"
       in
       if List.length constructor_params = 1 then
-        (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";", [])
+        let constructor_import =
+          constructor_info.filename
+          |> rm_exp (Str.regexp "\\.java$")
+          |> Str.global_replace (Str.regexp "/") "."
+        in
+        ( class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";",
+          [ constructor_import ] )
       else
         let code, import_list =
           List.fold_left_map
@@ -696,7 +702,12 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
             (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";")
             (List.tl constructor_params)
         in
-        (code, import_list |> List.flatten)
+        let constructor_import =
+          constructor_info.filename
+          |> rm_exp (Str.regexp "\\.java$")
+          |> Str.global_replace (Str.regexp "/") "."
+        in
+        (code, import_list |> List.flatten |> List.cons constructor_import)
   in
   match param |> snd with
   | Language.This typ -> (
