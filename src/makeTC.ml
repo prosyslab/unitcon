@@ -386,7 +386,7 @@ let calc_z3 id z3exp =
       else Z3.Arithmetic.Integer.numeral_to_string v
   | None -> ""
 
-let get_value id summary =
+let get_value typ id summary =
   let variables, mem = summary.Language.precond in
   let target_variable =
     Condition.M.fold
@@ -408,11 +408,20 @@ let get_value id summary =
       mem ""
   in
   let values = summary.Language.value in
+  let default_value =
+    match typ with
+    | Language.Int -> Value.Eq (Int 0)
+    | Language.Float -> Value.Eq (Float 0.0)
+    | Language.Bool -> Value.Eq (Bool false)
+    | Language.Char -> Value.Eq (Char 'x')
+    | Language.String -> Value.Eq (String "string")
+    | _ -> Value.Eq Null
+  in
   let find_value =
     Value.M.fold
       (fun symbol value find_value ->
         if symbol = target_variable then value else find_value)
-      values (Value.Eq Null)
+      values default_value
   in
   let value =
     match find_value with
@@ -747,19 +756,19 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
       match typ with
       | Int ->
           ( [ param |> fst ],
-            "int " ^ id ^ " = " ^ get_value id target_summary ^ ";" )
+            "int " ^ id ^ " = " ^ get_value typ id target_summary ^ ";" )
       | Float ->
           ( [ param |> fst ],
-            "double " ^ id ^ " = " ^ get_value id target_summary ^ ";" )
+            "double " ^ id ^ " = " ^ get_value typ id target_summary ^ ";" )
       | Bool ->
           ( [ param |> fst ],
-            "boolean " ^ id ^ " = " ^ get_value id target_summary ^ ";" )
+            "boolean " ^ id ^ " = " ^ get_value typ id target_summary ^ ";" )
       | Char ->
           ( [ param |> fst ],
-            "char " ^ id ^ " = " ^ get_value id target_summary ^ ";" )
+            "char " ^ id ^ " = " ^ get_value typ id target_summary ^ ";" )
       | String ->
           ( [ param |> fst ],
-            "String " ^ id ^ " = " ^ get_value id target_summary ^ ";" )
+            "String " ^ id ^ " = " ^ get_value typ id target_summary ^ ";" )
       | Object name ->
           let code, import_list =
             get_constructor name id target_summary summary method_info
