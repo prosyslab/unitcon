@@ -197,7 +197,7 @@ let parse_condition condition =
         let ref_trace = Str.split (Str.regexp "->") ref in
         if List.length ref_trace = 0 then mmap
         else
-          let head = List.hd ref_trace in
+          let head = List.hd ref_trace |> rm_space in
           let trace = List.tl ref_trace |> mk_ref_list in
           Condition.M.add head trace mmap)
       Condition.M.empty mem

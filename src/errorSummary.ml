@@ -195,7 +195,7 @@ let parse_condition condition =
     List.fold_left
       (fun mmap ref ->
         let ref_trace = Str.split (Str.regexp "->") ref in
-        let head = List.hd ref_trace in
+        let head = List.hd ref_trace |> rm_space in
         let trace = List.tl ref_trace |> mk_ref_list in
         Condition.M.add head trace mmap)
       Condition.M.empty mem
