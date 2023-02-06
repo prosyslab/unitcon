@@ -638,12 +638,48 @@ let get_constructor_list class_name method_info hierarchy_graph =
         (fun init_list class_name_to_find ->
           if
             Str.string_match
-              (class_name_to_find ^ ".<init>" |> Str.regexp)
+              (class_name_to_find ^ "\\.<init>" |> Str.regexp)
               method_name 0
           then method_name :: init_list
           else method_list)
         method_list class_to_find)
     method_info []
+
+let get_class_initializer_list class_name target_summary method_info =
+  let variables, mem = target_summary.Language.precond in
+  let target_variable =
+    Condition.M.fold
+      (fun symbol variable find_variable ->
+        match variable with
+        | Condition.RH_Var var ->
+            if Str.string_match (".*\\." ^ class_name |> Str.regexp) var 0 then
+              symbol
+            else find_variable
+        | _ -> find_variable)
+      variables ""
+  in
+  let target_variable =
+    Condition.M.fold
+      (fun symbol symbol_trace find_variable ->
+        if symbol = target_variable then
+          let variable = symbol_trace |> List.hd in
+          match variable with Condition.RH_Var var -> var | _ -> find_variable
+        else find_variable)
+      mem ""
+  in
+  MethodInfo.M.fold
+    (fun init_name _ find_init ->
+      if Str.string_match (class_name ^ "\\.<clinit>" |> Str.regexp) init_name 0
+      then
+        Condition.M.fold
+          (fun _ symbol_trace find_init ->
+            match symbol_trace |> List.hd with
+            | Condition.RH_Var var when var = target_variable ->
+                class_name ^ "." ^ var
+            | _ -> find_init)
+          mem ""
+      else find_init)
+    method_info ""
 
 let rec get_array_type typ =
   match typ with
@@ -669,7 +705,12 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
            []
     in
     if List.length constr_summary_list = 0 then
-      (class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();", [])
+      let class_initializer =
+        get_class_initializer_list class_name target_summary method_info
+      in
+      if class_initializer = "" then
+        (class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();", [])
+      else (class_name ^ " " ^ id ^ " = " ^ class_initializer ^ ";", [])
     else
       let constructor = List.hd constr_summary_list |> fst in
       let constructor_info = MethodInfo.M.find constructor method_info in
