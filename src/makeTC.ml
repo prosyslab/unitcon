@@ -36,6 +36,7 @@ let get_symbol_list values =
 
 (* memory: Condition.mem *)
 (* return: (callee_actual_symbol * head_symbol) list *)
+(* if head = "" then this symbol can be any value *)
 let get_head_symbol_list symbols (_, memory) =
   let get_head_symbol symbol memory =
     Condition.M.fold
@@ -47,10 +48,14 @@ let get_head_symbol_list symbols (_, memory) =
             if symbol = s then (symbol, head) :: head_list else head_list)
       memory []
   in
-  List.map (fun symbol -> get_head_symbol symbol memory |> List.hd) symbols
+  List.map
+    (fun symbol ->
+      try get_head_symbol symbol memory |> List.hd with _ -> (symbol, ""))
+    symbols
 
 (* variables: Condition.var *)
 (* return: (callee_actual_symbol * head_symbol * param_index) list *)
+(* if param_index = -1 then this symbol can be any value *)
 let get_param_index_list head_symbol_list (variables, _) formal_params =
   let get_param_index head_symbol variables formal_params =
     let variable =
@@ -74,8 +79,10 @@ let get_param_index_list head_symbol_list (variables, _) formal_params =
   in
   List.map
     (fun (symbol, head_symbol) ->
-      let index = get_param_index head_symbol variables formal_params in
-      (symbol, head_symbol, index))
+      if head_symbol = "" then (symbol, head_symbol, -1)
+      else
+        let index = get_param_index head_symbol variables formal_params in
+        (symbol, head_symbol, index))
     head_symbol_list
 
 (* caller_prop: contains boitv, citv, precond, postcond, arg *)
@@ -83,8 +90,10 @@ let get_param_index_list head_symbol_list (variables, _) formal_params =
 let get_caller_value_symbol_list caller_prop callee_param_index_list =
   List.map
     (fun (callee_value_symbol, _, index) ->
-      let caller_value_symbol = List.nth caller_prop.Language.args index in
-      (caller_value_symbol, callee_value_symbol))
+      if index = -1 then ("", callee_value_symbol)
+      else
+        let caller_value_symbol = List.nth caller_prop.Language.args index in
+        (caller_value_symbol, callee_value_symbol))
     callee_param_index_list
 
 let check_intersect_value_list caller_prop callee_summary value_symbol_list =
