@@ -38,14 +38,13 @@ let transitive_closure vertex graph =
   let rec iter children g =
     match children with
     | hd :: tl ->
-        List.fold_left
-          (fun g child -> G.add_edge g vertex child)
-          g (get_children hd)
-        |> iter (get_children hd)
-        |> iter tl
+        if G.mem_edge g vertex hd then iter tl g
+        else G.add_edge g vertex hd |> iter tl |> iter (get_children hd)
     | [] -> g
   in
-  iter (get_children vertex) graph
+  iter
+    (get_children vertex |> List.map (fun v -> get_children v) |> List.flatten)
+    graph
 
 let of_json json =
   let member =
