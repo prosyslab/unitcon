@@ -443,7 +443,7 @@ let get_value typ id summary =
         | Char c -> String.make 1 c
         | String s -> s
         | Null -> "null"
-        | _ -> "not implemented")
+        | _ -> failwith "not implemented eq")
     | Value.Neq v -> (
         match v with
         | Int i ->
@@ -462,7 +462,7 @@ let get_value typ id summary =
               Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
             in
             calc_z3 var [ z3exp ]
-        | _ -> "not implemented")
+        | _ -> failwith "not implemented neq")
     | Value.Le v -> (
         match v with
         | Int i ->
@@ -477,7 +477,7 @@ let get_value typ id summary =
             in
             let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
             calc_z3 var [ z3exp ]
-        | _ -> "not implemented")
+        | _ -> failwith "not implemented le")
     | Value.Lt v -> (
         match v with
         | Int i ->
@@ -492,7 +492,7 @@ let get_value typ id summary =
             in
             let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
             calc_z3 var [ z3exp ]
-        | _ -> "not implemented")
+        | _ -> failwith "not implemented lt")
     | Value.Ge v -> (
         match v with
         | Int i ->
@@ -507,7 +507,7 @@ let get_value typ id summary =
             in
             let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
             calc_z3 var [ z3exp ]
-        | _ -> "not implemented")
+        | _ -> failwith "not implemented ge")
     | Value.Gt v -> (
         match v with
         | Int i ->
@@ -522,7 +522,7 @@ let get_value typ id summary =
             in
             let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
             calc_z3 var [ z3exp ]
-        | _ -> "not implemented")
+        | _ -> failwith "not implemented gt")
     | Value.Between (v1, v2) -> (
         match (v1, v2) with
         | Int i1, Int i2 ->
@@ -544,7 +544,7 @@ let get_value typ id summary =
             let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
 
             calc_z3 var [ z3exp1; z3exp2 ]
-        | _ -> "not implemented")
+        | _ -> failwith "not implemented between")
     | Value.Outside (v1, v2) -> (
         match (v1, v2) with
         | Int i1, Int i2 ->
@@ -565,7 +565,7 @@ let get_value typ id summary =
             let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
             let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
             calc_z3 var [ z3exp1; z3exp2 ]
-        | _ -> "not implemented")
+        | _ -> failwith "not implemented outside")
   in
   value
 
@@ -806,10 +806,11 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
             "boolean " ^ id ^ " = " ^ get_value typ id target_summary ^ ";" )
       | Char ->
           ( [ param |> fst ],
-            "char " ^ id ^ " = " ^ get_value typ id target_summary ^ ";" )
+            "char " ^ id ^ " = \'" ^ get_value typ id target_summary ^ "\';" )
       | String ->
           ( [ param |> fst ],
-            "String " ^ id ^ " = " ^ get_value typ id target_summary ^ ";" )
+            "String " ^ id ^ " = \"" ^ get_value typ id target_summary ^ "\";"
+          )
       | Object name ->
           let code, import_list =
             get_constructor name id target_summary summary method_info
