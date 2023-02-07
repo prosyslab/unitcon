@@ -245,13 +245,15 @@ let get_method_names assoc =
 
 let mapping_callprop callprop mmap =
   let method_names = get_method_names callprop in
-  let callprop = parse_callprop callprop in
-  let callprop_map =
-    match CallPropMap.M.find_opt method_names mmap with
-    | Some props -> CallPropMap.M.add method_names (callprop :: props) mmap
-    | None -> CallPropMap.M.add method_names [ callprop ] mmap
-  in
-  callprop_map
+  if method_names = ("", "") then mmap
+  else
+    let callprop = parse_callprop callprop in
+    let callprop_map =
+      match CallPropMap.M.find_opt method_names mmap with
+      | Some props -> CallPropMap.M.add method_names (callprop :: props) mmap
+      | None -> CallPropMap.M.add method_names [ callprop ] mmap
+    in
+    callprop_map
 
 let from_callprop_json json =
   List.fold_left
