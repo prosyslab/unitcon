@@ -741,12 +741,15 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
         in
         constructor ^ "(" ^ param_list ^ ")"
       in
+      let constructor_import =
+        List.fold_left
+          (fun this_import param ->
+            match param with
+            | import, Language.This _ -> import
+            | _ -> this_import)
+          "" constructor_info.formal_params
+      in
       if List.length constructor_params = 1 then
-        let constructor_import =
-          constructor_info.filename
-          |> rm_exp (Str.regexp "\\.java$")
-          |> Str.global_replace (Str.regexp "/") "."
-        in
         ( class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";",
           [ constructor_import ] )
       else
@@ -760,11 +763,6 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
               (code ^ "\n" ^ constructor_code, import))
             (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";")
             (List.tl constructor_params)
-        in
-        let constructor_import =
-          constructor_info.filename
-          |> rm_exp (Str.regexp "\\.java$")
-          |> Str.global_replace (Str.regexp "/") "."
         in
         (code, import_list |> List.flatten |> List.cons constructor_import)
   in
