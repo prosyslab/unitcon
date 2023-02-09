@@ -168,8 +168,19 @@ let parse_condition condition =
   let mem =
     List.tl v_and_m |> List.hd
     |> Str.replace_first (Str.regexp "Heap=") ""
-    |> rm_exp (Str.regexp "[{}]")
-    |> String.split_on_char ','
+    |> rm_exp (Str.regexp "}*[ \t\r\n]+}$")
+    |> rm_exp (Str.regexp "{")
+    |> rm_space
+    |> Str.split (Str.regexp "}")
+  in
+  let mk_rh_type v =
+    let check_symbol v = Str.string_match (Str.regexp "^v[0-9]+$") v 0 in
+    let check_index v = Str.string_match (Str.regexp "^\\[v[0-9]+\\]$") v 0 in
+    let check_any_value v = Str.string_match (Str.regexp "\\*") v 0 in
+    if check_symbol v then Condition.RH_Symbol v
+    else if check_index v then Condition.RH_Index v
+    else if check_any_value v then Condition.RH_Any
+    else Condition.RH_Var v
   in
   let variables =
     List.fold_left
@@ -179,25 +190,41 @@ let parse_condition condition =
         if String.length id = 0 then mmap
         else
           let symbol = List.tl i_and_s |> List.hd |> rm_space in
-          Condition.M.add symbol (Condition.RH_Var id) mmap)
+          Condition.M.add (symbol |> mk_rh_type) (Condition.RH_Var id) mmap)
       Condition.M.empty var_list
   in
-  let rec mk_ref_list ref_trace =
+  let rec mk_ref_map ref_trace mmap =
     match ref_trace with
     | hd :: tl ->
-        let hd = rm_space hd in
-        let check_symbol v = Str.string_match (Str.regexp "^v[0-9]+$") v 0 in
-        if check_symbol hd then Condition.RH_Symbol hd :: mk_ref_list tl
-        else Condition.RH_Var hd :: mk_ref_list tl
-    | [] -> []
+        if hd |> rm_space = "" then mmap
+        else
+          let ref = Str.split (Str.regexp "->") hd in
+          let field = List.hd ref |> rm_space |> mk_rh_type in
+          let value = List.tl ref |> List.hd |> rm_space |> mk_rh_type in
+          Condition.M.add field value mmap |> mk_ref_map tl
+    | [] -> mmap
   in
   let memory =
     List.fold_left
       (fun mmap ref ->
-        let ref_trace = Str.split (Str.regexp "->") ref in
-        let head = List.hd ref_trace |> rm_space in
-        let trace = List.tl ref_trace |> mk_ref_list in
-        Condition.M.add head trace mmap)
+        let ref_trace =
+          rm_exp (Str.regexp "^,[ \t\r\n]*") ref |> String.split_on_char ','
+        in
+        if List.length ref_trace = 0 then mmap
+        else
+          let head =
+            List.hd ref_trace
+            |> Str.split (Str.regexp "->")
+            |> List.hd |> rm_space
+          in
+          let partial_tl =
+            List.hd ref_trace
+            |> rm_exp ("^" ^ head ^ "[ \t\r\n]+->" |> Str.regexp)
+            |> rm_space
+          in
+          let trace = List.tl ref_trace |> List.cons partial_tl in
+          let trace = mk_ref_map trace Condition.M.empty in
+          Condition.M.add (head |> mk_rh_type) trace mmap)
       Condition.M.empty mem
   in
   (variables, memory)

@@ -116,17 +116,17 @@ module Value = struct
 end
 
 module Condition = struct
+  type rh = RH_Var of id | RH_Symbol of symbol | RH_Index of symbol | RH_Any
+
   module M = Map.Make (struct
-    type t = symbol
+    type t = rh
 
     let compare = compare
   end)
 
-  type rh = RH_Var of id | RH_Symbol of symbol
-
   type var = rh M.t
 
-  type mem = rh list M.t
+  type mem = rh M.t M.t
 
   type t = var * mem
 end

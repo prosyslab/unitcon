@@ -40,12 +40,15 @@ let get_symbol_list values =
 let get_head_symbol_list symbols (_, memory) =
   let get_head_symbol symbol memory =
     Condition.M.fold
-      (fun head v_and_s_list head_list ->
-        let tail = List.rev v_and_s_list |> List.hd in
-        match tail with
-        | Condition.RH_Var _ -> head_list
-        | Condition.RH_Symbol s ->
-            if symbol = s then (symbol, head) :: head_list else head_list)
+      (fun head trace head_list ->
+        let head = match head with Condition.RH_Symbol s -> s | _ -> "" in
+        Condition.M.fold
+          (fun _ trace_tail head_list ->
+            match trace_tail with
+            | Condition.RH_Symbol s when symbol = s ->
+                (symbol, head) :: head_list
+            | _ -> head_list)
+          trace head_list)
       memory []
   in
   List.map
@@ -59,7 +62,7 @@ let get_head_symbol_list symbols (_, memory) =
 let get_param_index_list head_symbol_list (variables, _) formal_params =
   let get_param_index head_symbol variables formal_params =
     let variable =
-      match Condition.M.find head_symbol variables with
+      match Condition.M.find (Condition.RH_Symbol head_symbol) variables with
       | Condition.RH_Var v -> v
       | _ -> ""
     in
@@ -348,6 +351,8 @@ let rec find_ps_method s_method source_summary call_graph summary call_prop_map
   if is_public s_method method_info then [ (s_method, source_summary) ]
   else
     let caller_list = CG.succ call_graph s_method in
+    print_endline "caller_list: ";
+    List.iter (fun x -> print_endline x) caller_list;
     List.fold_left
       (fun list caller_method ->
         let caller_prop_list =
@@ -356,6 +361,8 @@ let rec find_ps_method s_method source_summary call_graph summary call_prop_map
           with
           | None -> list
           | Some prop_list ->
+              "# of prop_list" ^ (List.length prop_list |> string_of_int)
+              |> print_endline;
               List.fold_left
                 (fun caller_preconds call_prop ->
                   let new_value, check_match =
@@ -401,18 +408,22 @@ let get_value typ id summary =
     Condition.M.fold
       (fun symbol variable find_variable ->
         match variable with
-        | Condition.RH_Var var -> if var = id then symbol else find_variable
+        | Condition.RH_Var var when var = id -> (
+            match symbol with Condition.RH_Symbol s -> s | _ -> find_variable)
         | _ -> find_variable)
       variables ""
   in
   let target_variable =
     Condition.M.fold
       (fun symbol symbol_trace find_variable ->
+        let symbol = match symbol with Condition.RH_Symbol s -> s | _ -> "" in
         if symbol = target_variable then
-          let variable = List.rev symbol_trace |> List.hd in
-          match variable with
-          | Condition.RH_Symbol sym -> sym
-          | _ -> find_variable
+          Condition.M.fold
+            (fun _ trace_tail trace_find_var ->
+              match trace_tail with
+              | Condition.RH_Symbol s -> s
+              | _ -> trace_find_var)
+            symbol_trace find_variable
         else find_variable)
       mem ""
   in
@@ -584,6 +595,7 @@ let check_correct_constructor method_summary id candidate_constructor summary =
   let target_symbol =
     Condition.M.fold
       (fun symbol precond_id target ->
+        let symbol = match symbol with Condition.RH_Symbol s -> s | _ -> "" in
         match precond_id with
         | Condition.RH_Var pre_id when pre_id = id -> symbol
         | _ -> target)
@@ -593,11 +605,17 @@ let check_correct_constructor method_summary id candidate_constructor summary =
   else
     let target_symbol =
       Condition.M.fold
-        (fun symbol symbol_list target ->
+        (fun symbol trace target ->
+          let symbol =
+            match symbol with Condition.RH_Symbol s -> s | _ -> ""
+          in
           if symbol = target_symbol then
-            match symbol_list |> List.rev |> List.hd with
-            | Condition.RH_Symbol s -> s
-            | _ -> target
+            Condition.M.fold
+              (fun _ trace_tail find_target ->
+                match trace_tail with
+                | Condition.RH_Symbol s -> s
+                | _ -> find_target)
+              trace target
           else target)
         method_memory ""
     in
@@ -610,6 +628,9 @@ let check_correct_constructor method_summary id candidate_constructor summary =
           let c_target_symbol =
             Condition.M.fold
               (fun symbol p_id target ->
+                let symbol =
+                  match symbol with Condition.RH_Symbol s -> s | _ -> ""
+                in
                 match p_id with
                 | Condition.RH_Var pre_id when pre_id = "this" -> symbol
                 | _ -> target)
@@ -659,6 +680,7 @@ let get_class_initializer_list class_name target_summary method_info =
   let target_variable =
     Condition.M.fold
       (fun symbol variable find_variable ->
+        let symbol = match symbol with Condition.RH_Symbol s -> s | _ -> "" in
         match variable with
         | Condition.RH_Var var ->
             if Str.string_match (".*\\." ^ class_name |> Str.regexp) var 0 then
@@ -670,9 +692,14 @@ let get_class_initializer_list class_name target_summary method_info =
   let target_variable =
     Condition.M.fold
       (fun symbol symbol_trace find_variable ->
+        let symbol = match symbol with Condition.RH_Symbol s -> s | _ -> "" in
         if symbol = target_variable then
-          let variable = symbol_trace |> List.hd in
-          match variable with Condition.RH_Var var -> var | _ -> find_variable
+          Condition.M.fold
+            (fun trace_head _ trace_find_var ->
+              match trace_head with
+              | Condition.RH_Var var -> var
+              | _ -> trace_find_var)
+            symbol_trace find_variable
         else find_variable)
       mem ""
   in
@@ -682,10 +709,13 @@ let get_class_initializer_list class_name target_summary method_info =
       then
         Condition.M.fold
           (fun _ symbol_trace find_init ->
-            match symbol_trace |> List.hd with
-            | Condition.RH_Var var when var = target_variable ->
-                class_name ^ "." ^ var
-            | _ -> find_init)
+            Condition.M.fold
+              (fun trace_head _ trace_find_init ->
+                match trace_head with
+                | Condition.RH_Var var when var = target_variable ->
+                    class_name ^ "." ^ var
+                | _ -> trace_find_init)
+              symbol_trace find_init)
           mem ""
       else find_init)
     method_info ""
