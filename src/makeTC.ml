@@ -871,7 +871,7 @@ let mk_testcase all_param ps_method method_info =
         if import = "" then stm else stm ^ "import " ^ import ^ ";\n")
       import_set ""
   in
-  let start = imports ^ "\n@Test\nvoid test() {\n" in
+  let start = imports ^ "\n@Test\npublic void test() {\n" in
   let codes =
     List.fold_left (fun code (_, param) -> code ^ param ^ "\n") start all_param
   in
