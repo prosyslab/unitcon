@@ -351,8 +351,6 @@ let rec find_ps_method s_method source_summary call_graph summary call_prop_map
   if is_public s_method method_info then [ (s_method, source_summary) ]
   else
     let caller_list = CG.succ call_graph s_method in
-    print_endline "caller_list: ";
-    List.iter (fun x -> print_endline x) caller_list;
     List.fold_left
       (fun list caller_method ->
         let caller_prop_list =
@@ -361,8 +359,6 @@ let rec find_ps_method s_method source_summary call_graph summary call_prop_map
           with
           | None -> list
           | Some prop_list ->
-              "# of prop_list" ^ (List.length prop_list |> string_of_int)
-              |> print_endline;
               List.fold_left
                 (fun caller_preconds call_prop ->
                   let new_value, check_match =
