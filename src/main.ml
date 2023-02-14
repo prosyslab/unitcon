@@ -21,19 +21,15 @@ let parse_method_info filename =
   let list = JsonUtil.to_list json in
   Summary.from_method_json list
 
-let parse_error_summary source_method filename =
+let parse_error_summary filename =
   let json = Json.from_file filename in
   let list = JsonUtil.to_list json in
-  ErrorSummary.from_error_summary_json source_method list
+  ErrorSummary.from_error_summary_json list
 
 let parse_callprop filename =
   let json = Json.from_file filename in
   let list = JsonUtil.to_list json in
   CallProposition.from_callprop_json list
-
-let get_source_method filename =
-  let json = Yojson.Safe.from_file filename in
-  ErrorSummary.source_method json
 
 let print_callgraph call_graph =
   let oc = open_out (Filename.concat !Cmdline.out_dir "callgraph.dot") in
@@ -57,20 +53,19 @@ let main () =
   match !Cmdline.input_files with
   | [ summary_file; error_summary_file; call_proposition_file; hierarchy_file ]
     ->
-      let source_method = get_source_method error_summary_file in
       let method_info = parse_method_info summary_file in
       let summary = parse_summary summary_file in
       let call_prop_map = parse_callprop call_proposition_file in
       let call_graph = parse_callgraph summary_file in
       let hierarchy_graph = parse_hierarchy hierarchy_file in
-      let error_summary =
-        parse_error_summary source_method error_summary_file
-        |> Language.SummaryMap.M.find source_method
-      in
-      MakeTC.mk_testcases source_method error_summary call_graph summary
-        call_prop_map method_info hierarchy_graph
-      |> print_endline;
-      if !Cmdline.print_callgraph then print_callgraph call_graph
+      let error_summary_map = parse_error_summary error_summary_file in
+      Language.SummaryMap.M.iter
+        (fun source_method error_summary ->
+          MakeTC.mk_testcases source_method error_summary call_graph summary
+            call_prop_map method_info hierarchy_graph
+          |> print_endline)
+        error_summary_map
+      (* if !Cmdline.print_callgraph then print_callgraph call_graph *)
   | _ -> failwith "Invalid Inputs"
 
 let _ =

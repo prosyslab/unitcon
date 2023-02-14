@@ -255,16 +255,6 @@ let parse_summary summary =
       args = [];
     }
 
-let mapping_error_summary source_method error_summary mmap =
-  let summary = parse_summary error_summary in
-  SummaryMap.M.add source_method summary mmap
-
-let from_error_summary_json source_method json =
-  List.fold_left
-    (fun mmap error_summary ->
-      mapping_error_summary source_method error_summary mmap)
-    SummaryMap.M.empty json
-
 let get_method_name assoc =
   let split_name name =
     if String.contains name ' ' then
@@ -276,4 +266,12 @@ let get_method_name assoc =
   in
   method_name
 
-let source_method json = JsonUtil.to_list json |> List.hd |> get_method_name
+let mapping_error_summary error_summary mmap =
+  let source_method = get_method_name error_summary in
+  let summary = parse_summary error_summary in
+  SummaryMap.M.add source_method summary mmap
+
+let from_error_summary_json json =
+  List.fold_left
+    (fun mmap error_summary -> mapping_error_summary error_summary mmap)
+    SummaryMap.M.empty json
