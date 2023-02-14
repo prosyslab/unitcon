@@ -195,20 +195,24 @@ let parse_condition condition =
   in
   let rec mk_ref_map ref_trace mmap =
     match ref_trace with
-    | hd :: tl ->
+    | hd :: tl -> (
         if hd |> rm_space = "" then mmap
         else
           let ref = Str.split (Str.regexp "->") hd in
-          let field = List.hd ref |> rm_space |> mk_rh_type in
-          let value = List.tl ref |> List.hd |> rm_space |> mk_rh_type in
-          Condition.M.add field value mmap |> mk_ref_map tl
+          try
+            let field = List.hd ref |> rm_space |> mk_rh_type in
+            let value = List.tl ref |> List.hd |> rm_space |> mk_rh_type in
+            Condition.M.add field value mmap |> mk_ref_map tl
+          with _ -> mk_ref_map tl mmap)
     | [] -> mmap
   in
   let memory =
     List.fold_left
       (fun mmap ref ->
         let ref_trace =
-          rm_exp (Str.regexp "^,[ \t\r\n]*") ref |> String.split_on_char ','
+          rm_exp (Str.regexp "^,[ \t\r\n]*") ref
+          |> rm_space
+          |> Str.split (Str.regexp ",")
         in
         if List.length ref_trace = 0 then mmap
         else
