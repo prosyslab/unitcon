@@ -139,6 +139,15 @@ type summary = {
   args : symbol list;
 }
 
+let empty_summary =
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (Condition.M.empty, Condition.M.empty);
+    postcond = (Condition.M.empty, Condition.M.empty);
+    args = [];
+  }
+
 module SummaryMap = struct
   module M = Map.Make (struct
     type t = method_name

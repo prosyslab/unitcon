@@ -916,12 +916,17 @@ let find_all_parameter ps_method ps_method_summary summary method_info
 let mk_testcases s_method error_summary call_graph summary call_prop_map
     method_info hierarchy_graph =
   let ps_methods =
-    find_ps_method s_method error_summary call_graph summary call_prop_map
-      method_info
+    try
+      find_ps_method s_method error_summary call_graph summary call_prop_map
+        method_info
+    with _ -> [ ("", Language.empty_summary) ]
   in
   List.fold_left
     (fun tests (ps_method, ps_method_summary) ->
       tests
-      ^ find_all_parameter ps_method ps_method_summary summary method_info
-          hierarchy_graph)
+      ^
+      try
+        find_all_parameter ps_method ps_method_summary summary method_info
+          hierarchy_graph
+      with _ -> "")
     "" ps_methods

@@ -328,18 +328,7 @@ let mapping_summary method_summarys mmap =
     |> List.map (fun summary -> parse_summary summary)
   in
   let summarys =
-    if summarys = [] then
-      [
-        Language.
-          {
-            relation = Relation.M.empty;
-            value = Value.M.empty;
-            precond = (Condition.M.empty, Condition.M.empty);
-            postcond = (Condition.M.empty, Condition.M.empty);
-            args = [];
-          };
-      ]
-    else summarys
+    if summarys = [] then [ Language.empty_summary ] else summarys
   in
   SummaryMap.M.add method_name summarys mmap
 

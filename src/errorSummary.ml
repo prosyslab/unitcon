@@ -268,8 +268,10 @@ let get_method_name assoc =
 
 let mapping_error_summary error_summary mmap =
   let source_method = get_method_name error_summary in
-  let summary = parse_summary error_summary in
-  SummaryMap.M.add source_method summary mmap
+  if SummaryMap.M.mem source_method mmap then mmap
+  else
+    let summary = parse_summary error_summary in
+    SummaryMap.M.add source_method summary mmap
 
 let from_error_summary_json json =
   List.fold_left
