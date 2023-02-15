@@ -88,8 +88,8 @@ def get_extends_interface(node, src):
                     'super': super_interface_list})
 
 
-def one_file_hierarchy_info(src):
-    f = open(src, 'r')
+def one_file_hierarchy_info(src, encoding):
+    f = open(src, 'r', encoding=encoding)
     src_lines = f.readlines()
 
     def read_callable(byte_offset, point):
@@ -104,21 +104,27 @@ def one_file_hierarchy_info(src):
     get_extends_interface(tree.root_node, src_lines)
 
 
-def all_file_hierarchy_info(dirname):
+def all_file_hierarchy_info(dirname, encoding):
     filenames = os.listdir(dirname)
     for filename in filenames:
         full_filename = os.path.join(dirname, filename)
         if os.path.isdir(full_filename):
-            all_file_hierarchy_info(full_filename)
+            all_file_hierarchy_info(full_filename, encoding)
         else:
             ext = os.path.splitext(full_filename)[-1]
             if ext == '.java':
-                one_file_hierarchy_info(full_filename)
+                one_file_hierarchy_info(full_filename, encoding)
 
 
 hierarchy_info = []
 dir_path = sys.argv[1]
-all_file_hierarchy_info(dir_path)
+encoding = sys.argv[2]
+
+if len(sys.argv) != 3:
+    print("Usage: directory_path encoding")
+    sys.exit()
+
+all_file_hierarchy_info(dir_path, encoding)
 hierarchy_info.append({'extends_class': extends_class_list,
                       'implements_interface': implements_interface_list,
                       'extends_interface': extends_interface_list})
