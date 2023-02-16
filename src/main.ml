@@ -6,7 +6,7 @@ let parse_callgraph filename =
   let json = Json.from_file filename in
   Callgraph.of_json json
 
-let parse_hierarchy filename =
+let parse_class_info filename =
   let json = Json.from_file filename in
   let elem = JsonUtil.to_list json |> List.hd in
   Hierarchy.of_json elem
@@ -57,12 +57,12 @@ let main () =
       let summary = parse_summary summary_file in
       let call_prop_map = parse_callprop call_proposition_file in
       let call_graph = parse_callgraph summary_file in
-      let hierarchy_graph = parse_hierarchy hierarchy_file in
+      let class_info = parse_class_info hierarchy_file in
       let error_summary_map = parse_error_summary error_summary_file in
       Language.SummaryMap.M.iter
         (fun source_method error_summary ->
           MakeTC.mk_testcases source_method error_summary call_graph summary
-            call_prop_map method_info hierarchy_graph
+            call_prop_map method_info class_info
           |> print_endline)
         error_summary_map
       (* if !Cmdline.print_callgraph then print_callgraph call_graph *)

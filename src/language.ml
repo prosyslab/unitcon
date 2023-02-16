@@ -9,6 +9,9 @@ type file_name = string
 
 type modifier = Public | Private | Protected | Default [@@deriving compare]
 
+type class_type = Abstract | Static | Abstract_and_Static | Normal | Interface
+[@@deriving compare]
+
 type typ =
   | Int
   | Float
@@ -167,4 +170,14 @@ module CallPropMap = struct
   end)
 
   type t = summary list M.t
+end
+
+module ClassTypeInfo = struct
+  module M = Map.Make (struct
+    type t = class_name
+
+    let compare = compare
+  end)
+
+  type t = class_type M.t
 end

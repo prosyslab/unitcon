@@ -914,7 +914,7 @@ let find_all_parameter ps_method ps_method_summary summary method_info
   mk_testcase param_codes ps_method method_info
 
 let mk_testcases s_method error_summary call_graph summary call_prop_map
-    method_info hierarchy_graph =
+    method_info (class_type_info, hierarchy_graph) =
   let ps_methods =
     try
       find_ps_method s_method error_summary call_graph summary call_prop_map

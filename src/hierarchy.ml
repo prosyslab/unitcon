@@ -1,5 +1,6 @@
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
+module ClassTypeInfo = Language.ClassTypeInfo
 
 module Node = struct
   include String
@@ -46,7 +47,7 @@ let transitive_closure vertex graph =
     (get_children vertex |> List.map (fun v -> get_children v) |> List.flatten)
     graph
 
-let of_json json =
+let from_hierarchy_json json =
   let member =
     [ "extends_class"; "implements_interface"; "extends_interface" ]
   in
@@ -69,3 +70,47 @@ let of_json json =
 
 module Graphviz = Graph.Graphviz.Dot (G)
 include G
+
+let parse_type type_list =
+  let is_static =
+    List.fold_left
+      (fun result typ -> if typ = "static" then true else result)
+      false type_list
+  in
+  let is_abstract =
+    List.fold_left
+      (fun result typ -> if typ = "abstract" then true else result)
+      false type_list
+  in
+  let is_interface =
+    List.fold_left
+      (fun result typ -> if typ = "interface" then true else result)
+      false type_list
+  in
+  if is_static && is_abstract then Language.Abstract_and_Static
+  else if is_static then Language.Static
+  else if is_abstract then Language.Abstract
+  else if is_interface then Language.Interface
+  else Language.Normal
+
+let mapping_class_info assoc mmap =
+  let class_name = JsonUtil.member "name" assoc |> JsonUtil.to_string in
+  let typ =
+    JsonUtil.member "type" assoc
+    |> JsonUtil.to_list
+    |> List.map JsonUtil.to_string
+    |> parse_type
+  in
+  ClassTypeInfo.M.add class_name typ mmap
+
+let of_json json =
+  let class_and_interface_info =
+    JsonUtil.member "class_and_interface" json |> JsonUtil.to_list
+  in
+  let class_type_info =
+    List.fold_left
+      (fun mmap assoc -> mapping_class_info assoc mmap)
+      ClassTypeInfo.M.empty class_and_interface_info
+  in
+  let hierarchy_info = from_hierarchy_json json in
+  (class_type_info, hierarchy_info)
