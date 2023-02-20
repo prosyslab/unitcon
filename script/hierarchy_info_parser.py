@@ -432,11 +432,14 @@ hierarchy_info.append({
     list({name['name']: name
           for name in class_and_interface_list}.values()),
     'extends_class':
-    extends_class_list,
+    list({name['child']: name
+          for name in extends_class_list}.values()),
     'implements_interface':
-    implements_interface_list,
+    list({name['child']: name
+          for name in implements_interface_list}.values()),
     'extends_interface':
-    extends_interface_list
+    list({name['child']: name
+          for name in extends_interface_list}.values())
 })
 hierarchy_info_json = json.dumps(hierarchy_info)
 
