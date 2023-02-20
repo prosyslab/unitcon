@@ -660,6 +660,10 @@ let is_normal_class class_name class_type_info =
       match typ with Language.Static | Language.Normal -> true | _ -> false)
   | None -> true
 
+let is_private method_name method_info =
+  let info = MethodInfo.M.find method_name method_info in
+  match info.MethodInfo.modifier with Private -> true | _ -> false
+
 let match_constructor_name class_name method_name =
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
@@ -672,7 +676,10 @@ let get_constructor_list class_name method_info (class_info, hierarchy_graph) =
     (fun method_name _ method_list ->
       List.fold_left
         (fun init_list class_name_to_find ->
-          if is_normal_class class_name_to_find class_info then
+          if
+            is_normal_class class_name_to_find class_info
+            && is_private method_name method_info |> not
+          then
             if match_constructor_name class_name_to_find method_name then
               method_name :: init_list
             else init_list
@@ -747,6 +754,16 @@ let get_array_constructor typ size =
   | Array typ -> get_array_type typ ^ "[" ^ (size |> string_of_int) ^ "]"
   | _ -> failwith "not allowed type"
 
+let sort_constructor_list constructor_list method_info =
+  List.sort
+    (fun (k1, _) (k2, _) ->
+      let k1_info = MethodInfo.M.find k1 method_info in
+      let k1_formal = k1_info.MethodInfo.formal_params |> List.length in
+      let k2_info = MethodInfo.M.find k2 method_info in
+      let k2_formal = k2_info.MethodInfo.formal_params |> List.length in
+      compare k1_formal k2_formal)
+    constructor_list
+
 let rec get_statement param target_summary summary method_info class_info =
   let get_constructor class_name id target_summary summary method_info =
     let constr_summary_list =
@@ -769,7 +786,9 @@ let rec get_statement param target_summary summary method_info class_info =
         (class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();", [])
       else (class_name ^ " " ^ id ^ " = " ^ class_initializer ^ ";", [])
     else
-      let constructor = List.hd constr_summary_list |> fst in
+      let constructor =
+        sort_constructor_list constr_summary_list method_info |> List.hd |> fst
+      in
       let constructor_info = MethodInfo.M.find constructor method_info in
       let constructor_params = constructor_info.MethodInfo.formal_params in
       let constructor_summary = List.hd constr_summary_list |> snd in
