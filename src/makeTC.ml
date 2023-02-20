@@ -736,6 +736,17 @@ let rec get_array_type typ =
   | Array typ -> get_array_type typ ^ "[]"
   | _ -> failwith "not allowed type"
 
+let get_array_constructor typ size =
+  match typ with
+  | Language.Int -> "int"
+  | Float -> "double"
+  | Bool -> "boolean"
+  | Char -> "char"
+  | String -> "String"
+  | Object name -> name
+  | Array typ -> get_array_type typ ^ "[" ^ (size |> string_of_int) ^ "]"
+  | _ -> failwith "not allowed type"
+
 let rec get_statement param target_summary summary method_info class_info =
   let get_constructor class_name id target_summary summary method_info =
     let constr_summary_list =
@@ -863,8 +874,9 @@ let rec get_statement param target_summary summary method_info class_info =
       | Array _ ->
           (* TODO: implement array constructor *)
           let array_type = get_array_type typ in
+          let array_constructor = get_array_constructor typ 5 in
           ( [ param |> fst ],
-            array_type ^ " " ^ id ^ " = new " ^ array_type ^ ";" )
+            array_type ^ " " ^ id ^ " = new " ^ array_constructor ^ ";" )
       | _ -> failwith ("not allowed type var" ^ id))
 
 let mk_testcase all_param ps_method method_info =
