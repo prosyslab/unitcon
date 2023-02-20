@@ -4,6 +4,7 @@ module Condition = Language.Condition
 module MethodInfo = Language.MethodInfo
 module SummaryMap = Language.SummaryMap
 module CallPropMap = Language.CallPropMap
+module ClassTypeInfo = Language.ClassTypeInfo
 module CG = Callgraph.G
 module HG = Hierarchy.G
 
@@ -653,21 +654,29 @@ let check_correct_constructor method_summary id candidate_constructor summary =
           } )
       check_summarys
 
-let get_constructor_list class_name method_info hierarchy_graph =
+let is_normal_class class_name class_type_info =
+  match ClassTypeInfo.M.find_opt class_name class_type_info with
+  | Some typ -> (
+      match typ with Language.Static | Language.Normal -> true | _ -> false)
+  | None -> true
+
+let match_constructor_name class_name method_name =
+  Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
+
+let get_constructor_list class_name method_info (class_info, hierarchy_graph) =
   let class_to_find =
-    try HG.succ hierarchy_graph class_name
+    try HG.succ hierarchy_graph class_name |> List.cons class_name
     with Invalid_argument _ -> [ class_name ]
   in
   MethodInfo.M.fold
     (fun method_name _ method_list ->
       List.fold_left
         (fun init_list class_name_to_find ->
-          if
-            Str.string_match
-              (class_name_to_find ^ "\\.<init>" |> Str.regexp)
-              method_name 0
-          then method_name :: init_list
-          else method_list)
+          if is_normal_class class_name_to_find class_info then
+            if match_constructor_name class_name_to_find method_name then
+              method_name :: init_list
+            else init_list
+          else init_list)
         method_list class_to_find)
     method_info []
 
@@ -727,17 +736,19 @@ let rec get_array_type typ =
   | Array typ -> get_array_type typ ^ "[]"
   | _ -> failwith "not allowed type"
 
-let rec get_statement param target_summary summary method_info hierarchy_graph =
+let rec get_statement param target_summary summary method_info class_info =
   let get_constructor class_name id target_summary summary method_info =
     let constr_summary_list =
-      get_constructor_list class_name method_info hierarchy_graph
-      |> List.fold_left
-           (fun list constructor ->
-             let check, summary =
-               check_correct_constructor target_summary id constructor summary
-             in
-             if check then (constructor, summary) :: list else list)
-           []
+      get_constructor_list class_name method_info class_info
+    in
+    let constr_summary_list =
+      List.fold_left
+        (fun list constructor ->
+          let check, summary =
+            check_correct_constructor target_summary id constructor summary
+          in
+          if check then (constructor, summary) :: list else list)
+        [] constr_summary_list
     in
     if List.length constr_summary_list = 0 then
       let class_initializer =
@@ -784,7 +795,7 @@ let rec get_statement param target_summary summary method_info hierarchy_graph =
             (fun constructor_code param ->
               let import, code =
                 get_statement param constructor_summary summary method_info
-                  hierarchy_graph
+                  class_info
               in
               (code ^ "\n" ^ constructor_code, import))
             (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";")
@@ -901,20 +912,19 @@ let mk_testcase all_param ps_method method_info =
   codes ^ execute_ps "gen1." ps_method ^ ";\n}\n\n"
 
 let find_all_parameter ps_method ps_method_summary summary method_info
-    hierarchy_graph =
+    class_info =
   let ps_method_info = MethodInfo.M.find ps_method method_info in
   let ps_method_params = ps_method_info.MethodInfo.formal_params in
   let param_codes =
     List.map
       (fun param ->
-        get_statement param ps_method_summary summary method_info
-          hierarchy_graph)
+        get_statement param ps_method_summary summary method_info class_info)
       ps_method_params
   in
   mk_testcase param_codes ps_method method_info
 
 let mk_testcases s_method error_summary call_graph summary call_prop_map
-    method_info (class_type_info, hierarchy_graph) =
+    method_info class_info =
   let ps_methods =
     try
       find_ps_method s_method error_summary call_graph summary call_prop_map
@@ -927,6 +937,6 @@ let mk_testcases s_method error_summary call_graph summary call_prop_map
       ^
       try
         find_all_parameter ps_method ps_method_summary summary method_info
-          hierarchy_graph
+          class_info
       with _ -> "")
     "" ps_methods
