@@ -12,17 +12,9 @@ parser.set_language(J_LANGUAGE)
 
 extract_nested_class_query = J_LANGUAGE.query("""
 (class_declaration
-  (modifiers)* @class-modifier
   name: (identifier) @class-name
   body: (class_body
-  (class_declaration)+ @inner-class
-  ))
-""")
-
-extract_inner_class_query = J_LANGUAGE.query("""
-(class_declaration
-    (modifiers)* @inner-class-modifier
-    (identifier) @inner-class-name)
+  (class_declaration)+ @inner-class))
 """)
 
 extract_pure_class_query = J_LANGUAGE.query("""
@@ -31,27 +23,52 @@ extract_pure_class_query = J_LANGUAGE.query("""
   name: (identifier) @class-name)
 """)
 
-extract_interface_query = J_LANGUAGE.query("""
+extract_nested_interface_query = J_LANGUAGE.query("""
+(interface_declaration
+  (identifier) @interface-name
+  body: (interface_body
+    (interface_declaration)+ @inner-interface))
+""")
+
+extract_pure_interface_query = J_LANGUAGE.query("""
 (interface_declaration
   (identifier) @interface-name)
 """)
 
-extends_class_query = \
-    J_LANGUAGE.query("""
+extends_nested_class_query = J_LANGUAGE.query("""
+(class_declaration
+  name: (identifier) @class-name
+  body: (class_body
+  (class_declaration)+ @inner-class))
+""")
+
+extends_pure_class_query = J_LANGUAGE.query("""
 (class_declaration
   name: (identifier) @class-name
   (superclass) @class-list)
 """)
 
-implements_interface_query = \
-    J_LANGUAGE.query("""
+implements_nested_interface_query = J_LANGUAGE.query("""
+(class_declaration
+  name: (identifier) @class-name
+  body: (class_body
+  (class_declaration)+ @inner-class))
+""")
+
+implements_pure_interface_query = J_LANGUAGE.query("""
 (class_declaration
   name: (identifier) @class-name
   (super_interfaces) @interface-list)
 """)
 
-extends_interface_query = \
-    J_LANGUAGE.query("""
+extends_nested_interface_query = J_LANGUAGE.query("""
+(interface_declaration
+  (identifier) @interface-name
+  body: (interface_body
+    (interface_declaration)+ @inner-interface))
+""")
+
+extends_pure_interface_query = J_LANGUAGE.query("""
 (interface_declaration
   (identifier) @interface-name
   (extends_interfaces) @interface-list)
@@ -63,6 +80,22 @@ implements_interface_list = []
 extends_interface_list = []
 
 
+def get_text(node, src):
+    text = ''
+    if src[node[0].start_point[0]] == src[node[0].end_point[0]]:
+        text = (src[node[0].start_point[0]]
+                )[node[0].start_point[1]:node[0].end_point[1]]
+    else:
+        text = (src[node[0].start_point[0]])[node[0].start_point[1]:]
+        for row in range(node[0].start_point[0] + 1, node[0].end_point[0] + 1):
+            if row == src[node[0].end_point[0]]:
+                text = text + src[[row][:node[0].end_point[1]]]
+            else:
+                text = text + src[row]
+    text = re.sub("<.*>", "", re.sub("{", "", text))
+    return text
+
+
 def get_nested_class_name(node, src):
     pure_match_list = extract_nested_class_query.captures(node)
     match_list = []
@@ -70,34 +103,17 @@ def get_nested_class_name(node, src):
         if node not in match_list:
             match_list.append(node)
     class_name = ''
-    class_modifier = []
     inner_class_name = ''
     inner_class_modifier = []
     for i in match_list:
-        text = \
-            (src[i[0].start_point[0]])[i[0].start_point[1]:i[0].end_point[1]]
-        text = re.sub("<.*>", "", text)
-        if i[1] == 'class-modifier':
-            modifier_list = list(
-                filter(lambda x: x == 'static' or x == 'abstract',
-                       [modifier.strip() for modifier in text.split(' ')]))
-            if len(modifier_list) == 0:
-                class_modifier = []
-            else:
-                class_modifier = modifier_list
-        elif i[1] == 'class-name':
+        text = get_text(i, src)
+        if i[1] == 'class-name':
             class_name = text
-            class_and_interface_list.append({
-                'name': class_name,
-                'type': class_modifier
-            })
         elif i[1] == 'inner-class':
-            match_inner_list = extract_inner_class_query.captures(i[0])
+            match_inner_list = extract_pure_class_query.captures(i[0])
             for j in match_inner_list:
-                text = \
-                    (src[j[0].start_point[0]])[j[0].start_point[1]:j[0].end_point[1]]
-                text = re.sub("<.*>", "", text)
-                if j[1] == 'inner-class-modifier':
+                text = get_text(j, src)
+                if j[1] == 'class-modifier':
                     modifier_list = list(
                         filter(
                             lambda x: x == 'static' or x == 'abstract',
@@ -107,7 +123,7 @@ def get_nested_class_name(node, src):
                         inner_class_modifier = []
                     else:
                         inner_class_modifier = modifier_list
-                elif j[1] == 'inner-class-name':
+                elif j[1] == 'class-name':
                     inner_class_name = class_name + '$' + text
                     class_and_interface_list.append({
                         'name':
@@ -125,12 +141,8 @@ def get_pure_class_name(node, src):
             match_list.append(node)
     class_name = ''
     class_modifier = []
-    inner_class_name = ''
-    inner_class_modifier = []
     for i in match_list:
-        text = \
-            (src[i[0].start_point[0]])[i[0].start_point[1]:i[0].end_point[1]]
-        text = re.sub("<.*>", "", text)
+        text = get_text(i, src)
         if i[1] == 'class-modifier':
             modifier_list = list(
                 filter(lambda x: x == 'static' or x == 'abstract',
@@ -147,13 +159,31 @@ def get_pure_class_name(node, src):
             })
 
 
-def get_interface_name(node, src):
-    match_list = extract_interface_query.captures(node)
+def get_nested_interface_name(node, src):
+    match_list = extract_nested_interface_query.captures(node)
+    interface_name = ''
+    inner_interface_name = ''
+    for i in match_list:
+        text = get_text(i, src)
+        if i[1] == 'interface-name':
+            interface_name = text
+        elif i[1] == 'inner-interface':
+            match_inner_list = extract_pure_interface_query.captures(i[0])
+            for j in match_inner_list:
+                text = get_text(j, src)
+                if j[1] == 'interface-name':
+                    inner_interface_name = interface_name + '$' + text
+                    class_and_interface_list.append({
+                        'name': inner_interface_name,
+                        'type': ["interface"]
+                    })
+
+
+def get_pure_interface_name(node, src):
+    match_list = extract_pure_interface_query.captures(node)
     interface_name = ''
     for i in match_list:
-        text = \
-            (src[i[0].start_point[0]])[i[0].start_point[1]:i[0].end_point[1]]
-        text = re.sub("<.*>", "", text)
+        text = get_text(i, src)
         if i[1] == 'interface-name':
             interface_name = text
             class_and_interface_list.append({
@@ -162,14 +192,64 @@ def get_interface_name(node, src):
             })
 
 
-def get_extends_class(node, src):
-    match_list = extends_class_query.captures(node)
+def get_nested_extends_class(node, src):
+    pure_match_list = extends_nested_class_query.captures(node)
+    match_list = []
+    for node in pure_match_list:
+        if node not in match_list:
+            match_list.append(node)
+    class_name = ''
+    inner_class_name = ''
+    inner_super_class_list = []
+    inner_super_interface_list = []
+    for i in match_list:
+        text = get_text(i, src)
+        if i[1] == 'class-name':
+            class_name = text
+        elif i[1] == 'inner-class':
+            match_inner_list = extends_pure_class_query.captures(i[0])
+            for j in match_inner_list:
+                text = get_text(j, src)
+                if j[1] == 'class-name':
+                    inner_class_name = class_name + '$' + text
+                elif j[1] == 'class-list':
+                    text = text.replace('extends', '', 1)
+                    inner_super_class_list = [
+                        super_class.strip() for super_class in text.split(',')
+                    ]
+                    extends_class_list.append({
+                        'child': inner_class_name,
+                        'super': inner_super_class_list
+                    })
+            match_inner_list = implements_pure_interface_query.captures(i[0])
+            for j in match_inner_list:
+                text = get_text(j, src)
+                if j[1] == 'class-name':
+                    inner_class_name = class_name + '$' + text
+                elif j[1] == 'interface-list':
+                    text = text.replace('implements', '', 1)
+                    inner_super_interface_list = [
+                        super_interface.strip()
+                        for super_interface in text.split(',')
+                    ]
+                    implements_interface_list.append({
+                        'child':
+                        inner_class_name,
+                        'super':
+                        inner_super_interface_list
+                    })
+
+
+def get_pure_extends_class(node, src):
+    pure_match_list = extends_pure_class_query.captures(node)
+    match_list = []
+    for node in pure_match_list:
+        if node not in match_list:
+            match_list.append(node)
     class_name = ''
     super_class_list = []
     for i in match_list:
-        text = \
-            (src[i[0].start_point[0]])[i[0].start_point[1]:i[0].end_point[1]]
-        text = re.sub("<.*>", "", text)
+        text = get_text(i, src)
         if i[1] == 'class-name':
             class_name = text
         elif i[1] == 'class-list':
@@ -183,14 +263,60 @@ def get_extends_class(node, src):
             })
 
 
-def get_implements_interface(node, src):
-    match_list = implements_interface_query.captures(node)
+def get_nested_implements_interface(node, src):
+    pure_match_list = implements_nested_interface_query.captures(node)
+    match_list = []
+    for node in pure_match_list:
+        if node not in match_list:
+            match_list.append(node)
+    class_name = ''
+    inner_class_name = ''
+    inner_super_class_list = []
+    inner_super_interface_list = []
+    for i in match_list:
+        text = get_text(i, src)
+        if i[1] == 'class-name':
+            class_name = text
+        elif i[1] == 'inner-class':
+            match_inner_list = extends_pure_class_query.captures(i[0])
+            for j in match_inner_list:
+                text = get_text(j, src)
+                if j[1] == 'class-name':
+                    inner_class_name = class_name + '$' + text
+                elif j[1] == 'class-list':
+                    text = text.replace('extends', '', 1)
+                    inner_super_class_list = [
+                        super_class.strip() for super_class in text.split(',')
+                    ]
+                    extends_class_list.append({
+                        'child': inner_class_name,
+                        'super': inner_super_class_list
+                    })
+            match_inner_list = implements_pure_interface_query.captures(i[0])
+            for j in match_inner_list:
+                text = get_text(j, src)
+                if j[1] == 'class-name':
+                    inner_class_name = class_name + '$' + text
+                elif j[1] == 'interface-list':
+                    text = text.replace('implements', '', 1)
+                    inner_super_interface_list = [
+                        super_interface.strip()
+                        for super_interface in text.split(',')
+                    ]
+                    implements_interface_list.append({
+                        'child':
+                        inner_class_name,
+                        'super':
+                        inner_super_interface_list
+                    })
+
+
+def get_pure_implements_interface(node, src):
+    match_list = implements_pure_interface_query.captures(node)
     class_name = ''
     super_interface_list = []
     for i in match_list:
-        text = \
-            (src[i[0].start_point[0]])[i[0].start_point[1]:i[0].end_point[1]]
-        text = re.sub("<.*>", "", text)
+        text = get_text(i, src)
         if i[1] == 'class-name':
             class_name = text
         elif i[1] == 'interface-list':
@@ -204,14 +330,45 @@ def get_implements_interface(node, src):
             })
 
 
-def get_extends_interface(node, src):
-    match_list = extends_interface_query.captures(node)
+def get_nested_extends_interface(node, src):
+    pure_match_list = extends_nested_interface_query.captures(node)
+    match_list = []
+    for node in pure_match_list:
+        if node not in match_list:
+            match_list.append(node)
+    interface_name = ''
+    inner_interface_name = ''
+    inner_super_interface_list = []
+    for i in match_list:
+        text = get_text(i, src)
+        if i[1] == 'interface-name':
+            interface_name = text
+        elif i[1] == 'inner-interface':
+            match_inner_list = extends_pure_interface_query.captures(i[0])
+            for j in match_inner_list:
+                text = get_text(j, src)
+                if i[1] == 'interface-name':
+                    inner_interface_name = text
+                elif i[1] == 'interface-list':
+                    text = text.replace('extends', '', 1)
+                    inner_super_interface_list = [
+                        super_interface.strip()
+                        for super_interface in text.split(',')
+                    ]
+                    extends_interface_list.append({
+                        'child':
+                        inner_interface_name,
+                        'super':
+                        inner_super_interface_list
+                    })
+
+
+def get_pure_extends_interface(node, src):
+    match_list = extends_pure_interface_query.captures(node)
     interface_name = ''
     super_interface_list = []
     for i in match_list:
-        text = \
-            (src[i[0].start_point[0]])[i[0].start_point[1]:i[0].end_point[1]]
-        text = re.sub("<.*>", "", text)
+        text = get_text(i, src)
         if i[1] == 'interface-name':
             interface_name = text
         elif i[1] == 'interface-list':
@@ -238,10 +395,14 @@ def one_file_hierarchy_info(src, encoding):
     tree = parser.parse(read_callable)
     get_nested_class_name(tree.root_node, src_lines)
     get_pure_class_name(tree.root_node, src_lines)
-    get_interface_name(tree.root_node, src_lines)
-    get_extends_class(tree.root_node, src_lines)
-    get_implements_interface(tree.root_node, src_lines)
-    get_extends_interface(tree.root_node, src_lines)
+    get_nested_interface_name(tree.root_node, src_lines)
+    get_pure_interface_name(tree.root_node, src_lines)
+    get_nested_extends_class(tree.root_node, src_lines)
+    get_pure_extends_class(tree.root_node, src_lines)
+    get_nested_implements_interface(tree.root_node, src_lines)
+    get_pure_implements_interface(tree.root_node, src_lines)
+    get_nested_extends_interface(tree.root_node, src_lines)
+    get_pure_extends_interface(tree.root_node, src_lines)
 
 
 def all_file_hierarchy_info(dirname, encoding):
@@ -285,6 +446,5 @@ if dir_path[-1] == '/':
 else:
     name = '/hierarchy_info.json'
 
-with open(dir_path + name, 'w', encoding='utf-8') as \
-    json_file:
+with open(dir_path + name, 'w', encoding='utf-8') as json_file:
     json.dump(hierarchy_info, json_file, indent=2)
