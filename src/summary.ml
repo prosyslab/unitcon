@@ -16,8 +16,10 @@ let parse_param param =
   let v_and_t = String.split_on_char ':' param in
   let rec get_type t =
     match t with
-    | "int" | "signed short" | "long" -> ("", Language.Int)
-    | "float" | "double" -> ("", Language.Float)
+    | "int" | "signed short" -> ("", Language.Int)
+    | "long" -> ("", Language.Long)
+    | "float" -> ("", Language.Float)
+    | "double" -> ("", Language.Double)
     | "_Bool" | "boolean" -> ("", Language.Bool)
     | "unsigned short" | "signed char" | "unsigned char" -> ("", Language.Char)
     | "java.lang.String*" -> ("java.lang.String", Language.String)

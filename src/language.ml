@@ -14,7 +14,9 @@ type class_type = Abstract | Static | Abstract_and_Static | Normal | Interface
 
 type typ =
   | Int
+  | Long
   | Float
+  | Double
   | Bool
   | Char
   | String
@@ -69,7 +71,9 @@ end
 module Value = struct
   type value =
     | Int of int
+    | Long of int
     | Float of float
+    | Double of float
     | Bool of bool
     | Char of char
     | String of string
