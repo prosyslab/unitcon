@@ -993,11 +993,21 @@ let check_correct_constructor method_summary id candidate_constructor summary =
           } )
       check_summarys
 
+let is_nested_class name = String.contains name '$'
+
 let is_normal_class class_name class_type_info =
   match ClassTypeInfo.M.find_opt class_name class_type_info with
   | Some typ -> (
       match typ with Language.Static | Language.Normal -> true | _ -> false)
   | None -> true
+
+let is_static_class ~is_class name (class_type_info, _) =
+  let class_name =
+    if is_class then name else rm_exp (Str.regexp "\\.<.*>(.*)$") name
+  in
+  match ClassTypeInfo.M.find_opt class_name class_type_info with
+  | Some typ -> ( match typ with Language.Static -> true | _ -> false)
+  | None -> false
 
 let is_private method_name method_info =
   let info = MethodInfo.M.find method_name method_info in
@@ -1133,6 +1143,18 @@ let rec get_statement param target_summary summary method_info class_info =
       in
       let constructor_info = MethodInfo.M.find constructor method_info in
       let constructor_params = constructor_info.MethodInfo.formal_params in
+      let constructor_params =
+        if
+          is_nested_class constructor
+          && is_static_class ~is_class:false constructor class_info
+        then
+          let params_hd = List.hd constructor_params in
+          let params_tl =
+            match List.tl constructor_params with [] -> [] | _ :: tl -> tl
+          in
+          params_hd :: params_tl
+        else constructor_params
+      in
       let constructor_summary = List.hd constr_summary_list |> snd in
       let constructor =
         let param_list =
@@ -1157,10 +1179,50 @@ let rec get_statement param target_summary summary method_info class_info =
             | import, Language.This _ -> import
             | _ -> this_import)
           "" constructor_info.formal_params
+        |> Str.global_replace (Str.regexp "\\$") "."
+      in
+      let constructor =
+        if
+          is_nested_class constructor
+          && is_static_class ~is_class:false constructor class_info
+        then Str.global_replace (Str.regexp "\\$") "." constructor
+        else constructor
       in
       if List.length constructor_params = 1 then
         ( class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";",
           [ constructor_import ] )
+      else if
+        is_nested_class constructor
+        && is_static_class ~is_class:false constructor class_info |> not
+      then
+        let constructor, constructor_params =
+          let this = List.hd constructor_params in
+          let outer_import, outer_var = List.tl constructor_params |> List.hd in
+          let constructor, outer =
+            match outer_var with
+            | Language.Var (typ, id) ->
+                let constructor =
+                  Str.replace_first (Str.regexp_string id) "" constructor
+                  |> Str.replace_first (Str.regexp "^.*\\$") ""
+                in
+                (constructor, (outer_import, Language.Var (typ, "outer1")))
+            | _ -> ("", (outer_import, outer_var))
+          in
+          let params_tl = List.tl constructor_params |> List.tl in
+          (constructor, params_tl |> List.cons outer |> List.cons this)
+        in
+        let code, import_list =
+          List.fold_left_map
+            (fun constructor_code param ->
+              let import, code =
+                get_statement param constructor_summary summary method_info
+                  class_info
+              in
+              (code ^ "\n" ^ constructor_code, import))
+            (class_name ^ " " ^ id ^ " = outer1.new " ^ constructor ^ ";")
+            (List.tl constructor_params)
+        in
+        (code, import_list |> List.flatten |> List.cons constructor_import)
       else
         let code, import_list =
           List.fold_left_map
