@@ -1004,6 +1004,7 @@ let is_private method_name method_info =
   match info.MethodInfo.modifier with Private -> true | _ -> false
 
 let match_constructor_name class_name method_name =
+  let class_name = Str.global_replace (Str.regexp "\\$") "\\$" class_name in
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
 let get_constructor_list class_name method_info (class_info, hierarchy_graph) =
@@ -1018,10 +1019,8 @@ let get_constructor_list class_name method_info (class_info, hierarchy_graph) =
           if
             is_normal_class class_name_to_find class_info
             && is_private method_name method_info |> not
-          then
-            if match_constructor_name class_name_to_find method_name then
-              method_name :: init_list
-            else init_list
+            && match_constructor_name class_name_to_find method_name
+          then method_name :: init_list
           else init_list)
         method_list class_to_find)
     method_info []
