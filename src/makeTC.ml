@@ -1003,7 +1003,8 @@ let is_normal_class class_name class_type_info =
 
 let is_static_class ~is_class name (class_type_info, _) =
   let class_name =
-    if is_class then name else rm_exp (Str.regexp "\\.<.*>(.*)$") name
+    if is_class then name
+    else rm_exp (Str.regexp "\\.<.*>(.*)$") name |> rm_exp (Str.regexp "(.*)$")
   in
   match ClassTypeInfo.M.find_opt class_name class_type_info with
   | Some typ -> ( match typ with Language.Static -> true | _ -> false)
