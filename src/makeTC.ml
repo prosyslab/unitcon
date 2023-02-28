@@ -1145,6 +1145,8 @@ let sort_constructor_list constructor_list method_info =
       compare k1_formal k2_formal)
     constructor_list
 
+let replace_nested_symbol str = Str.global_replace (Str.regexp "\\$") "." str
+
 let rec get_statement param target_summary summary method_info class_info =
   let get_constructor class_name id target_summary summary method_info =
     let constr_summary_list =
@@ -1208,13 +1210,13 @@ let rec get_statement param target_summary summary method_info class_info =
             | import, Language.This _ -> import
             | _ -> this_import)
           "" constructor_info.formal_params
-        |> Str.global_replace (Str.regexp "\\$") "."
+        |> replace_nested_symbol
       in
       let constructor =
         if
           is_nested_class constructor
           && is_static_class ~is_class:false constructor class_info
-        then Str.global_replace (Str.regexp "\\$") "." constructor
+        then replace_nested_symbol constructor
         else constructor
       in
       if List.length constructor_params = 1 then
@@ -1232,6 +1234,7 @@ let rec get_statement param target_summary summary method_info class_info =
             | Language.Var (typ, id) ->
                 let constructor =
                   Str.replace_first (Str.regexp_string id) "" constructor
+                  |> Str.replace_first (Str.regexp "(, ") "("
                   |> Str.replace_first (Str.regexp "^.*\\$") ""
                 in
                 (constructor, (outer_import, Language.Var (typ, "outer1")))
@@ -1248,7 +1251,8 @@ let rec get_statement param target_summary summary method_info class_info =
                   class_info
               in
               (code ^ "\n" ^ constructor_code, import))
-            (class_name ^ " " ^ id ^ " = outer1.new " ^ constructor ^ ";")
+            ((class_name |> replace_nested_symbol)
+            ^ " " ^ id ^ " = outer1.new " ^ constructor ^ ";")
             (List.tl constructor_params)
         in
         (code, import_list |> List.flatten |> List.cons constructor_import)
@@ -1353,7 +1357,8 @@ let mk_testcase all_param ps_method method_info =
       List.fold_left
         (fun set (import_list, _) ->
           List.fold_left
-            (fun _set import -> ImportSet.add import _set)
+            (fun _set import ->
+              ImportSet.add (import |> replace_nested_symbol) _set)
             set import_list)
         ImportSet.empty all_param
     in
