@@ -32,6 +32,26 @@ let rec find_relation given_symbol relation =
   | Some find_symbol -> find_relation find_symbol relation
   | None -> given_symbol
 
+let get_rh_name ~is_var rh =
+  if is_var then match rh with Condition.RH_Var v -> v | _ -> ""
+  else match rh with Condition.RH_Symbol s -> s | _ -> ""
+
+let find_variable head_symbol variables =
+  match Condition.M.find_opt (Condition.RH_Symbol head_symbol) variables with
+  | Some var -> get_rh_name ~is_var:true var
+  | None -> ""
+
+let more_find_head_symbol head_symbol memory =
+  let trace_traverse trace_memory =
+    Condition.M.fold
+      (fun _ value list ->
+        match value with
+        | Condition.RH_Symbol s when head_symbol = s -> s :: list
+        | _ -> list)
+      trace_memory []
+  in
+  if trace_traverse memory |> List.length = 0 then false else true
+
 let get_symbol_list values =
   Value.M.fold (fun symbol _ symbol_list -> symbol :: symbol_list) values []
 
@@ -39,10 +59,26 @@ let get_symbol_list values =
 (* return: (callee_actual_symbol * head_symbol) list *)
 (* if head = "" then this symbol can be any value *)
 let get_head_symbol_list symbols (_, memory) =
+  let rec find_real_head head_symbol memory =
+    let exist_head_list =
+      Condition.M.fold
+        (fun head_cand symbols cand_list ->
+          if more_find_head_symbol head_symbol symbols then
+            match head_cand with
+            | Condition.RH_Symbol s -> s :: cand_list
+            | _ -> cand_list
+          else cand_list)
+        memory []
+    in
+    if List.length exist_head_list = 0 then head_symbol
+    else find_real_head (exist_head_list |> List.hd) memory
+  in
   let get_head_symbol symbol memory =
     Condition.M.fold
-      (fun head trace head_list ->
-        let head = match head with Condition.RH_Symbol s -> s | _ -> "" in
+      (fun head_symbol trace head_list ->
+        let head =
+          find_real_head (get_rh_name ~is_var:false head_symbol) memory
+        in
         Condition.M.fold
           (fun _ trace_tail head_list ->
             match trace_tail with
@@ -62,11 +98,7 @@ let get_head_symbol_list symbols (_, memory) =
 (* if param_index = -1 then this symbol can be any value *)
 let get_param_index_list head_symbol_list (variables, _) formal_params =
   let get_param_index head_symbol variables formal_params =
-    let variable =
-      match Condition.M.find (Condition.RH_Symbol head_symbol) variables with
-      | Condition.RH_Var v -> v
-      | _ -> ""
-    in
+    let variable = find_variable head_symbol variables in
     let index =
       let rec get_index count params =
         match params with
@@ -75,7 +107,7 @@ let get_param_index_list head_symbol_list (variables, _) formal_params =
             | Language.This _ -> get_index (count + 1) tl
             | Var (_, id) ->
                 if id = variable then count else get_index (count + 1) tl)
-        | [] -> failwith "not found param"
+        | [] -> -1
       in
       get_index 0 formal_params
     in
@@ -742,7 +774,7 @@ let get_value typ id summary =
   let target_variable =
     Condition.M.fold
       (fun symbol symbol_trace find_variable ->
-        let symbol = match symbol with Condition.RH_Symbol s -> s | _ -> "" in
+        let symbol = get_rh_name ~is_var:false symbol in
         if symbol = target_variable then
           Condition.M.fold
             (fun _ trace_tail trace_find_var ->
@@ -931,7 +963,7 @@ let check_correct_constructor method_summary id candidate_constructor summary =
   let target_symbol =
     Condition.M.fold
       (fun symbol precond_id target ->
-        let symbol = match symbol with Condition.RH_Symbol s -> s | _ -> "" in
+        let symbol = get_rh_name ~is_var:false symbol in
         match precond_id with
         | Condition.RH_Var pre_id when pre_id = id -> symbol
         | _ -> target)
@@ -942,9 +974,7 @@ let check_correct_constructor method_summary id candidate_constructor summary =
     let target_symbol =
       Condition.M.fold
         (fun symbol trace target ->
-          let symbol =
-            match symbol with Condition.RH_Symbol s -> s | _ -> ""
-          in
+          let symbol = get_rh_name ~is_var:false symbol in
           if symbol = target_symbol then
             Condition.M.fold
               (fun _ trace_tail find_target ->
@@ -964,9 +994,7 @@ let check_correct_constructor method_summary id candidate_constructor summary =
           let c_target_symbol =
             Condition.M.fold
               (fun symbol p_id target ->
-                let symbol =
-                  match symbol with Condition.RH_Symbol s -> s | _ -> ""
-                in
+                let symbol = get_rh_name ~is_var:false symbol in
                 match p_id with
                 | Condition.RH_Var pre_id when pre_id = "this" -> symbol
                 | _ -> target)
@@ -1041,7 +1069,7 @@ let get_class_initializer_list class_name target_summary method_info =
   let target_variable =
     Condition.M.fold
       (fun symbol variable find_variable ->
-        let symbol = match symbol with Condition.RH_Symbol s -> s | _ -> "" in
+        let symbol = get_rh_name ~is_var:false symbol in
         match variable with
         | Condition.RH_Var var ->
             if Str.string_match (".*\\." ^ class_name |> Str.regexp) var 0 then
@@ -1053,7 +1081,7 @@ let get_class_initializer_list class_name target_summary method_info =
   let target_variable =
     Condition.M.fold
       (fun symbol symbol_trace find_variable ->
-        let symbol = match symbol with Condition.RH_Symbol s -> s | _ -> "" in
+        let symbol = get_rh_name ~is_var:false symbol in
         if symbol = target_variable then
           Condition.M.fold
             (fun trace_head _ trace_find_var ->
@@ -1378,17 +1406,16 @@ let find_all_parameter ps_method ps_method_summary summary method_info
 let mk_testcases s_method error_summary call_graph summary call_prop_map
     method_info class_info =
   let ps_methods =
-    try
-      find_ps_method s_method error_summary call_graph summary call_prop_map
-        method_info
-    with _ -> [ ("", Language.empty_summary) ]
+    (* try *)
+    find_ps_method s_method error_summary call_graph summary call_prop_map
+      method_info
+    (* with _ -> [ ("", Language.empty_summary) ] *)
   in
   List.fold_left
     (fun tests (ps_method, ps_method_summary) ->
       tests
-      ^
-      try
-        find_all_parameter ps_method ps_method_summary summary method_info
-          class_info
-      with _ -> "")
+      ^ (* try *)
+      find_all_parameter ps_method ps_method_summary summary method_info
+        class_info
+      (* with _ -> "" *))
     "" ps_methods
