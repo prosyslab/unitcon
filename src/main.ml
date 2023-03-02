@@ -41,10 +41,6 @@ let initialize () =
   print_endline ("Logging to " ^ !Cmdline.out_dir)
 (* Filename.concat !Cmdline.out_dir "log.txt" |> Logger.from_file *)
 
-let synthesize method_map call_graph =
-  (* generate Spoon class here *)
-  ()
-
 let main () =
   let usage = "Usage: unitgen [options] input_files" in
   Arg.parse Cmdline.options Cmdline.parse_arg usage;
