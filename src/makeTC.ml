@@ -1046,6 +1046,14 @@ let match_constructor_name class_name method_name =
   let class_name = Str.global_replace (Str.regexp "\\$") "\\$" class_name in
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
+let get_java_util_normal_class class_name =
+  let import_array_list = "java.util.ArrayList" in
+  let import_hash_map = "java.util.HashMap" in
+  if class_name = "Collection" || class_name = "List" then
+    ("ArrayList", [ import_array_list ])
+  else if class_name = "Map" then ("HashMap", [ import_hash_map ])
+  else (class_name, [])
+
 let get_constructor_list class_name method_info (class_info, hierarchy_graph) =
   let class_to_find =
     try HG.succ hierarchy_graph class_name |> List.cons class_name
@@ -1166,7 +1174,8 @@ let rec get_statement param target_summary summary method_info class_info =
         get_class_initializer_list class_name target_summary method_info
       in
       if class_initializer = "" then
-        (class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();", [])
+        let normal_class_name, import = get_java_util_normal_class class_name in
+        (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();", import)
       else (class_name ^ " " ^ id ^ " = " ^ class_initializer ^ ";", [])
     else
       let constructor =
@@ -1411,16 +1420,17 @@ let find_all_parameter ps_method ps_method_summary summary method_info
 let mk_testcases s_method error_summary call_graph summary call_prop_map
     method_info class_info =
   let ps_methods =
-    (* try *)
-    find_ps_method s_method error_summary call_graph summary call_prop_map
-      method_info
-    (* with _ -> [ ("", Language.empty_summary) ] *)
+    try
+      find_ps_method s_method error_summary call_graph summary call_prop_map
+        method_info
+    with _ -> [ ("", Language.empty_summary) ]
   in
   List.fold_left
     (fun tests (ps_method, ps_method_summary) ->
       tests
-      ^ (* try *)
-      find_all_parameter ps_method ps_method_summary summary method_info
-        class_info
-      (* with _ -> "" *))
+      ^
+      try
+        find_all_parameter ps_method ps_method_summary summary method_info
+          class_info
+      with _ -> "")
     "" ps_methods
