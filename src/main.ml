@@ -31,6 +31,8 @@ let parse_callprop filename =
   let list = JsonUtil.to_list json in
   CallProposition.from_callprop_json list
 
+let get_setter summary = Setter.from_summary_map summary
+
 let print_callgraph call_graph =
   let oc = open_out (Filename.concat !Cmdline.out_dir "callgraph.dot") in
   Callgraph.Graphviz.output_graph oc call_graph
@@ -51,6 +53,7 @@ let main () =
     ->
       let method_info = parse_method_info summary_file in
       let summary = parse_summary summary_file in
+      let setter_map = get_setter summary in
       let call_prop_map = parse_callprop call_proposition_file in
       let call_graph = parse_callgraph summary_file in
       let class_info = parse_class_info hierarchy_file in

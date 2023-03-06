@@ -185,3 +185,15 @@ module ClassTypeInfo = struct
 
   type t = class_type M.t
 end
+
+module SetterMap = struct
+  module M = Map.Make (struct
+    type t = class_name
+
+    let compare = compare
+  end)
+
+  type setter = method_name * id list
+
+  type t = setter M.t
+end
