@@ -195,5 +195,5 @@ module SetterMap = struct
 
   type setter = method_name * id list
 
-  type t = setter M.t
+  type t = setter list M.t
 end

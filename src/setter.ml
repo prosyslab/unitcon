@@ -72,8 +72,12 @@ let find_setter method_name method_summarys mmap =
         (fun field _ field_list -> field :: field_list)
         change_fields []
     in
-    List.iter (fun x -> x |> print_endline) fields;
-    SetterMap.M.add class_name (method_name, fields) mmap
+    if SetterMap.M.mem class_name mmap then
+      let setter_list =
+        SetterMap.M.find class_name mmap |> List.cons (method_name, fields)
+      in
+      SetterMap.M.add class_name setter_list mmap
+    else SetterMap.M.add class_name [ (method_name, fields) ] mmap
 
 let from_summary_map summary =
   SummaryMap.M.fold
