@@ -5,6 +5,8 @@ module MethodInfo = Language.MethodInfo
 module SummaryMap = Language.SummaryMap
 module CallPropMap = Language.CallPropMap
 module ClassTypeInfo = Language.ClassTypeInfo
+module SetterMap = Language.SetterMap
+module FieldMap = Language.FieldMap
 module CG = Callgraph.G
 module HG = Hierarchy.G
 
@@ -957,6 +959,137 @@ let get_value typ id summary =
   in
   value
 
+let get_id_symbol id variable =
+  Condition.M.fold
+    (fun symbol symbol_id this_symbol ->
+      match symbol_id with
+      | Condition.RH_Var v when v = id -> symbol
+      | _ -> this_symbol)
+    variable Condition.RH_Any
+
+let rec get_tail_symbol symbol memory =
+  let next_symbol = Condition.M.find_opt symbol memory in
+  match next_symbol with
+  | Some sym ->
+      let m_any_symbol = Condition.M.find Condition.RH_Any sym in
+      get_tail_symbol m_any_symbol memory
+  | None -> symbol
+
+let get_field_value_map field_name value_map field_map value memory =
+  Condition.M.fold
+    (fun _ symbol old_field_map ->
+      let field_symbol = get_tail_symbol symbol memory in
+      let field_value =
+        Value.M.find (field_symbol |> get_rh_name ~is_var:false) value
+      in
+      FieldMap.M.add field_name field_value old_field_map)
+    value_map field_map
+
+let rec collect_field m_symbol c_symbol m_value c_value m_mem c_mem field_map =
+  try
+    let next_m_symbol = Condition.M.find m_symbol m_mem in
+    let next_c_symbol = Condition.M.find c_symbol c_mem in
+    let is_m_field =
+      if Condition.M.cardinal next_m_symbol > 1 then true else false
+    in
+    let is_c_field =
+      if Condition.M.cardinal next_c_symbol > 1 then true else false
+    in
+    match (is_m_field, is_c_field) with
+    | false, false ->
+        let m = Condition.M.find Condition.RH_Any next_m_symbol in
+        let c = Condition.M.find Condition.RH_Any next_c_symbol in
+        collect_field m c m_value c_value m_mem c_mem field_map
+    | true, false ->
+        let field_name, field_symbol =
+          Condition.M.fold
+            (fun field symbol field_symbol ->
+              match field with
+              | Condition.RH_Var v -> (v, symbol)
+              | _ -> field_symbol)
+            next_m_symbol ("", Condition.RH_Any)
+        in
+        let next_m_symbol = Condition.M.find field_symbol m_mem in
+        get_field_value_map field_name next_m_symbol field_map m_value m_mem
+    | false, true -> field_map
+    | true, true ->
+        let m_field_name, m_field_symbol =
+          Condition.M.fold
+            (fun field symbol field_symbol ->
+              match field with
+              | Condition.RH_Var v -> (v, symbol)
+              | _ -> field_symbol)
+            next_m_symbol ("", Condition.RH_Any)
+        in
+        let next_m_symbol = Condition.M.find m_field_symbol m_mem in
+        let c_field_name, c_field_symbol =
+          Condition.M.fold
+            (fun field symbol field_symbol ->
+              match field with
+              | Condition.RH_Var v when v = m_field_name -> (v, symbol)
+              | _ -> field_symbol)
+            next_c_symbol ("", Condition.RH_Any)
+        in
+        let next_c_symbol = Condition.M.find c_field_symbol c_mem in
+
+        let m_field_map =
+          get_field_value_map m_field_name next_m_symbol FieldMap.M.empty
+            m_value m_mem
+        in
+        let c_field_map =
+          get_field_value_map c_field_name next_c_symbol FieldMap.M.empty
+            c_value c_mem
+        in
+        FieldMap.M.fold
+          (fun field m_value old_field_map ->
+            let c_value = FieldMap.M.find_opt field c_field_map in
+            match c_value with
+            | Some value when value = m_value -> old_field_map
+            | _ -> FieldMap.M.add field m_value old_field_map)
+          m_field_map field_map
+  with _ -> field_map
+
+let get_class_name method_name = rm_exp ("(.*)" |> Str.regexp) method_name
+
+let get_setter_list constructor field_map setter_map =
+  let class_name = get_class_name constructor in
+  let setter_list = SetterMap.M.find class_name setter_map in
+  let rec find_then_remove_field setter_list field_map =
+    match setter_list with
+    | (method_name, change_field) :: tl ->
+        let check =
+          List.fold_left
+            (fun check field ->
+              match FieldMap.M.find_opt field field_map with
+              | None -> false
+              | _ -> check)
+            true change_field
+        in
+        if check then
+          let field_map =
+            List.fold_left
+              (fun old_field_map field -> FieldMap.M.remove field old_field_map)
+              field_map change_field
+          in
+          find_then_remove_field tl field_map |> List.cons method_name
+        else find_then_remove_field tl field_map
+    | _ -> []
+  in
+  find_then_remove_field setter_list field_map
+
+let get_setter constructor id method_summary constructor_summary setter_map =
+  let m_pre_var, m_pre_mem = method_summary.Language.precond in
+  let m_pre_value = method_summary.Language.value in
+  let c_post_var, c_post_mem = constructor_summary.Language.postcond in
+  let c_post_value = constructor_summary.Language.value in
+  let m_id_symbol = get_id_symbol id m_pre_var in
+  let c_this_symbol = get_id_symbol "this" c_post_var in
+  let need_setter_field =
+    collect_field m_id_symbol c_this_symbol m_pre_value c_post_value m_pre_mem
+      c_post_mem FieldMap.M.empty
+  in
+  (need_setter_field, get_setter_list constructor need_setter_field setter_map)
+
 let check_correct_constructor method_summary id candidate_constructor summary =
   let constructor_summarys = SummaryMap.M.find candidate_constructor summary in
   let method_symbols, method_memory = method_summary.Language.precond in
@@ -1155,7 +1288,79 @@ let sort_constructor_list constructor_list method_info =
 
 let replace_nested_symbol str = Str.global_replace (Str.regexp "\\$") "." str
 
-let rec get_statement param target_summary summary method_info class_info =
+let rec get_statement param target_summary summary method_info class_info
+    setter_map =
+  let get_setter_statement id setter c_summary summary field_map method_info
+      class_info =
+    let old_c_summary = c_summary in
+    let old_var, old_mem = c_summary.Language.precond in
+    let new_value_map =
+      FieldMap.M.fold
+        (fun id value value_map ->
+          let id_symbol = get_id_symbol id old_var in
+          let id_tail_symbol =
+            get_tail_symbol id_symbol old_mem |> get_rh_name ~is_var:false
+          in
+          Value.M.add id_tail_symbol value value_map)
+        field_map Value.M.empty
+    in
+    let new_c_summary =
+      Language.
+        {
+          relation = old_c_summary.relation;
+          value = new_value_map;
+          precond = old_c_summary.precond;
+          postcond = old_c_summary.postcond;
+          args = old_c_summary.args;
+        }
+    in
+    let setter_method_info = MethodInfo.M.find setter method_info in
+    let setter_params = setter_method_info.MethodInfo.formal_params in
+    let setter =
+      let param_list =
+        List.fold_left
+          (fun param_code (_, param) ->
+            match param with
+            | Language.This _ -> param_code
+            | Language.Var (_, id) -> param_code ^ ", " ^ id)
+          "" setter_params
+      in
+      let param_list = rm_exp (Str.regexp "^, ") param_list in
+      let setter =
+        Str.replace_first (Str.regexp ".*\\.") "" setter
+        |> rm_exp (Str.regexp "(.*)$")
+      in
+      setter ^ "(" ^ param_list ^ ")"
+    in
+    let setter_code = id ^ "." ^ setter ^ ";" in
+    let code, import_list =
+      List.fold_left_map
+        (fun setter_code param ->
+          let import, code =
+            get_statement param new_c_summary summary method_info class_info
+              setter_map
+          in
+          (code ^ "\n" ^ setter_code, import))
+        setter_code (List.tl setter_params)
+    in
+    ("\n" ^ code, import_list |> List.flatten)
+  in
+  let get_setter_statements constructor id t_summary c_summary summary
+      method_info class_info setter_map =
+    try
+      let setter_field, setter_list =
+        get_setter constructor id t_summary c_summary setter_map
+      in
+      List.fold_left_map
+        (fun setter_code setter ->
+          let new_setter_code, new_import =
+            get_setter_statement id setter c_summary summary setter_field
+              method_info class_info
+          in
+          (new_setter_code ^ setter_code, new_import))
+        "" setter_list
+    with _ -> ("", [])
+  in
   let get_constructor class_name id target_summary summary method_info =
     let constr_summary_list =
       get_constructor_list class_name method_info class_info
@@ -1229,8 +1434,13 @@ let rec get_statement param target_summary summary method_info class_info =
         else constructor
       in
       if List.length constructor_params = 1 then
-        ( class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";",
-          [ constructor_import ] )
+        let setter_code, setter_import =
+          get_setter_statements constructor id target_summary
+            constructor_summary summary method_info class_info setter_map
+        in
+        let code = class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";" in
+        ( code ^ setter_code,
+          setter_import |> List.flatten |> List.cons constructor_import )
       else if
         is_nested_class constructor
         && is_static_class ~is_class:false constructor class_info |> not
@@ -1257,7 +1467,7 @@ let rec get_statement param target_summary summary method_info class_info =
             (fun constructor_code param ->
               let import, code =
                 get_statement param constructor_summary summary method_info
-                  class_info
+                  class_info setter_map
               in
               (code ^ "\n" ^ constructor_code, import))
             ((class_name |> replace_nested_symbol)
@@ -1266,18 +1476,24 @@ let rec get_statement param target_summary summary method_info class_info =
         in
         (code, import_list |> List.flatten |> List.cons constructor_import)
       else
+        let setter_code, setter_import =
+          get_setter_statements constructor id target_summary
+            constructor_summary summary method_info class_info setter_map
+        in
         let code, import_list =
           List.fold_left_map
             (fun constructor_code param ->
               let import, code =
                 get_statement param constructor_summary summary method_info
-                  class_info
+                  class_info setter_map
               in
               (code ^ "\n" ^ constructor_code, import))
             (class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";")
             (List.tl constructor_params)
         in
-        (code, import_list |> List.flatten |> List.cons constructor_import)
+        ( code ^ setter_code,
+          import_list |> List.append setter_import |> List.flatten
+          |> List.cons constructor_import )
   in
   match param |> snd with
   | Language.This typ -> (
@@ -1406,19 +1622,20 @@ let mk_testcase all_param ps_method method_info =
   codes ^ execute_ps "gen1." ps_method ^ ";\n}\n\n"
 
 let find_all_parameter ps_method ps_method_summary summary method_info
-    class_info =
+    class_info setter_map =
   let ps_method_info = MethodInfo.M.find ps_method method_info in
   let ps_method_params = ps_method_info.MethodInfo.formal_params in
   let param_codes =
     List.map
       (fun param ->
-        get_statement param ps_method_summary summary method_info class_info)
+        get_statement param ps_method_summary summary method_info class_info
+          setter_map)
       ps_method_params
   in
   mk_testcase param_codes ps_method method_info
 
 let mk_testcases s_method error_summary call_graph summary call_prop_map
-    method_info class_info =
+    method_info class_info setter_map =
   let ps_methods =
     try
       find_ps_method s_method error_summary call_graph summary call_prop_map
@@ -1431,6 +1648,6 @@ let mk_testcases s_method error_summary call_graph summary call_prop_map
       ^
       try
         find_all_parameter ps_method ps_method_summary summary method_info
-          class_info
+          class_info setter_map
       with _ -> "")
     "" ps_methods

@@ -61,7 +61,7 @@ let main () =
       Language.SummaryMap.M.iter
         (fun source_method error_summary ->
           MakeTC.mk_testcases source_method error_summary call_graph summary
-            call_prop_map method_info class_info
+            call_prop_map method_info class_info setter_map
           |> print_endline)
         error_summary_map
       (* if !Cmdline.print_callgraph then print_callgraph call_graph *)

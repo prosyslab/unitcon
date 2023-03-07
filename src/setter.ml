@@ -3,16 +3,7 @@ module Value = Language.Value
 module Condition = Language.Condition
 module SummaryMap = Language.SummaryMap
 module SetterMap = Language.SetterMap
-
-module FieldMap = struct
-  module M = Map.Make (struct
-    type t = string
-
-    let compare = compare
-  end)
-
-  type t = bool M.t
-end
+module FieldMap = Language.FieldMap
 
 let get_this_symbol variable =
   Condition.M.fold
@@ -33,7 +24,7 @@ let rec get_change_field post_key field_name pre_mem post_mem field_map =
   | None -> field_map
   | Some value_map -> (
       match Condition.M.find_opt post_key pre_mem with
-      | None -> FieldMap.M.add field_name true field_map
+      | None -> FieldMap.M.add field_name (Value.Eq (Int 0)) field_map
       | Some _ ->
           Condition.M.fold
             (fun field value old_field_map ->

@@ -197,3 +197,13 @@ module SetterMap = struct
 
   type t = setter list M.t
 end
+
+module FieldMap = struct
+  module M = Map.Make (struct
+    type t = string
+
+    let compare = compare
+  end)
+
+  type t = Value.op M.t
+end
