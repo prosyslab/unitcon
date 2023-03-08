@@ -13,6 +13,16 @@ let get_this_symbol variable =
       | _ -> this_symbol)
     variable Condition.RH_Any
 
+let rec get_tail_symbol symbol memory =
+  let next_symbol = Condition.M.find_opt symbol memory in
+  match next_symbol with
+  | Some sym -> (
+      let m_any_symbol = Condition.M.find_opt Condition.RH_Any sym in
+      match m_any_symbol with
+      | Some any_s -> get_tail_symbol any_s memory
+      | None -> symbol)
+  | None -> symbol
+
 let merge_field_map m1 m2 =
   FieldMap.M.merge
     (fun _ v1 v2 ->
@@ -24,14 +34,21 @@ let rec get_change_field post_key field_name pre_mem post_mem field_map =
   | None -> field_map
   | Some value_map -> (
       match Condition.M.find_opt post_key pre_mem with
-      | None -> FieldMap.M.add field_name (Value.Eq (Int 0)) field_map
+      | None -> FieldMap.M.add field_name (Value.Eq Null) field_map
       | Some _ ->
           Condition.M.fold
             (fun field value old_field_map ->
               let new_field_map =
                 match field with
                 | Condition.RH_Var id ->
-                    get_change_field value id pre_mem post_mem field_map
+                    let pre_tail_symbol = get_tail_symbol value pre_mem in
+                    let is_post_tail =
+                      match Condition.M.find_opt pre_tail_symbol post_mem with
+                      | None -> true
+                      | Some _ -> false
+                    in
+                    if is_post_tail then field_map
+                    else FieldMap.M.add id (Value.Eq Null) field_map
                 | _ ->
                     get_change_field value field_name pre_mem post_mem field_map
               in
