@@ -844,6 +844,9 @@ let get_value typ id summary =
               Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
             in
             calc_z3 var [ z3exp ]
+        | Bool b -> if b then "false" else "true"
+        | String s -> "not " ^ s
+        | Null -> "not null"
         | _ -> failwith "not implemented neq")
     | Value.Le v -> (
         match v with
@@ -1560,9 +1563,15 @@ let rec get_statement param target_summary summary method_info class_info
           ( [ param |> fst ],
             "char " ^ id ^ " = \'" ^ get_value typ id target_summary ^ "\';" )
       | String ->
-          ( [ param |> fst ],
-            "String " ^ id ^ " = \"" ^ get_value typ id target_summary ^ "\";"
-          )
+          let get_string = get_value typ id target_summary in
+          let get_string =
+            if get_string = "null" then get_string
+            else if Str.string_match (Str.regexp "^not ") get_string 0 then
+              let get_string = rm_exp (Str.regexp " ") get_string in
+              "\"" ^ get_string ^ "\""
+            else "\"" ^ get_string ^ "\""
+          in
+          ([ param |> fst ], "String " ^ id ^ " = " ^ get_string ^ ";")
       | Object name ->
           let code, import_list =
             get_constructor name id target_summary summary method_info
