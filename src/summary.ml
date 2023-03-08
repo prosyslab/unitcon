@@ -212,7 +212,10 @@ let parse_condition condition =
   in
   let mk_rh_type v =
     let check_symbol v = Str.string_match (Str.regexp "^v[0-9]+$") v 0 in
-    let check_index v = Str.string_match (Str.regexp "^\\[v[0-9]+\\]$") v 0 in
+    let check_index v =
+      Str.string_match (Str.regexp "^\\[v[0-9]+\\]$") v 0
+      || Str.string_match (Str.regexp "^\\[a[0-9]+\\]$") v 0
+    in
     let check_any_value v = Str.string_match (Str.regexp "\\*") v 0 in
     if check_symbol v then Condition.RH_Symbol v
     else if check_index v then Condition.RH_Index v
