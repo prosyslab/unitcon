@@ -55,6 +55,19 @@ implements_interface_list = []
 extends_interface_list = []
 
 
+def remove_generic(name):
+    rename = name
+    index_stack = []
+    for i in range(len(name)):
+        if name[i] == '<':
+            index_stack.append(i)
+        elif name[i] == '>':
+            prev_brk = index_stack.pop()
+            add_space = ' ' * (i + 1 - prev_brk)
+            rename = rename[0:prev_brk] + add_space + rename[i + 1:]
+    return rename
+
+
 def get_text(node, src):
     text = ''
     if src[node[0].start_point[0]] == src[node[0].end_point[0]]:
@@ -67,7 +80,7 @@ def get_text(node, src):
                 text = text + src[[row][:node[0].end_point[1]]]
             else:
                 text = text + src[row]
-    text = re.sub("<.*>", "", re.sub("{", "", text))
+    text = re.sub("{", "", text)
     return text
 
 
@@ -118,6 +131,7 @@ def get_class_name(node, src, package_name):
         elif i[1] == 'class-name':
             class_name = re.sub("\$$", "",
                                 get_parent_class_name(i[0], src, ''))
+            class_name = remove_generic(class_name)
             class_and_interface_list.append({
                 'package': package_name,
                 'name': class_name,
@@ -136,6 +150,7 @@ def get_nested_class_name(node, src):
             if j[1] == 'package-name':
                 package_name = text.replace('package', '',
                                             1).replace(';', '', 1).strip()
+                package_name = remove_generic(package_name)
             elif j[1] == 'class':
                 get_class_name(j[0], src, package_name)
 
@@ -148,6 +163,7 @@ def get_interface_name(node, src, package_name):
         if i[1] == 'interface-name':
             interface_name = re.sub("\$$", "",
                                     get_parent_interface_name(i[0], src, ''))
+            interface_name = remove_generic(interface_name)
             class_and_interface_list.append({
                 'package': package_name,
                 'name': interface_name,
@@ -165,6 +181,7 @@ def get_nested_interface_name(node, src):
             if j[1] == 'package-name':
                 package_name = text.replace('package', '',
                                             1).replace(';', '', 1).strip()
+                package_name = remove_generic(package_name)
             elif j[1] == 'interface':
                 get_interface_name(j[0], src, package_name)
 
@@ -178,8 +195,9 @@ def get_extends_class_name(node, src):
         if i[1] == 'class-name':
             class_name = re.sub("\$$", "",
                                 get_parent_class_name(i[0], src, ''))
+            class_name = remove_generic(class_name)
         elif i[1] == 'class-list':
-            text = text.replace('extends', '', 1)
+            text = remove_generic(text.replace('extends', '', 1))
             super_class_list = [
                 super_class.strip() for super_class in text.split(',')
             ]
@@ -208,8 +226,9 @@ def get_implements_interface_name(node, src):
         if i[1] == 'class-name':
             class_name = re.sub("\$$", "",
                                 get_parent_class_name(i[0], src, ''))
+            class_name = remove_generic(class_name)
         elif i[1] == 'interface-list':
-            text = text.replace('implements', '', 1)
+            text = remove_generic(text.replace('implements', '', 1))
             super_interface_list = [
                 super_interface.strip() for super_interface in text.split(',')
             ]
@@ -239,8 +258,9 @@ def get_extends_interface_name(node, src):
         if i[1] == 'interface-name':
             interface_name = re.sub("\$$", "",
                                     get_parent_interface_name(i[0], src, ''))
+            interface_name = remove_generic(interface_name)
         elif i[1] == 'interface-list':
-            text = text.replace('extends', '', 1)
+            text = remove_generic(text.replace('extends', '', 1))
             super_interface_list = [
                 super_interface.strip() for super_interface in text.split(',')
             ]
