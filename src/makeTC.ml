@@ -844,7 +844,7 @@ let get_value typ id summary =
               Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
             in
             calc_z3 var [ z3exp ]
-        | Bool b -> if b then "false" else "true"
+        | Bool b -> b |> not |> string_of_bool
         | String s -> "not " ^ s
         | Null -> "not null"
         | _ -> failwith "not implemented neq")
@@ -1557,8 +1557,13 @@ let rec get_statement param target_summary summary method_info class_info
           ( [ param |> fst ],
             "double " ^ id ^ " = " ^ get_value typ id target_summary ^ ";" )
       | Bool ->
-          ( [ param |> fst ],
-            "boolean " ^ id ^ " = " ^ get_value typ id target_summary ^ ";" )
+          let get_boolean = get_value typ id target_summary in
+          let get_boolean =
+            match int_of_string_opt get_boolean with
+            | Some i -> if i = 0 then "false" else "true"
+            | _ -> get_boolean
+          in
+          ([ param |> fst ], "boolean " ^ id ^ " = " ^ get_boolean ^ ";")
       | Char ->
           ( [ param |> fst ],
             "char " ^ id ^ " = \'" ^ get_value typ id target_summary ^ "\';" )
