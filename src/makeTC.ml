@@ -1291,6 +1291,26 @@ let sort_constructor_list constructor_list method_info =
 
 let replace_nested_symbol str = Str.global_replace (Str.regexp "\\$") "." str
 
+let get_constructor_import constructor_info =
+  let rec nested_import constructor_import =
+    if String.contains constructor_import '$' then
+      let new_import =
+        Str.replace_first ("\\$.*" |> Str.regexp) "" constructor_import
+      in
+      let next_constructor_import =
+        Str.replace_first ("\\$" |> Str.regexp) "." constructor_import
+      in
+      nested_import next_constructor_import |> List.cons new_import
+    else [ constructor_import ]
+  in
+  let constructor_import =
+    List.fold_left
+      (fun this_import param ->
+        match param with import, Language.This _ -> import | _ -> this_import)
+      "" constructor_info.MethodInfo.formal_params
+  in
+  nested_import constructor_import
+
 let rec get_statement param target_summary summary method_info class_info
     setter_map =
   let get_setter_statement id setter c_summary summary field_map method_info
@@ -1420,15 +1440,7 @@ let rec get_statement param target_summary summary method_info class_info
         in
         constructor ^ "(" ^ param_list ^ ")"
       in
-      let constructor_import =
-        List.fold_left
-          (fun this_import param ->
-            match param with
-            | import, Language.This _ -> import
-            | _ -> this_import)
-          "" constructor_info.formal_params
-        |> replace_nested_symbol
-      in
+      let constructor_import = get_constructor_import constructor_info in
       let constructor =
         if
           is_nested_class constructor
@@ -1443,7 +1455,7 @@ let rec get_statement param target_summary summary method_info class_info
         in
         let code = class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";" in
         ( code ^ setter_code,
-          setter_import |> List.flatten |> List.cons constructor_import )
+          setter_import |> List.flatten |> List.rev_append constructor_import )
       else if
         is_nested_class constructor
         && is_static_class ~is_class:false constructor class_info |> not
@@ -1477,7 +1489,7 @@ let rec get_statement param target_summary summary method_info class_info
             ^ " " ^ id ^ " = outer1.new " ^ constructor ^ ";")
             (List.tl constructor_params)
         in
-        (code, import_list |> List.flatten |> List.cons constructor_import)
+        (code, import_list |> List.flatten |> List.rev_append constructor_import)
       else
         let setter_code, setter_import =
           get_setter_statements constructor id target_summary
@@ -1496,7 +1508,7 @@ let rec get_statement param target_summary summary method_info class_info
         in
         ( code ^ setter_code,
           import_list |> List.append setter_import |> List.flatten
-          |> List.cons constructor_import )
+          |> List.rev_append constructor_import )
   in
   match param |> snd with
   | Language.This typ -> (
