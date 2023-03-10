@@ -51,6 +51,7 @@ module MethodInfo = struct
 
   type info = {
     modifier : modifier;
+    is_static : bool;
     formal_params : params;
     filename : file_name;
   }

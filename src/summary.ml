@@ -313,6 +313,10 @@ let mapping_method_info method_info mmap =
     JsonUtil.member "modifier" method_info
     |> JsonUtil.to_list |> List.hd |> Language.modifier_of_json
   in
+  let is_static =
+    JsonUtil.member "is_static" method_info
+    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> bool_of_string
+  in
   let formal_params =
     JsonUtil.member "param" method_info
     |> JsonUtil.to_list
@@ -322,7 +326,7 @@ let mapping_method_info method_info mmap =
     JsonUtil.member "filename" method_info
     |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
   in
-  let info = MethodInfo.{ modifier; formal_params; filename } in
+  let info = MethodInfo.{ modifier; is_static; formal_params; filename } in
   MethodInfo.M.add method_name info mmap
 
 let mapping_summary method_summarys mmap =
