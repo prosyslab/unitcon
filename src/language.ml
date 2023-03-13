@@ -177,14 +177,16 @@ module CallPropMap = struct
   type t = summary list M.t
 end
 
-module ClassTypeInfo = struct
+module ClassInfo = struct
   module M = Map.Make (struct
     type t = class_name
 
     let compare = compare
   end)
 
-  type t = class_type M.t
+  type info = { package : import; class_type : class_type }
+
+  type t = info M.t
 end
 
 module SetterMap = struct

@@ -4,7 +4,7 @@ module Condition = Language.Condition
 module MethodInfo = Language.MethodInfo
 module SummaryMap = Language.SummaryMap
 module CallPropMap = Language.CallPropMap
-module ClassTypeInfo = Language.ClassTypeInfo
+module ClassInfo = Language.ClassInfo
 module SetterMap = Language.SetterMap
 module FieldMap = Language.FieldMap
 module CG = Callgraph.G
@@ -1052,10 +1052,12 @@ let rec collect_field m_symbol c_symbol m_value c_value m_mem c_mem field_map =
           m_field_map field_map
   with _ -> field_map
 
-let get_class_name method_name = rm_exp ("(.*)" |> Str.regexp) method_name
+let get_class_name ~infer method_name =
+  if infer then rm_exp ("\\..+(.*)" |> Str.regexp) method_name
+  else rm_exp ("(.*)" |> Str.regexp) method_name
 
 let get_setter_list constructor field_map setter_map =
-  let class_name = get_class_name constructor in
+  let class_name = get_class_name ~infer:false constructor in
   let setter_list = SetterMap.M.find class_name setter_map in
   let rec find_then_remove_field setter_list field_map =
     match setter_list with
@@ -1159,20 +1161,27 @@ let check_correct_constructor method_summary id candidate_constructor summary =
 
 let is_nested_class name = String.contains name '$'
 
-let is_normal_class class_name class_type_info =
-  match ClassTypeInfo.M.find_opt class_name class_type_info with
+let is_normal_class class_name class_info =
+  match ClassInfo.M.find_opt class_name class_info with
   | Some typ -> (
-      match typ with Language.Static | Language.Normal -> true | _ -> false)
+      match typ.ClassInfo.class_type with
+      | Language.Static | Language.Normal -> true
+      | _ -> false)
   | None -> true
 
-let is_static_class ~is_class name (class_type_info, _) =
+let is_static_class ~is_class name (class_info, _) =
   let class_name =
     if is_class then name
     else rm_exp (Str.regexp "\\.<.*>(.*)$") name |> rm_exp (Str.regexp "(.*)$")
   in
-  match ClassTypeInfo.M.find_opt class_name class_type_info with
-  | Some typ -> ( match typ with Language.Static -> true | _ -> false)
+  match ClassInfo.M.find_opt class_name class_info with
+  | Some typ -> (
+      match typ.ClassInfo.class_type with Language.Static -> true | _ -> false)
   | None -> false
+
+let is_static_method method_name method_info =
+  let m_info = MethodInfo.M.find method_name method_info in
+  m_info.MethodInfo.is_static
 
 let is_private method_name method_info =
   let info = MethodInfo.M.find method_name method_info in
@@ -1310,6 +1319,12 @@ let get_constructor_import constructor_info =
       "" constructor_info.MethodInfo.formal_params
   in
   nested_import constructor_import
+
+let get_static_constructor t_method class_info =
+  let class_name = get_class_name ~infer:true t_method in
+  let info = ClassInfo.M.find class_name class_info in
+  let method_import = info.ClassInfo.package ^ "." ^ class_name in
+  (class_name, method_import)
 
 let rec get_statement param target_summary summary method_info class_info
     setter_map =
@@ -1602,7 +1617,7 @@ let rec get_statement param target_summary summary method_info class_info
             array_type ^ " " ^ id ^ " = new " ^ array_constructor ^ ";" )
       | _ -> failwith ("not allowed type var" ^ id))
 
-let mk_testcase all_param ps_method method_info =
+let mk_testcase all_param ps_method method_info (class_info, _) =
   let imports =
     let import_set =
       List.fold_left
@@ -1617,10 +1632,6 @@ let mk_testcase all_param ps_method method_info =
       (fun import stm ->
         if import = "" then stm else stm ^ "import " ^ import ^ ";\n")
       import_set ""
-  in
-  let start = imports ^ "\n@Test\npublic void test() throws Exception {\n" in
-  let codes =
-    List.fold_left (fun code (_, param) -> code ^ param ^ "\n") start all_param
   in
   let execute_ps id ps_method =
     let ps_info = MethodInfo.M.find ps_method method_info in
@@ -1644,8 +1655,19 @@ let mk_testcase all_param ps_method method_info =
     in
     id ^ ps_method ^ str_params
   in
-
-  codes ^ execute_ps "gen1." ps_method ^ ";\n}\n\n"
+  let id, import =
+    if is_static_method ps_method method_info then
+      get_static_constructor ps_method class_info
+    else ("gen1", "")
+  in
+  let import =
+    if import = "" then imports else imports ^ "import " ^ import ^ ";\n"
+  in
+  let start = import ^ "\n@Test\npublic void test() throws Exception {\n" in
+  let codes =
+    List.fold_left (fun code (_, param) -> code ^ param ^ "\n") start all_param
+  in
+  codes ^ execute_ps (id ^ ".") ps_method ^ ";\n}\n\n"
 
 let find_all_parameter ps_method ps_method_summary summary method_info
     class_info setter_map =
@@ -1658,7 +1680,7 @@ let find_all_parameter ps_method ps_method_summary summary method_info
           setter_map)
       ps_method_params
   in
-  mk_testcase param_codes ps_method method_info
+  mk_testcase param_codes ps_method method_info class_info
 
 let mk_testcases s_method error_summary call_graph summary call_prop_map
     method_info class_info setter_map =

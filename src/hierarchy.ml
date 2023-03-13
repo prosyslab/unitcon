@@ -1,6 +1,6 @@
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
-module ClassTypeInfo = Language.ClassTypeInfo
+module ClassInfo = Language.ClassInfo
 
 module Node = struct
   include String
@@ -94,6 +94,7 @@ let parse_type type_list =
   else Language.Normal
 
 let mapping_class_info assoc mmap =
+  let package_name = JsonUtil.member "package" assoc |> JsonUtil.to_string in
   let class_name = JsonUtil.member "name" assoc |> JsonUtil.to_string in
   let typ =
     JsonUtil.member "type" assoc
@@ -101,7 +102,9 @@ let mapping_class_info assoc mmap =
     |> List.map JsonUtil.to_string
     |> parse_type
   in
-  ClassTypeInfo.M.add class_name typ mmap
+  ClassInfo.M.add class_name
+    ClassInfo.{ package = package_name; class_type = typ }
+    mmap
 
 let of_json json =
   let class_and_interface_info =
@@ -110,7 +113,7 @@ let of_json json =
   let class_type_info =
     List.fold_left
       (fun mmap assoc -> mapping_class_info assoc mmap)
-      ClassTypeInfo.M.empty class_and_interface_info
+      ClassInfo.M.empty class_and_interface_info
   in
   let hierarchy_info = from_hierarchy_json json in
   (class_type_info, hierarchy_info)
