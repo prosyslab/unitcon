@@ -1191,12 +1191,16 @@ let match_constructor_name class_name method_name =
   let class_name = Str.global_replace (Str.regexp "\\$") "\\$" class_name in
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
-let get_java_util_normal_class class_name =
+let is_java_io_class class_name =
+  if class_name = "PrintStream" then true else false
+
+let get_java_package_normal_class class_name =
   let import_array_list = "java.util.ArrayList" in
   let import_hash_map = "java.util.HashMap" in
   if class_name = "Collection" || class_name = "List" then
     ("ArrayList", [ import_array_list ])
   else if class_name = "Map" then ("HashMap", [ import_hash_map ])
+  else if class_name = "PrintStream" then ("System.out", [])
   else (class_name, [])
 
 let get_constructor_list class_name method_info (class_info, hierarchy_graph) =
@@ -1417,8 +1421,13 @@ let rec get_statement param target_summary summary method_info class_info
         get_class_initializer_list class_name target_summary method_info
       in
       if class_initializer = "" then
-        let normal_class_name, import = get_java_util_normal_class class_name in
-        (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();", import)
+        let normal_class_name, import =
+          get_java_package_normal_class class_name
+        in
+        if is_java_io_class class_name then
+          (class_name ^ " " ^ id ^ " = " ^ normal_class_name ^ ";", import)
+        else
+          (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();", import)
       else (class_name ^ " " ^ id ^ " = " ^ class_initializer ^ ";", [])
     else
       let constructor =
