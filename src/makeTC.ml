@@ -1167,7 +1167,7 @@ let is_normal_class class_name class_info =
       match typ.ClassInfo.class_type with
       | Language.Static | Language.Normal -> true
       | _ -> false)
-  | None -> true
+  | None -> false
 
 let is_static_class ~is_class name (class_info, _) =
   let class_name =
@@ -1192,15 +1192,26 @@ let match_constructor_name class_name method_name =
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
 let is_java_io_class class_name =
-  if class_name = "PrintStream" then true else false
+  if class_name = "PrintStream" || class_name = "InputStream" then true
+  else false
+
+let is_file_class class_name = if class_name = "File" then true else false
+
+let file_code = "File gen_file = new File(\"unitgen_file\");\n"
 
 let get_java_package_normal_class class_name =
   let import_array_list = "java.util.ArrayList" in
   let import_hash_map = "java.util.HashMap" in
+  let import_file = "java.io.File" in
+  let import_input = "java.io.FileInputStream" in
   if class_name = "Collection" || class_name = "List" then
     ("ArrayList", [ import_array_list ])
   else if class_name = "Map" then ("HashMap", [ import_hash_map ])
-  else if class_name = "PrintStream" then ("System.out", [])
+  else if class_name = "File" then ("File(\"unitgen_file\")", [ import_file ])
+  else if class_name = "PrintStream" then
+    ("PrintStream(gen_file)", [ import_file ])
+  else if class_name = "InputStream" then
+    ("FileInputStream(gen_file)", [ import_file; import_input ])
   else (class_name, [])
 
 let get_constructor_list class_name method_info (class_info, hierarchy_graph) =
@@ -1425,7 +1436,11 @@ let rec get_statement param target_summary summary method_info class_info
           get_java_package_normal_class class_name
         in
         if is_java_io_class class_name then
-          (class_name ^ " " ^ id ^ " = " ^ normal_class_name ^ ";", import)
+          ( file_code ^ class_name ^ " " ^ id ^ " = new " ^ normal_class_name
+            ^ ";",
+            import )
+        else if is_file_class class_name then
+          (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ ";", import)
         else
           (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();", import)
       else (class_name ^ " " ^ id ^ " = " ^ class_initializer ^ ";", [])
