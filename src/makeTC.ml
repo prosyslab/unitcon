@@ -1200,6 +1200,8 @@ let is_file_class class_name = if class_name = "File" then true else false
 
 let file_code = "File gen_file = new File(\"unitgen_file\");\n"
 
+let create_file_code file_name = file_name ^ ".createNewFile();"
+
 let get_java_package_normal_class class_name =
   let import_array_list = "java.util.ArrayList" in
   let import_hash_map = "java.util.HashMap" in
@@ -1437,11 +1439,14 @@ let rec get_statement param target_summary summary method_info class_info
           get_java_package_normal_class class_name
         in
         if is_java_io_class class_name then
-          ( file_code ^ class_name ^ " " ^ id ^ " = new " ^ normal_class_name
-            ^ ";",
+          ( file_code
+            ^ create_file_code "gen_file"
+            ^ "\n" ^ class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ ";",
             import )
         else if is_file_class class_name then
-          (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ ";", import)
+          ( class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ ";\n"
+            ^ create_file_code id,
+            import )
         else
           (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();", import)
       else (class_name ^ " " ^ id ^ " = " ^ class_initializer ^ ";", [])
