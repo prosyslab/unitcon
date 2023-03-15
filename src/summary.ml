@@ -354,6 +354,9 @@ let from_method_json json =
     MethodInfo.M.empty json
 
 let from_summary_json json =
-  List.fold_left
-    (fun mmap method_summarys -> mapping_summary method_summarys mmap)
-    SummaryMap.M.empty json
+  let summary_map =
+    List.fold_left
+      (fun mmap method_summarys -> mapping_summary method_summarys mmap)
+      SummaryMap.M.empty json
+  in
+  Modeling.add_java_package_summary summary_map
