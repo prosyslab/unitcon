@@ -1162,6 +1162,7 @@ let check_correct_constructor method_summary id candidate_constructor summary =
 let is_nested_class name = String.contains name '$'
 
 let is_normal_class class_name class_info =
+  let class_name = Str.global_replace (Str.regexp "\\.") "$" class_name in
   match ClassInfo.M.find_opt class_name class_info with
   | Some typ -> (
       match typ.ClassInfo.class_type with
