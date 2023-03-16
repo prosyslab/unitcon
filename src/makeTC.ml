@@ -1098,6 +1098,7 @@ let get_setter constructor id method_summary constructor_summary setter_map =
 let check_correct_constructor method_summary id candidate_constructor summary =
   let constructor_summarys = SummaryMap.M.find candidate_constructor summary in
   let method_symbols, method_memory = method_summary.Language.precond in
+  let id = if id = "gen1" then "this" else id in
   let target_symbol =
     Condition.M.fold
       (fun symbol precond_id target ->
@@ -1148,15 +1149,7 @@ let check_correct_constructor method_summary id candidate_constructor summary =
       (fun check_value (check_summary, c_summary) ->
         let check = List.filter (fun (_, c) -> c = false) check_summary in
         if List.length check <> 0 then check_value else (true, c_summary))
-      ( false,
-        Language.
-          {
-            relation = Relation.M.empty;
-            value = Value.M.empty;
-            precond = (Condition.M.empty, Condition.M.empty);
-            postcond = (Condition.M.empty, Condition.M.empty);
-            args = [];
-          } )
+      (false, Language.empty_summary)
       check_summarys
 
 let is_nested_class name = String.contains name '$'
