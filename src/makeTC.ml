@@ -1198,9 +1198,15 @@ let is_java_io_class class_name =
 
 let is_file_class class_name = if class_name = "File" then true else false
 
+let is_class_class class_name = if class_name = "Class" then true else false
+
 let file_code = "File gen_file = new File(\"unitgen_file\");\n"
 
 let create_file_code file_name = file_name ^ ".createNewFile();"
+
+let class_code = "Object gen_obj = new Object();\n"
+
+let get_class_code obj_name = obj_name ^ ".getClass();"
 
 let get_java_package_normal_class class_name =
   let import_array_list = "java.util.ArrayList" in
@@ -1215,7 +1221,7 @@ let get_java_package_normal_class class_name =
     ("PrintStream(gen_file)", [ import_file ])
   else if class_name = "InputStream" then
     ("FileInputStream(gen_file)", [ import_file; import_input ])
-  else (class_name, [])
+  else ("null", [])
 
 let get_constructor_list class_name method_info (class_info, hierarchy_graph) =
   let class_to_find =
@@ -1447,8 +1453,14 @@ let rec get_statement param target_summary summary method_info class_info
           ( class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ ";\n"
             ^ create_file_code id,
             import )
+        else if is_class_class class_name then
+          ( class_code ^ class_name ^ " " ^ id ^ " = " ^ get_class_code "gen_obj",
+            import )
         else
-          (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();", import)
+          ( class_name ^ " " ^ id ^ " = " ^ normal_class_name ^ ";",
+            import
+            (* (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();", import) *)
+          )
       else (class_name ^ " " ^ id ^ " = " ^ class_initializer ^ ";", [])
     else
       let constructor =
