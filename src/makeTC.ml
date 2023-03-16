@@ -1706,8 +1706,21 @@ let mk_testcase all_param ps_method method_info (class_info, _) =
     if import = "" then imports else imports ^ "import " ^ import ^ ";\n"
   in
   let start = import ^ "\n@Test\npublic void test() throws Exception {\n" in
+  let param_code =
+    List.fold_left
+      (fun code_list (_, code) ->
+        let bundle = Str.split (Str.regexp "\n") code in
+        List.rev_append bundle code_list)
+      [] all_param
+    |> List.rev
+    |> List.fold_left
+         (fun code_list code ->
+           if List.mem code code_list then code_list else code :: code_list)
+         []
+    |> List.rev
+  in
   let codes =
-    List.fold_left (fun code (_, param) -> code ^ param ^ "\n") start all_param
+    List.fold_left (fun code param -> code ^ param ^ "\n") start param_code
   in
   codes ^ execute_ps (id ^ ".") ps_method ^ ";\n}\n\n"
 
