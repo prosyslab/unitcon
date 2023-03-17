@@ -49,9 +49,10 @@ let rec get_tail_symbol field_name symbol memory =
   | Some sym -> (
       match Condition.M.find_opt (Condition.RH_Var field_name) sym with
       | Some s -> get_tail_symbol field_name s memory
-      | None ->
-          let m_any_symbol = Condition.M.find Condition.RH_Any sym in
-          get_tail_symbol field_name m_any_symbol memory)
+      | None -> (
+          match Condition.M.find_opt Condition.RH_Any sym with
+          | Some any_sym -> get_tail_symbol field_name any_sym memory
+          | None -> symbol))
   | None -> symbol
 
 let more_find_head_symbol head_symbol memory =
@@ -1251,6 +1252,7 @@ let get_java_package_normal_class class_name =
   if class_name = "Collection" || class_name = "List" then
     ("ArrayList", [ import_array_list ])
   else if class_name = "Map" then ("HashMap", [ import_hash_map ])
+  else if class_name = "Object" then ("Object", [])
   else if class_name = "File" then ("File(\"unitgen_file\")", [ import_file ])
   else if class_name = "PrintStream" then
     ("PrintStream(gen_file)", [ import_file ])
@@ -1475,6 +1477,7 @@ let rec get_statement param target_summary summary method_info class_info
       let class_initializer =
         get_class_initializer_list class_name target_summary method_info
       in
+      let class_name = class_name |> replace_nested_symbol in
       if class_initializer = "" then
         let normal_class_name, import =
           get_java_package_normal_class class_name
@@ -1491,11 +1494,10 @@ let rec get_statement param target_summary summary method_info class_info
         else if is_class_class class_name then
           ( class_code ^ class_name ^ " " ^ id ^ " = " ^ get_class_code "gen_obj",
             import )
+        else if normal_class_name = "null" then
+          (class_name ^ " " ^ id ^ " = " ^ normal_class_name ^ ";", import)
         else
-          ( class_name ^ " " ^ id ^ " = " ^ normal_class_name ^ ";",
-            import
-            (* (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();", import) *)
-          )
+          (class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();", import)
       else (class_name ^ " " ^ id ^ " = " ^ class_initializer ^ ";", [])
     else
       let constructor =
@@ -1775,17 +1777,16 @@ let find_all_parameter ps_method ps_method_summary summary method_info
 let mk_testcases s_method error_summary call_graph summary call_prop_map
     method_info class_info setter_map =
   let ps_methods =
-    try
-      find_ps_method s_method error_summary call_graph summary call_prop_map
-        method_info
-    with _ -> [ ("", Language.empty_summary) ]
+    (* try *)
+    find_ps_method s_method error_summary call_graph summary call_prop_map
+      method_info
+    (* with _ -> [ ("", Language.empty_summary) ] *)
   in
   List.fold_left
     (fun tests (ps_method, ps_method_summary) ->
       tests
-      ^
-      try
-        find_all_parameter ps_method ps_method_summary summary method_info
-          class_info setter_map
-      with _ -> "")
+      ^ (* try *)
+      find_all_parameter ps_method ps_method_summary summary method_info
+        class_info setter_map
+      (* with _ -> "" *))
     "" ps_methods
