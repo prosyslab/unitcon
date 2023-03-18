@@ -55,6 +55,34 @@ let rec get_tail_symbol field_name symbol memory =
           | None -> symbol))
   | None -> symbol
 
+let get_id_symbol id variable memory =
+  let this_symbol =
+    Condition.M.fold
+      (fun symbol symbol_id this_symbol ->
+        match symbol_id with
+        | Condition.RH_Var v when v = "this" -> symbol
+        | _ -> this_symbol)
+      variable Condition.RH_Any
+  in
+  let this_tail_symbol = get_tail_symbol "this" this_symbol memory in
+  let this_field_mem = Condition.M.find_opt this_tail_symbol memory in
+  match this_field_mem with
+  | None -> this_symbol
+  | Some mem -> (
+      let if_field_symbol = Condition.M.find_opt (Condition.RH_Var id) mem in
+      match if_field_symbol with
+      | Some field_symbol -> field_symbol
+      | None ->
+          let symbol =
+            Condition.M.fold
+              (fun symbol symbol_id this_tail_symbol ->
+                match symbol_id with
+                | Condition.RH_Var v when v = id -> symbol
+                | _ -> this_tail_symbol)
+              variable Condition.RH_Any
+          in
+          symbol)
+
 let more_find_head_symbol head_symbol memory =
   let trace_traverse trace_memory =
     Condition.M.fold
@@ -147,39 +175,58 @@ let get_caller_value_symbol_list caller_prop callee_param_index_list =
     callee_param_index_list
 
 let get_value_symbol_list ~is_init t_summary c_summary vs_list =
-  if is_init then
-    let t_symbol, c_symbol = vs_list |> List.hd in
-    let _, target_mem = t_summary.Language.precond in
-    let _, c_mem = c_summary.Language.precond in
-    let compare_t_mem =
-      Condition.M.find_opt (Condition.RH_Symbol t_symbol) target_mem
-    in
-    let compare_c_mem =
-      Condition.M.find_opt (Condition.RH_Symbol c_symbol) c_mem
-    in
-    match (compare_t_mem, compare_c_mem) with
-    | None, _ -> []
-    | _, None -> []
-    | Some t, Some c ->
-        Condition.M.fold
-          (fun key sym sym_list ->
-            let c_sym =
-              match Condition.M.find_opt key c with
-              | Some s -> s
-              | None -> Condition.M.find Condition.RH_Any c
-            in
-            let field_name = get_rh_name ~is_var:true key in
-            let tail_t_symbol =
-              get_tail_symbol field_name sym target_mem
-              |> get_rh_name ~is_var:false
-            in
-            let tail_c_symbol =
-              get_tail_symbol field_name c_sym c_mem
-              |> get_rh_name ~is_var:false
-            in
-            (tail_t_symbol, tail_c_symbol) :: sym_list)
-          t []
-  else vs_list
+  let vs_list =
+    if is_init then
+      (*this, this*)
+      let t_symbol, c_symbol = vs_list |> List.hd in
+      let t_var, t_mem = t_summary.Language.precond in
+      let c_var, c_mem = c_summary.Language.precond in
+      let compare_t_mem =
+        Condition.M.find_opt (Condition.RH_Symbol t_symbol) t_var
+      in
+      let compare_c_mem =
+        Condition.M.find_opt (Condition.RH_Symbol c_symbol) c_var
+      in
+      match (compare_t_mem, compare_c_mem) with
+      | None, _ | _, None -> [ (t_symbol, c_symbol) ]
+      | Some t_id, Some c_id -> (
+          let t_symbol =
+            get_tail_symbol
+              (t_id |> get_rh_name ~is_var:true)
+              (Condition.RH_Symbol t_symbol) t_mem
+          in
+          let c_symbol =
+            get_tail_symbol
+              (c_id |> get_rh_name ~is_var:true)
+              (Condition.RH_Symbol c_symbol) c_mem
+          in
+          let compare_t_mem = Condition.M.find_opt t_symbol t_mem in
+          let compare_c_mem = Condition.M.find_opt c_symbol c_mem in
+          match (compare_t_mem, compare_c_mem) with
+          | None, _ -> []
+          | _, None -> []
+          | Some t, Some c ->
+              Condition.M.fold
+                (fun key sym sym_list ->
+                  let c_sym =
+                    match Condition.M.find_opt key c with
+                    | Some s -> s
+                    | None -> Condition.M.find Condition.RH_Any c
+                  in
+                  let field_name = get_rh_name ~is_var:true key in
+                  let tail_t_symbol =
+                    get_tail_symbol field_name sym t_mem
+                    |> get_rh_name ~is_var:false
+                  in
+                  let tail_c_symbol =
+                    get_tail_symbol field_name c_sym c_mem
+                    |> get_rh_name ~is_var:false
+                  in
+                  (tail_t_symbol, tail_c_symbol) :: sym_list)
+                t [])
+    else vs_list
+  in
+  vs_list
 
 let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
   let check_intersect_value caller_symbol callee_symbol =
@@ -710,7 +757,15 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           Value.M.find callee_symbol callee_summary.Language.value
         in
         (Value.M.add caller_symbol callee_value caller_prop.Language.value, true)
-      with Not_found -> (caller_prop.Language.value, true))
+      with Not_found -> (
+        try
+          (* constructor prop propagation *)
+          let caller_value =
+            Value.M.find caller_symbol caller_prop.Language.value
+          in
+          ( Value.M.add callee_symbol caller_value callee_summary.Language.value,
+            true )
+        with Not_found -> (caller_prop.Language.value, true)))
   in
   let vs_list =
     get_value_symbol_list ~is_init caller_prop callee_summary vs_list
@@ -719,6 +774,28 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
     (fun (caller_symbol, callee_symbol) ->
       check_intersect_value caller_symbol callee_symbol)
     vs_list
+
+let combine_value base_value vc_list =
+  List.fold_left
+    (fun prop_values (prop_value, _) ->
+      Value.M.merge
+        (fun _ v1 v2 ->
+          match (v1, v2) with
+          | None, None -> None
+          | Some _, _ -> v1
+          | None, Some _ -> v2)
+        prop_values prop_value)
+    base_value vc_list
+
+let new_value_summary old_summary new_value =
+  Language.
+    {
+      relation = old_summary.relation;
+      value = new_value;
+      precond = old_summary.precond;
+      postcond = old_summary.postcond;
+      args = old_summary.args;
+    }
 
 let match_precond callee_method callee_summary call_prop method_info =
   let callee_method_info = MethodInfo.M.find callee_method method_info in
@@ -739,18 +816,7 @@ let match_precond callee_method callee_summary call_prop method_info =
       check_intersect_value_list ~is_init:false call_prop callee_summary
         value_symbol_list
     in
-    let values =
-      List.fold_left
-        (fun prop_values (prop_value, _) ->
-          Value.M.merge
-            (fun _ v1 v2 ->
-              match (v1, v2) with
-              | None, None -> None
-              | Some _, _ -> v1
-              | None, Some _ -> v2)
-            prop_values prop_value)
-        call_prop.Language.value values_and_check
-    in
+    let values = combine_value call_prop.Language.value values_and_check in
     let check = List.filter (fun (_, c) -> c = false) values_and_check in
     (values, check)
   in
@@ -780,17 +846,7 @@ let rec find_ps_method s_method source_summary call_graph summary call_prop_map
                     match_precond s_method source_summary call_prop method_info
                   in
                   if check_match then
-                    let old_call_prop = call_prop in
-                    let new_call_prop =
-                      Language.
-                        {
-                          relation = old_call_prop.relation;
-                          value = new_value;
-                          precond = old_call_prop.precond;
-                          postcond = old_call_prop.postcond;
-                          args = old_call_prop.args;
-                        }
-                    in
+                    let new_call_prop = new_value_summary call_prop new_value in
                     List.rev_append
                       (find_ps_method caller_method new_call_prop call_graph
                          summary call_prop_map method_info)
@@ -1013,14 +1069,6 @@ let get_value typ id summary =
   in
   value
 
-let get_id_symbol id variable =
-  Condition.M.fold
-    (fun symbol symbol_id this_symbol ->
-      match symbol_id with
-      | Condition.RH_Var v when v = id -> symbol
-      | _ -> this_symbol)
-    variable Condition.RH_Any
-
 let get_field_value_map field_name value_map field_map value memory =
   Condition.M.fold
     (fun _ symbol old_field_map ->
@@ -1130,8 +1178,8 @@ let get_setter constructor id method_summary constructor_summary setter_map =
   let m_pre_value = method_summary.Language.value in
   let c_post_var, c_post_mem = constructor_summary.Language.postcond in
   let c_post_value = constructor_summary.Language.value in
-  let m_id_symbol = get_id_symbol id m_pre_var in
-  let c_this_symbol = get_id_symbol "this" c_post_var in
+  let m_id_symbol = get_id_symbol id m_pre_var m_pre_mem in
+  let c_this_symbol = get_id_symbol "this" c_post_var c_post_mem in
   let need_setter_field =
     collect_field m_id_symbol c_this_symbol m_pre_value c_post_value m_pre_mem
       c_post_mem FieldMap.M.empty
@@ -1143,30 +1191,10 @@ let check_correct_constructor method_summary id candidate_constructor summary =
   let method_symbols, method_memory = method_summary.Language.precond in
   let id = if id = "gen1" then "this" else id in
   let target_symbol =
-    Condition.M.fold
-      (fun symbol precond_id target ->
-        let symbol = get_rh_name ~is_var:false symbol in
-        match precond_id with
-        | Condition.RH_Var pre_id when pre_id = id -> symbol
-        | _ -> target)
-      method_symbols ""
+    get_id_symbol id method_symbols method_memory |> get_rh_name ~is_var:false
   in
   if target_symbol = "" then (true, constructor_summarys |> List.hd)
   else
-    let target_symbol =
-      Condition.M.fold
-        (fun symbol trace target ->
-          let symbol = get_rh_name ~is_var:false symbol in
-          if symbol = target_symbol then
-            Condition.M.fold
-              (fun _ trace_tail find_target ->
-                match trace_tail with
-                | Condition.RH_Symbol s -> s
-                | _ -> find_target)
-              trace target
-          else target)
-        method_memory ""
-    in
     let target_symbol =
       find_relation target_symbol method_summary.Language.relation
     in
@@ -1191,7 +1219,9 @@ let check_correct_constructor method_summary id candidate_constructor summary =
     List.fold_left
       (fun check_value (check_summary, c_summary) ->
         let check = List.filter (fun (_, c) -> c = false) check_summary in
-        if List.length check <> 0 then check_value else (true, c_summary))
+        let new_values = combine_value c_summary.Language.value check_summary in
+        let new_c_summary = new_value_summary c_summary new_values in
+        if List.length check <> 0 then check_value else (true, new_c_summary))
       (false, Language.empty_summary)
       check_summarys
 
@@ -1361,6 +1391,21 @@ let sort_constructor_list constructor_list method_info =
 
 let replace_nested_symbol str = Str.global_replace (Str.regexp "\\$") "." str
 
+let this_is_null summary =
+  let s_var, s_mem = summary.Language.precond in
+  let this_symbol = get_id_symbol "this" s_var s_mem in
+  let find_this_value =
+    Value.M.find_opt
+      (this_symbol |> get_rh_name ~is_var:false)
+      summary.Language.value
+  in
+  match find_this_value with
+  | Some value -> (
+      match value with
+      | Eq e_val -> ( match e_val with Null -> true | _ -> false)
+      | _ -> false)
+  | None -> false
+
 let get_constructor_import constructor_info =
   let rec nested_import constructor_import =
     if String.contains constructor_import '$' then
@@ -1391,28 +1436,18 @@ let rec get_statement param target_summary summary method_info class_info
     setter_map =
   let get_setter_statement id setter c_summary summary field_map method_info
       class_info =
-    let old_c_summary = c_summary in
     let old_var, old_mem = c_summary.Language.precond in
     let new_value_map =
       FieldMap.M.fold
         (fun id value value_map ->
-          let id_symbol = get_id_symbol id old_var in
+          let id_symbol = get_id_symbol id old_var old_mem in
           let id_tail_symbol =
             get_tail_symbol id id_symbol old_mem |> get_rh_name ~is_var:false
           in
           Value.M.add id_tail_symbol value value_map)
         field_map Value.M.empty
     in
-    let new_c_summary =
-      Language.
-        {
-          relation = old_c_summary.relation;
-          value = new_value_map;
-          precond = old_c_summary.precond;
-          postcond = old_c_summary.postcond;
-          args = old_c_summary.args;
-        }
-    in
+    let new_c_summary = new_value_summary c_summary new_value_map in
     let setter_method_info = MethodInfo.M.find setter method_info in
     let setter_params = setter_method_info.MethodInfo.formal_params in
     let setter =
@@ -1542,7 +1577,10 @@ let rec get_statement param target_summary summary method_info class_info
         then replace_nested_symbol constructor
         else constructor
       in
-      if List.length constructor_params = 1 then
+      if this_is_null constructor_summary then
+        let code = class_name ^ " " ^ id ^ " = null;" in
+        (code, constructor_import)
+      else if List.length constructor_params = 1 then
         let setter_code, setter_import =
           get_setter_statements constructor id target_summary
             constructor_summary summary method_info class_info setter_map
