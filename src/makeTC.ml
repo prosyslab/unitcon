@@ -211,7 +211,10 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
                   let c_sym =
                     match Condition.M.find_opt key c with
                     | Some s -> s
-                    | None -> Condition.M.find Condition.RH_Any c
+                    | None -> (
+                        match Condition.M.find_opt Condition.RH_Any c with
+                        | Some s -> s
+                        | None -> Condition.RH_Any (*fail to match*))
                   in
                   let field_name = get_rh_name ~is_var:true key in
                   let tail_t_symbol =
