@@ -1436,22 +1436,11 @@ let get_constructor_import constructor_info =
   in
   nested_import constructor_import
 
-let get_static_constructor t_method method_info =
-  let info = MethodInfo.M.find t_method method_info in
-  let get_obj_name obj = match obj with Language.Object c -> c | _ -> "" in
-  let find_this_param params =
-    List.fold_left
-      (fun this_param param ->
-        match param |> snd with
-        | Language.This t -> (param |> fst, get_obj_name t)
-        | _ -> this_param)
-      ("", "") params
-  in
-  let this = info.MethodInfo.formal_params |> find_this_param in
-  let full_class_name =
-    if this |> fst = "" then this |> snd else (this |> fst) ^ "." ^ (this |> snd)
-  in
-  (this |> snd, full_class_name)
+let get_static_constructor t_method class_info =
+  let class_name = get_class_name ~infer:true t_method in
+  let info = ClassInfo.M.find class_name class_info in
+  let method_import = info.ClassInfo.package ^ "." ^ class_name in
+  (class_name, method_import)
 
 let rec get_statement param target_summary summary method_info class_info
     setter_map =
@@ -1767,7 +1756,7 @@ let rec get_statement param target_summary summary method_info class_info
             array_type ^ " " ^ id ^ " = new " ^ array_constructor ^ ";" )
       | _ -> failwith ("not allowed type var" ^ id))
 
-let mk_testcase all_param ps_method method_info =
+let mk_testcase all_param ps_method method_info (class_info, _) =
   let imports =
     let import_set =
       List.fold_left
@@ -1807,7 +1796,7 @@ let mk_testcase all_param ps_method method_info =
   in
   let id, import =
     if is_static_method ps_method method_info then
-      get_static_constructor ps_method method_info
+      get_static_constructor ps_method class_info
     else ("gen1", "")
   in
   let import =
@@ -1843,7 +1832,7 @@ let find_all_parameter ps_method ps_method_summary summary method_info
           setter_map)
       ps_method_params
   in
-  mk_testcase param_codes ps_method method_info
+  mk_testcase param_codes ps_method method_info class_info
 
 let mk_testcases s_method error_summary call_graph summary call_prop_map
     method_info class_info setter_map =

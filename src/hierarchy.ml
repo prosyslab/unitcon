@@ -102,7 +102,9 @@ let mapping_class_info assoc mmap =
     |> List.map JsonUtil.to_string
     |> parse_type
   in
-  ClassInfo.M.add class_name ClassInfo.{ class_type = typ } mmap
+  ClassInfo.M.add class_name
+    ClassInfo.{ package = package_name; class_type = typ }
+    mmap
 
 let of_json json =
   let class_and_interface_info =

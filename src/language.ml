@@ -184,7 +184,7 @@ module ClassInfo = struct
     let compare = compare
   end)
 
-  type info = { class_type : class_type }
+  type info = { package : import; class_type : class_type }
 
   type t = info M.t
 end
