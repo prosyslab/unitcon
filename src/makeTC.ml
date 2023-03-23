@@ -1231,7 +1231,7 @@ let check_correct_constructor method_summary id candidate_constructor summary =
 let is_nested_class name = String.contains name '$'
 
 let is_normal_class class_name class_info =
-  let class_name = Str.global_replace (Str.regexp "\\.") "$" class_name in
+  (* let class_name = Str.global_replace (Str.regexp "\\.") "$" class_name in *)
   match ClassInfo.M.find_opt class_name class_info with
   | Some typ -> (
       match typ.ClassInfo.class_type with
@@ -1258,6 +1258,9 @@ let is_private method_name method_info =
   match info.MethodInfo.modifier with Private -> true | _ -> false
 
 let match_constructor_name class_name method_name =
+  let class_name =
+    Str.split (Str.regexp "\\.") class_name |> List.rev |> List.hd
+  in
   let class_name = Str.global_replace (Str.regexp "\\$") "\\$" class_name in
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
@@ -1293,10 +1296,14 @@ let get_java_package_normal_class class_name =
     ("FileInputStream(gen_file)", [ import_file; import_input ])
   else ("null", [])
 
-let get_constructor_list class_name method_info (class_info, hierarchy_graph) =
+let get_constructor_list (class_package, class_name) method_info
+    (class_info, hierarchy_graph) =
+  let full_class_name =
+    if class_package = "" then class_name else class_package
+  in
   let class_to_find =
-    try HG.succ hierarchy_graph class_name |> List.cons class_name
-    with Invalid_argument _ -> [ class_name ]
+    try HG.succ hierarchy_graph full_class_name |> List.cons full_class_name
+    with Invalid_argument _ -> [ full_class_name ]
   in
   MethodInfo.M.fold
     (fun method_name _ method_list ->
@@ -1429,11 +1436,22 @@ let get_constructor_import constructor_info =
   in
   nested_import constructor_import
 
-let get_static_constructor t_method class_info =
-  let class_name = get_class_name ~infer:true t_method in
-  let info = ClassInfo.M.find class_name class_info in
-  let method_import = info.ClassInfo.package ^ "." ^ class_name in
-  (class_name, method_import)
+let get_static_constructor t_method method_info =
+  let info = MethodInfo.M.find t_method method_info in
+  let get_obj_name obj = match obj with Language.Object c -> c | _ -> "" in
+  let find_this_param params =
+    List.fold_left
+      (fun this_param param ->
+        match param |> snd with
+        | Language.This t -> (param |> fst, get_obj_name t)
+        | _ -> this_param)
+      ("", "") params
+  in
+  let this = info.MethodInfo.formal_params |> find_this_param in
+  let full_class_name =
+    if this |> fst = "" then this |> snd else (this |> fst) ^ "." ^ (this |> snd)
+  in
+  (this |> snd, full_class_name)
 
 let rec get_statement param target_summary summary method_info class_info
     setter_map =
@@ -1498,9 +1516,10 @@ let rec get_statement param target_summary summary method_info class_info
         "" setter_list
     with _ -> ("", [])
   in
-  let get_constructor class_name id target_summary summary method_info =
+  let get_constructor (class_package, class_name) id target_summary summary
+      method_info =
     let constr_summary_list =
-      get_constructor_list class_name method_info class_info
+      get_constructor_list (class_package, class_name) method_info class_info
     in
     let constr_summary_list =
       List.fold_left
@@ -1650,42 +1669,51 @@ let rec get_statement param target_summary summary method_info class_info
       match typ with
       | Int ->
           let code, import_list =
-            get_constructor "int" "gen1" target_summary summary method_info
+            get_constructor ("", "int") "gen1" target_summary summary
+              method_info
           in
           ((param |> fst) :: import_list, code)
       | Long ->
           let code, import_list =
-            get_constructor "long" "gen1" target_summary summary method_info
+            get_constructor ("", "long") "gen1" target_summary summary
+              method_info
           in
           ((param |> fst) :: import_list, code)
       | Float ->
           let code, import_list =
-            get_constructor "float" "gen1" target_summary summary method_info
+            get_constructor ("", "float") "gen1" target_summary summary
+              method_info
           in
           ((param |> fst) :: import_list, code)
       | Double ->
           let code, import_list =
-            get_constructor "double" "gen1" target_summary summary method_info
+            get_constructor ("", "double") "gen1" target_summary summary
+              method_info
           in
           ((param |> fst) :: import_list, code)
       | Bool ->
           let code, import_list =
-            get_constructor "bool" "gen1" target_summary summary method_info
+            get_constructor ("", "bool") "gen1" target_summary summary
+              method_info
           in
           ((param |> fst) :: import_list, code)
       | Char ->
           let code, import_list =
-            get_constructor "char" "gen1" target_summary summary method_info
+            get_constructor ("", "char") "gen1" target_summary summary
+              method_info
           in
           ((param |> fst) :: import_list, code)
       | String ->
           let code, import_list =
-            get_constructor "String" "gen1" target_summary summary method_info
+            get_constructor ("", "String") "gen1" target_summary summary
+              method_info
           in
           ((param |> fst) :: import_list, code)
       | Object name ->
           let code, import_list =
-            get_constructor name "gen1" target_summary summary method_info
+            get_constructor
+              (param |> fst, name)
+              "gen1" target_summary summary method_info
           in
           ((param |> fst) :: import_list, code)
       | _ -> failwith "not allowed type this")
@@ -1726,7 +1754,9 @@ let rec get_statement param target_summary summary method_info class_info
           ([ param |> fst ], "String " ^ id ^ " = " ^ get_string ^ ";")
       | Object name ->
           let code, import_list =
-            get_constructor name id target_summary summary method_info
+            get_constructor
+              (param |> fst, name)
+              id target_summary summary method_info
           in
           ((param |> fst) :: import_list, code)
       | Array _ ->
@@ -1737,7 +1767,7 @@ let rec get_statement param target_summary summary method_info class_info
             array_type ^ " " ^ id ^ " = new " ^ array_constructor ^ ";" )
       | _ -> failwith ("not allowed type var" ^ id))
 
-let mk_testcase all_param ps_method method_info (class_info, _) =
+let mk_testcase all_param ps_method method_info =
   let imports =
     let import_set =
       List.fold_left
@@ -1777,7 +1807,7 @@ let mk_testcase all_param ps_method method_info (class_info, _) =
   in
   let id, import =
     if is_static_method ps_method method_info then
-      get_static_constructor ps_method class_info
+      get_static_constructor ps_method method_info
     else ("gen1", "")
   in
   let import =
@@ -1813,7 +1843,7 @@ let find_all_parameter ps_method ps_method_summary summary method_info
           setter_map)
       ps_method_params
   in
-  mk_testcase param_codes ps_method method_info class_info
+  mk_testcase param_codes ps_method method_info
 
 let mk_testcases s_method error_summary call_graph summary call_prop_map
     method_info class_info setter_map =
