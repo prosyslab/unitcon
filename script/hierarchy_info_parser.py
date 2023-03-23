@@ -85,7 +85,7 @@ def get_super_list(super_text, package_name, import_list):
             if (import_name.split('.'))[-1] == super_name:
                 super_import = import_name
         if super_import:
-            super_name = super_import + '.' + super_name
+            super_name = super_import
         elif (not super_import) and package_name:
             super_name = package_name + '.' + super_name
         super_list.append(super_name)
@@ -232,9 +232,9 @@ def get_extends_class_name(node, src, package_name, import_list):
 
 def get_nested_extends_class_name(node, src):
     package_name = ''
+    import_list = []
     for i in node.children:
         match_list = extract_class_query.captures(i)
-        import_list = []
         class_name = ''
         for j in match_list:
             text = get_text(j, src)
@@ -273,9 +273,9 @@ def get_implements_interface_name(node, src, package_name, import_list):
 
 def get_nested_implements_interface_name(node, src):
     package_name = ''
+    import_list = []
     for i in node.children:
         match_list = extract_class_query.captures(i)
-        import_list = []
         class_name = ''
         for j in match_list:
             text = get_text(j, src)
@@ -316,9 +316,9 @@ def get_extends_interface_name(node, src, package_name, import_list):
 
 def get_nested_extends_interface_name(node, src):
     package_name = ''
+    import_list = []
     for i in node.children:
         match_list = extract_interface_query.captures(i)
-        import_list = []
         interface_name = ''
         for j in match_list:
             text = get_text(j, src)
