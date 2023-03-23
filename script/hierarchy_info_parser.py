@@ -158,6 +158,7 @@ def get_class_name(node, src, package_name):
             class_name = get_package_class(package_name,
                                            remove_generic(class_name))
             class_and_interface_list.append({
+                'package': package_name,
                 'name': class_name,
                 'type': class_modifier
             })
@@ -190,6 +191,7 @@ def get_interface_name(node, src, package_name):
             interface_name = get_package_class(package_name,
                                                remove_generic(interface_name))
             class_and_interface_list.append({
+                'package': package_name,
                 'name': interface_name,
                 'type': ["interface"]
             })
