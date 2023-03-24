@@ -1603,6 +1603,7 @@ let rec get_statement param target_summary summary method_info class_info
           get_setter_statements constructor id target_summary
             constructor_summary summary method_info class_info setter_map
         in
+        let constructor = constructor |> replace_nested_symbol in
         let code = class_name ^ " " ^ id ^ " = new " ^ constructor ^ ";" in
         ( code ^ setter_code,
           setter_import |> List.flatten |> List.rev_append constructor_import )
