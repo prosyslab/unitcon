@@ -1438,9 +1438,16 @@ let get_constructor_import constructor_info =
 
 let get_static_constructor t_method class_info =
   let class_name = get_class_name ~infer:true t_method in
-  let info = ClassInfo.M.find class_name class_info in
-  let method_import = info.ClassInfo.package ^ "." ^ class_name in
-  (class_name, method_import)
+  let full_class_name =
+    ClassInfo.M.fold
+      (fun full_name _ find_name ->
+        let name =
+          Str.split (Str.regexp "\\.") full_name |> List.rev |> List.hd
+        in
+        if class_name = name then full_name else find_name)
+      class_info ""
+  in
+  (class_name, full_class_name)
 
 let rec get_statement param target_summary summary method_info class_info
     setter_map =

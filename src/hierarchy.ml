@@ -94,7 +94,6 @@ let parse_type type_list =
   else Language.Normal
 
 let mapping_class_info assoc mmap =
-  let package_name = JsonUtil.member "package" assoc |> JsonUtil.to_string in
   let class_name = JsonUtil.member "name" assoc |> JsonUtil.to_string in
   let typ =
     JsonUtil.member "type" assoc
@@ -102,9 +101,7 @@ let mapping_class_info assoc mmap =
     |> List.map JsonUtil.to_string
     |> parse_type
   in
-  ClassInfo.M.add class_name
-    ClassInfo.{ package = package_name; class_type = typ }
-    mmap
+  ClassInfo.M.add class_name ClassInfo.{ class_type = typ } mmap
 
 let of_json json =
   let class_and_interface_info =
