@@ -16,6 +16,8 @@ module ImportSet = Set.Make (struct
   let compare = compare
 end)
 
+let outer = ref 0
+
 let z3ctx =
   Z3.mk_context
     [
@@ -1622,7 +1624,10 @@ let rec get_statement param target_summary summary method_info class_info
                   |> Str.replace_first (Str.regexp "(, ") "("
                   |> Str.replace_first (Str.regexp "^.*\\$") ""
                 in
-                (constructor, (outer_import, Language.Var (typ, "outer1")))
+                outer := !outer + 1;
+                ( constructor,
+                  ( outer_import,
+                    Language.Var (typ, "outer" ^ (!outer |> string_of_int)) ) )
             | _ -> ("", (outer_import, outer_var))
           in
           let params_tl = List.tl constructor_params |> List.tl in
@@ -1637,7 +1642,8 @@ let rec get_statement param target_summary summary method_info class_info
               in
               (code ^ "\n" ^ constructor_code, import))
             ((class_name |> replace_nested_symbol)
-            ^ " " ^ id ^ " = outer1.new " ^ constructor ^ ";")
+            ^ " " ^ id ^ " = outer" ^ (!outer |> string_of_int) ^ ".new "
+            ^ constructor ^ ";")
             (List.tl constructor_params)
         in
         (code, import_list |> List.flatten |> List.rev_append constructor_import)
