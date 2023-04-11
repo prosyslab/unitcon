@@ -10,6 +10,9 @@ module FieldMap = Language.FieldMap
 module CG = Callgraph.G
 module HG = Hierarchy.G
 
+(* defining for constructor priority *)
+type new_bool = T | F | DM
+
 module ImportSet = Set.Make (struct
   type t = string
 
@@ -250,25 +253,25 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
       in
       match (caller_value, callee_value) with
       | Eq eq_v1, Eq eq_v2 ->
-          if eq_v1 = eq_v2 then (caller_prop.Language.value, true)
-          else (caller_prop.Language.value, false)
+          if eq_v1 = eq_v2 then (caller_prop.Language.value, T)
+          else (caller_prop.Language.value, F)
       | Eq eq_v, Neq neq_v | Neq neq_v, Eq eq_v ->
-          if eq_v = neq_v then (caller_prop.Language.value, false)
-          else (caller_prop.Language.value, true)
+          if eq_v = neq_v then (caller_prop.Language.value, F)
+          else (caller_prop.Language.value, T)
       | Eq eq_v, Le le_v | Le le_v, Eq eq_v -> (
           match (eq_v, le_v) with
           | Int eq_int, Int le_int
           | Long eq_int, Long le_int
           | Int eq_int, Long le_int
           | Long eq_int, Int le_int ->
-              if eq_int <= le_int then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_int <= le_int then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | Float eq_float, Float le_float
           | Double eq_float, Double le_float
           | Float eq_float, Double le_float
           | Double eq_float, Float le_float ->
-              if eq_float <= le_float then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_float <= le_float then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | _ -> failwith "not allowed type in eq, le")
       | Eq eq_v, Lt lt_v | Lt lt_v, Eq eq_v -> (
           match (eq_v, lt_v) with
@@ -276,14 +279,14 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long eq_int, Long lt_int
           | Int eq_int, Long lt_int
           | Long eq_int, Int lt_int ->
-              if eq_int < lt_int then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_int < lt_int then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | Float eq_float, Float lt_float
           | Double eq_float, Double lt_float
           | Float eq_float, Double lt_float
           | Double eq_float, Float lt_float ->
-              if eq_float < lt_float then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_float < lt_float then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | _ -> failwith "not allowed type in eq, lt")
       | Eq eq_v, Ge ge_v | Ge ge_v, Eq eq_v -> (
           match (eq_v, ge_v) with
@@ -291,14 +294,14 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long eq_int, Long ge_int
           | Int eq_int, Long ge_int
           | Long eq_int, Int ge_int ->
-              if eq_int >= ge_int then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_int >= ge_int then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | Float eq_float, Float ge_float
           | Double eq_float, Double ge_float
           | Float eq_float, Double ge_float
           | Double eq_float, Float ge_float ->
-              if eq_float >= ge_float then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_float >= ge_float then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | _ -> failwith "not allowed type in eq, ge")
       | Eq eq_v, Gt gt_v | Gt gt_v, Eq eq_v -> (
           match (eq_v, gt_v) with
@@ -306,14 +309,14 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long eq_int, Long gt_int
           | Int eq_int, Long gt_int
           | Long eq_int, Int gt_int ->
-              if eq_int > gt_int then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_int > gt_int then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | Float eq_float, Float gt_float
           | Double eq_float, Double gt_float
           | Float eq_float, Double gt_float
           | Double eq_float, Float gt_float ->
-              if eq_float > gt_float then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_float > gt_float then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | _ -> failwith "not allowed type in eq, gt")
       | Eq eq_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Eq eq_v -> (
@@ -327,8 +330,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long eq_int, Long btw_min_int, Int btw_max_int
           | Long eq_int, Long btw_min_int, Long btw_max_int ->
               if eq_int >= btw_min_int && eq_int <= btw_max_int then
-                (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+                (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | Float eq_float, Float btw_min_float, Float btw_max_float
           | Float eq_float, Float btw_min_float, Double btw_max_float
           | Float eq_float, Double btw_min_float, Float btw_max_float
@@ -338,8 +341,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Double eq_float, Double btw_min_float, Float btw_max_float
           | Double eq_float, Double btw_min_float, Double btw_max_float ->
               if eq_float >= btw_min_float && eq_float <= btw_max_float then
-                (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+                (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | _ -> failwith "not allowed type in eq, between")
       | Eq eq_v, Outside (out_min, out_max)
       | Outside (out_min, out_max), Eq eq_v -> (
@@ -353,8 +356,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long eq_int, Long out_min_int, Int out_max_int
           | Long eq_int, Long out_min_int, Long out_max_int ->
               if eq_int < out_min_int && eq_int > out_max_int then
-                (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+                (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | Float eq_float, Float out_min_float, Float out_max_float
           | Float eq_float, Float out_min_float, Double out_max_float
           | Float eq_float, Double out_min_float, Float out_max_float
@@ -364,8 +367,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Double eq_float, Double out_min_float, Float out_max_float
           | Double eq_float, Double out_min_float, Double out_max_float ->
               if eq_float < out_min_float && eq_float > out_max_float then
-                (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+                (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | _ -> failwith "not allowed type in eq, outside")
       | Le le_v, Ge ge_v | Ge ge_v, Le le_v -> (
           match (le_v, ge_v) with
@@ -373,14 +376,14 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long le_int, Long ge_int
           | Int le_int, Long ge_int
           | Long le_int, Int ge_int ->
-              if le_int >= ge_int then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if le_int >= ge_int then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | Float le_float, Float ge_float
           | Double le_float, Double ge_float
           | Float le_float, Double ge_float
           | Double le_float, Float ge_float ->
-              if le_float >= ge_float then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if le_float >= ge_float then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | _ -> failwith "not allowed type in le, ge")
       | Le l_v, Gt g_v
       | Lt l_v, Ge g_v
@@ -393,14 +396,14 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long l_int, Long g_int
           | Int l_int, Long g_int
           | Long l_int, Int g_int ->
-              if l_int > g_int then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if l_int > g_int then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | Float l_float, Float g_float
           | Double l_float, Double g_float
           | Float l_float, Double g_float
           | Double l_float, Float g_float ->
-              if l_float > g_float then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if l_float > g_float then (caller_prop.Language.value, T)
+              else (caller_prop.Language.value, F)
           | _ -> failwith "not allowed type in le, ge")
       | Le le_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Le le_v -> (
@@ -413,8 +416,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Int le_int, Long btw_min_int, Long _
           | Long le_int, Int btw_min_int, Int _
           | Long le_int, Int btw_min_int, Long _ ->
-              if le_int < btw_min_int then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if le_int < btw_min_int then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | Float le_float, Float btw_min_float, Float _
           | Float le_float, Float btw_min_float, Double _
           | Double le_float, Double btw_min_float, Float _
@@ -423,9 +426,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Float le_float, Double btw_min_float, Double _
           | Double le_float, Float btw_min_float, Float _
           | Double le_float, Float btw_min_float, Double _ ->
-              if le_float < btw_min_float then
-                (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if le_float < btw_min_float then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | _ -> failwith "not allowed type in le, between")
       | Lt lt_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Lt lt_v -> (
@@ -438,8 +440,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Int lt_int, Long btw_min_int, Long _
           | Long lt_int, Int btw_min_int, Int _
           | Long lt_int, Int btw_min_int, Long _ ->
-              if lt_int <= btw_min_int then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if lt_int <= btw_min_int then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | Float lt_float, Float btw_min_float, Float _
           | Float lt_float, Float btw_min_float, Double _
           | Double lt_float, Double btw_min_float, Float _
@@ -448,9 +450,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Float lt_float, Double btw_min_float, Double _
           | Double lt_float, Float btw_min_float, Float _
           | Double lt_float, Float btw_min_float, Double _ ->
-              if lt_float <= btw_min_float then
-                (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if lt_float <= btw_min_float then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | _ -> failwith "not allowed type in lt, between")
       | Ge ge_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Ge ge_v -> (
@@ -463,8 +464,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Int ge_int, Long _, Long btw_max_int
           | Long ge_int, Int _, Int btw_max_int
           | Long ge_int, Long _, Int btw_max_int ->
-              if ge_int > btw_max_int then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if ge_int > btw_max_int then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | Float ge_float, Float _, Float btw_max_float
           | Float ge_float, Double _, Float btw_max_float
           | Double ge_float, Float _, Double btw_max_float
@@ -473,9 +474,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Float ge_float, Double _, Double btw_max_float
           | Double ge_float, Float _, Float btw_max_float
           | Double ge_float, Double _, Float btw_max_float ->
-              if ge_float > btw_max_float then
-                (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if ge_float > btw_max_float then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | _ -> failwith "not allowed type in ge, between")
       | Gt gt_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Gt gt_v -> (
@@ -488,8 +488,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Int gt_int, Long _, Long btw_max_int
           | Long gt_int, Int _, Int btw_max_int
           | Long gt_int, Long _, Int btw_max_int ->
-              if gt_int >= btw_max_int then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if gt_int >= btw_max_int then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | Float gt_float, Float _, Float btw_max_float
           | Float gt_float, Double _, Float btw_max_float
           | Double gt_float, Float _, Double btw_max_float
@@ -498,9 +498,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Float gt_float, Double _, Double btw_max_float
           | Double gt_float, Float _, Float btw_max_float
           | Double gt_float, Double _, Float btw_max_float ->
-              if gt_float >= btw_max_float then
-                (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if gt_float >= btw_max_float then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | _ -> failwith "not allowed type in gt, between")
       | Between (caller_min, caller_max), Between (callee_min, callee_max) -> (
           match (caller_min, caller_max, callee_min, callee_max) with
@@ -571,8 +570,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
               if
                 caller_max_int < callee_min_int
                 || callee_max_int < caller_min_int
-              then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | ( Float caller_min_float,
               Float caller_max_float,
               Float callee_min_float,
@@ -640,8 +639,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
               if
                 caller_max_float < callee_min_float
                 || callee_max_float < caller_min_float
-              then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | _ -> failwith "not allowed type in between, between")
       | Between (btw_min, btw_max), Outside (out_min, out_max)
       | Outside (out_min, out_max), Between (btw_min, btw_max) -> (
@@ -678,8 +677,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
               Long out_min_int,
               Long out_max_int ) ->
               if out_min_int <= btw_min_int && out_max_int >= btw_max_int then
-                (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+                (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | ( Float btw_min_float,
               Float btw_max_float,
               Float out_min_float,
@@ -746,8 +745,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
               Double out_max_float ) ->
               if
                 btw_min_float <= out_min_float && btw_max_float >= out_max_float
-              then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              then (caller_prop.Language.value, F)
+              else (caller_prop.Language.value, T)
           | _ -> failwith "not allowed type in between, outside")
       | _, Outside _
       | Outside _, _
@@ -761,13 +760,13 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
       | Ge _, Gt _
       | Neq _, _
       | _, Neq _ ->
-          (caller_prop.Language.value, true)
+          (caller_prop.Language.value, T)
     with Not_found -> (
       try
         let callee_value =
           Value.M.find callee_symbol callee_summary.Language.value
         in
-        (Value.M.add caller_symbol callee_value caller_prop.Language.value, true)
+        (Value.M.add caller_symbol callee_value caller_prop.Language.value, DM)
       with Not_found -> (
         try
           (* constructor prop propagation *)
@@ -775,8 +774,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
             Value.M.find caller_symbol caller_prop.Language.value
           in
           ( Value.M.add callee_symbol caller_value callee_summary.Language.value,
-            true )
-        with Not_found -> (caller_prop.Language.value, true)))
+            DM )
+        with Not_found -> (caller_prop.Language.value, DM)))
   in
   let vs_list =
     get_value_symbol_list ~is_init caller_prop callee_summary vs_list
@@ -828,7 +827,7 @@ let match_precond callee_method callee_summary call_prop method_info =
         value_symbol_list
     in
     let values = combine_value call_prop.Language.value values_and_check in
-    let check = List.filter (fun (_, c) -> c = false) values_and_check in
+    let check = List.filter (fun (_, c) -> c = F) values_and_check in
     (values, check)
   in
   let values, check = intersect_value in
@@ -1204,7 +1203,7 @@ let check_correct_constructor method_summary id candidate_constructor summary =
   let target_symbol =
     get_id_symbol id method_symbols method_memory |> get_rh_name ~is_var:false
   in
-  if target_symbol = "" then (true, constructor_summarys |> List.hd)
+  if target_symbol = "" then (true, constructor_summarys |> List.hd, 0)
   else
     let target_symbol =
       find_relation target_symbol method_summary.Language.relation
@@ -1229,11 +1228,15 @@ let check_correct_constructor method_summary id candidate_constructor summary =
     in
     List.fold_left
       (fun check_value (check_summary, c_summary) ->
-        let check = List.filter (fun (_, c) -> c = false) check_summary in
+        let check = List.filter (fun (_, c) -> c = F) check_summary in
+        let t_count =
+          List.filter (fun (_, c) -> c = T) check_summary |> List.length
+        in
         let new_values = combine_value c_summary.Language.value check_summary in
         let new_c_summary = new_value_summary c_summary new_values in
-        if List.length check <> 0 then check_value else (true, new_c_summary))
-      (false, Language.empty_summary)
+        if List.length check <> 0 then check_value
+        else (true, new_c_summary, t_count))
+      (false, Language.empty_summary, 0)
       check_summarys
 
 let is_nested_class name = String.contains name '$'
@@ -1399,12 +1402,14 @@ let get_array_constructor typ size =
 
 let sort_constructor_list constructor_list method_info =
   List.sort
-    (fun (k1, _) (k2, _) ->
-      let k1_info = MethodInfo.M.find k1 method_info in
-      let k1_formal = k1_info.MethodInfo.formal_params |> List.length in
-      let k2_info = MethodInfo.M.find k2 method_info in
-      let k2_formal = k2_info.MethodInfo.formal_params |> List.length in
-      compare k1_formal k2_formal)
+    (fun (c1, _, k1) (c2, _, k2) ->
+      if compare k1 k2 <> 0 then compare k2 k1
+      else
+        let c1_info = MethodInfo.M.find c1 method_info in
+        let c1_formal = c1_info.MethodInfo.formal_params |> List.length in
+        let c2_info = MethodInfo.M.find c2 method_info in
+        let c2_formal = c2_info.MethodInfo.formal_params |> List.length in
+        compare c1_formal c2_formal)
     constructor_list
 
 let replace_nested_symbol str = Str.global_replace (Str.regexp "\\$") "." str
@@ -1615,6 +1620,8 @@ let get_many_constructor constr_summary_list class_name id method_info
   in
   List.map
     (fun constructor ->
+      let c, s, _ = constructor in
+      let constructor = (c, s) in
       get_one_constructor constructor class_name id method_info class_info code
         import var_list)
     constructor_list
@@ -1627,10 +1634,10 @@ let get_constructor (class_package, class_name) id target_summary summary
   let constr_summary_list =
     List.fold_left
       (fun list constructor ->
-        let check, summary =
+        let check, summary, count =
           check_correct_constructor target_summary id constructor summary
         in
-        if check then (constructor, summary) :: list else list)
+        if check then (constructor, summary, count) :: list else list)
       [] constr_summary_list
   in
   if List.length constr_summary_list = 0 then
@@ -1789,8 +1796,9 @@ let rec all_statement candidate summary method_info class_info =
           let state_list =
             get_statement p t_summary summary method_info class_info code import
               var_tl
-            |> List.rev_append tl |> List.rev
+            |> List.rev
           in
+          let state_list = List.rev_append state_list tl in
           all_statement state_list summary method_info class_info
       | [] ->
           all_statement tl summary method_info class_info
