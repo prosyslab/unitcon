@@ -1287,6 +1287,16 @@ let is_public_or_default recv_package method_name method_info =
     match info.MethodInfo.modifier with Default | Public -> true | _ -> false
   else match info.MethodInfo.modifier with Public -> true | _ -> false
 
+let is_recursive_param parent_class method_name method_info =
+  let info = MethodInfo.M.find method_name method_info in
+  let this = Language.Object parent_class in
+  List.fold_left
+    (fun check (_, var) ->
+      match var with
+      | Language.Var (typ, _) when typ = this -> true
+      | _ -> check)
+    false info.MethodInfo.formal_params
+
 let get_recv_package t_method (class_info, _) =
   let class_name = get_class_name ~infer:true t_method in
   let full_class_name =
@@ -1680,6 +1690,8 @@ let get_constructor (class_package, class_name) id target_summary recv_package
     List.filter
       (fun (c, _, _) -> is_public_or_default recv_package c method_info)
       constr_summary_list
+    |> List.filter (fun (c, _, _) ->
+           is_recursive_param class_name c method_info |> not)
   in
   if List.length constr_summary_list = 0 then
     get_defined_statement class_name id target_summary method_info code import
