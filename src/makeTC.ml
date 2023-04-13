@@ -1297,6 +1297,23 @@ let is_recursive_param parent_class method_name method_info =
       | _ -> check)
     false info.MethodInfo.formal_params
 
+let remove_same_name c_list =
+  let get_same_one target list =
+    List.filter
+      (fun (c_name, _, _) ->
+        let class_name = get_class_name ~infer:true c_name in
+        target = class_name)
+      list
+    |> List.hd
+  in
+  List.fold_left
+    (fun new_list (c, _, _) ->
+      let name = get_class_name ~infer:true c in
+      let one = get_same_one name c_list in
+      if List.mem one new_list then new_list else one :: new_list)
+    [] c_list
+  |> List.rev
+
 let get_recv_package t_method (class_info, _) =
   let class_name = get_class_name ~infer:true t_method in
   let full_class_name =
@@ -1692,6 +1709,7 @@ let get_constructor (class_package, class_name) id target_summary recv_package
       constr_summary_list
     |> List.filter (fun (c, _, _) ->
            is_recursive_param class_name c method_info |> not)
+    |> remove_same_name
   in
   if List.length constr_summary_list = 0 then
     get_defined_statement class_name id target_summary method_info code import
