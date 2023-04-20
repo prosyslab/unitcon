@@ -314,8 +314,20 @@ let get_method_name assoc =
   in
   method_name
 
+let get_return assoc =
+  let split_return m =
+    if String.contains m ' ' then m |> String.split_on_char ' ' |> List.hd
+    else ""
+  in
+  let return =
+    JsonUtil.member "method" assoc
+    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> split_return
+  in
+  return
+
 let mapping_method_info method_info mmap =
   let method_name = get_method_name method_info in
+  let return = get_return method_info in
   let modifier =
     JsonUtil.member "modifier" method_info
     |> JsonUtil.to_list |> List.hd |> Language.modifier_of_json
@@ -333,7 +345,9 @@ let mapping_method_info method_info mmap =
     JsonUtil.member "filename" method_info
     |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
   in
-  let info = MethodInfo.{ modifier; is_static; formal_params; filename } in
+  let info =
+    MethodInfo.{ modifier; is_static; formal_params; return; filename }
+  in
   MethodInfo.M.add method_name info mmap
 
 let mapping_summary method_summarys mmap =

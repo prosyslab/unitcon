@@ -53,6 +53,7 @@ module MethodInfo = struct
     modifier : modifier;
     is_static : bool;
     formal_params : params;
+    return : string;
     filename : file_name;
   }
 

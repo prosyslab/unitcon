@@ -47,6 +47,17 @@ let transitive_closure vertex graph =
     (get_children vertex |> List.map (fun v -> get_children v) |> List.flatten)
     graph
 
+let missing_inheritance vertex graph =
+  let missing_class_name =
+    Str.global_replace (Str.regexp "\\..*\\$") "." vertex
+  in
+  try
+    let missing = G.succ graph missing_class_name in
+    List.fold_left
+      (fun new_graph name -> G.add_edge new_graph vertex name)
+      graph missing
+  with Invalid_argument _ -> graph
+
 let from_hierarchy_json json =
   let member =
     [ "extends_class"; "implements_interface"; "extends_interface" ]
@@ -66,7 +77,8 @@ let from_hierarchy_json json =
       (fun g assoc_name -> from_hierarchy assoc_name json g)
       G.empty member
   in
-  G.fold_vertex (fun v g -> transitive_closure v g) graph graph
+  let graph = G.fold_vertex (fun v g -> transitive_closure v g) graph graph in
+  G.fold_vertex (fun v g -> missing_inheritance v g) graph graph
 
 module Graphviz = Graph.Graphviz.Dot (G)
 include G
