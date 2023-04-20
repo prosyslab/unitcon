@@ -9,7 +9,13 @@ type file_name = string
 
 type modifier = Public | Private | Protected | Default [@@deriving compare]
 
-type class_type = Abstract | Static | Abstract_and_Static | Normal | Interface
+type class_type =
+  | Abstract
+  | Static
+  | Private
+  | Abstract_and_Static
+  | Normal
+  | Interface
 [@@deriving compare]
 
 type typ =

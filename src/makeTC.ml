@@ -1260,6 +1260,11 @@ let is_static_class ~is_class name (class_info, _) =
       match typ.ClassInfo.class_type with Language.Static -> true | _ -> false)
   | None -> false
 
+let is_private_class class_package class_info =
+  let c_info = ClassInfo.M.find class_package (class_info |> fst) in
+  let class_type = c_info.ClassInfo.class_type in
+  match class_type with Language.Private -> true | _ -> false
+
 let is_static_method method_name method_info =
   let m_info = MethodInfo.M.find method_name method_info in
   m_info.MethodInfo.is_static
@@ -1611,13 +1616,20 @@ let get_return_object (class_package, class_name) method_info
         method_list class_to_find)
     method_info []
 
-let get_one_constructor constructor class_name id method_info class_info
-    old_code old_import old_var_list =
+let get_one_constructor ~origin_private constructor class_name id method_info
+    class_info old_code old_import old_var_list =
   if constructor |> fst = "null" then
     let code = class_name ^ " " ^ id ^ " = null;\n" in
     (code ^ old_code, old_import, old_var_list)
   else
     let constr_statement = constructor |> fst in
+    let class_name =
+      if origin_private then
+        constr_statement |> replace_nested_symbol
+        |> Str.replace_first (Str.regexp ".<init>") ""
+        |> rm_exp (Str.regexp "(.*)$")
+      else class_name
+    in
     let constructor_info = MethodInfo.M.find constr_statement method_info in
     let constructor_params = constructor_info.MethodInfo.formal_params in
     let constr_class_name =
@@ -1728,8 +1740,8 @@ let get_one_constructor constructor class_name id method_info class_info
         constructor_import |> List.rev_append old_import,
         constructor_params |> List.rev_append old_var_list )
 
-let get_many_constructor constr_summary_list class_name id method_info
-    class_info code import var_list =
+let get_many_constructor constr_summary_list class_package class_name id
+    method_info class_info code import var_list =
   let constructor_list =
     sort_constructor_list constr_summary_list method_info
   in
@@ -1737,12 +1749,13 @@ let get_many_constructor constr_summary_list class_name id method_info
     if Str.string_match (Str.regexp "gen") id 0 then constructor_list
     else ("null", Language.empty_summary, 0) :: constructor_list
   in
+  let is_origin_private = is_private_class class_package class_info in
   List.map
     (fun constructor ->
       let c, s, _ = constructor in
       let constructor = (c, s) in
-      get_one_constructor constructor class_name id method_info class_info code
-        import var_list)
+      get_one_constructor ~origin_private:is_origin_private constructor
+        class_name id method_info class_info code import var_list)
     constructor_list
 
 let get_constructor (class_package, class_name) id target_summary recv_package
@@ -1775,8 +1788,8 @@ let get_constructor (class_package, class_name) id target_summary recv_package
     get_defined_statement class_name id target_summary method_info code import
       var_list
   else
-    get_many_constructor constr_summary_list class_name id method_info
-      class_info code import var_list
+    get_many_constructor constr_summary_list class_package class_name id
+      method_info class_info code import var_list
 
 let get_statement param target_summary r_package summary method_info class_info
     old_code old_import old_var_list =
@@ -1819,12 +1832,16 @@ let get_statement param target_summary r_package summary method_info class_info
           |> List.map (fun (code, import_list, mk_var_list) ->
                  (code, (param |> fst) :: import_list, mk_var_list))
       | Object name ->
+          let new_import =
+            if is_private_class (param |> fst) class_info then ""
+            else param |> fst
+          in
           get_constructor
             (param |> fst, name)
             "gen1" target_summary r_package summary method_info class_info
             old_code old_import old_var_list
           |> List.map (fun (code, import_list, mk_var_list) ->
-                 (code, (param |> fst) :: import_list, mk_var_list))
+                 (code, new_import :: import_list, mk_var_list))
       | _ -> failwith "not allowed type this")
   | Language.Var (typ, id) -> (
       match typ with

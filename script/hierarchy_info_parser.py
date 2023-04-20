@@ -146,7 +146,7 @@ def get_class_name(node, src, package_name):
         text = get_text(i, src)
         if i[1] == 'class-modifier':
             modifier_list = list(
-                filter(lambda x: x == 'static' or x == 'abstract',
+                filter(lambda x: x == 'static' or x == 'abstract' or x == 'private',
                        [modifier.strip() for modifier in text.split(' ')]))
             if len(modifier_list) == 0:
                 class_modifier = []

@@ -94,12 +94,18 @@ let parse_type type_list =
       (fun result typ -> if typ = "abstract" then true else result)
       false type_list
   in
+  let is_private =
+    List.fold_left
+      (fun result typ -> if typ = "private" then true else result)
+      false type_list
+  in
   let is_interface =
     List.fold_left
       (fun result typ -> if typ = "interface" then true else result)
       false type_list
   in
-  if is_static && is_abstract then Language.Abstract_and_Static
+  if is_private then Language.Private
+  else if is_static && is_abstract then Language.Abstract_and_Static
   else if is_static then Language.Static
   else if is_abstract then Language.Abstract
   else if is_interface then Language.Interface
