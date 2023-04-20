@@ -1579,107 +1579,115 @@ let get_defined_statement class_name id target_summary method_info old_code
 
 let get_one_constructor constructor class_name id method_info class_info
     old_code old_import old_var_list =
-  let constr_statement = constructor |> fst in
-  let constructor_info = MethodInfo.M.find constr_statement method_info in
-  let constructor_params = constructor_info.MethodInfo.formal_params in
-  let constructor_params =
-    if
-      is_nested_class constr_statement
-      && is_static_class ~is_class:false constr_statement class_info
-    then
-      let params_hd = List.hd constructor_params in
-      let params_tl =
-        match List.tl constructor_params with [] -> [] | _ :: tl -> tl
-      in
-      params_hd :: params_tl
-    else constructor_params
-  in
-  let constructor_summary = constructor |> snd in
-  let constr_statement =
-    let param_list =
-      List.fold_left
-        (fun param_code (_, param) ->
-          match param with
-          | Language.This _ -> param_code
-          | Language.Var (_, id) -> param_code ^ ", " ^ id)
-        "" constructor_params
-    in
-    let param_list = rm_exp (Str.regexp "^, ") param_list in
-    let constr_statement =
-      Str.replace_first (Str.regexp ".<init>") "" constr_statement
-      |> rm_exp (Str.regexp "(.*)$")
-    in
-    constr_statement ^ "(" ^ param_list ^ ")"
-  in
-  let constructor_import = get_constructor_import constructor_info in
-  let constr_statement =
-    if
-      is_nested_class constr_statement
-      && is_static_class ~is_class:false constr_statement class_info
-    then replace_nested_symbol constr_statement
-    else constr_statement
-  in
-  if this_is_null constructor_summary then
+  if constructor |> fst = "null" then
     let code = class_name ^ " " ^ id ^ " = null;\n" in
-    ( code ^ old_code,
-      constructor_import |> List.rev_append old_import,
-      old_var_list )
-  else if List.length constructor_params = 1 then
-    let constr_statement = constr_statement |> replace_nested_symbol in
-    let code = class_name ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n" in
-    ( code ^ old_code,
-      constructor_import |> List.rev_append old_import,
-      old_var_list )
-  else if
-    is_nested_class constr_statement
-    && is_static_class ~is_class:false constr_statement class_info |> not
-  then
-    let constr_statement, constructor_params =
-      let this = List.hd constructor_params in
-      let outer_import, outer_var = List.tl constructor_params |> List.hd in
-      let constr_statement, outer =
-        match outer_var with
-        | Language.Var (typ, id) ->
-            let constr_statement =
-              Str.replace_first (Str.regexp_string id) "" constr_statement
-              |> Str.replace_first (Str.regexp "(, ") "("
-              |> Str.replace_first (Str.regexp "^.*\\$") ""
-            in
-            outer := !outer + 1;
-            ( constr_statement,
-              ( outer_import,
-                Language.Var (typ, "outer" ^ (!outer |> string_of_int)) ) )
-        | _ -> ("", (outer_import, outer_var))
-      in
-      let params_tl = List.tl constructor_params |> List.tl in
-      (constr_statement, params_tl |> List.cons outer |> List.cons this)
-    in
-    let code =
-      (class_name |> replace_nested_symbol)
-      ^ " " ^ id ^ " = outer" ^ (!outer |> string_of_int) ^ ".new "
-      ^ constr_statement ^ ";\n"
-    in
-    let constructor_params =
-      constructor_params |> List.tl
-      |> List.map (fun p -> (p, constructor_summary))
-    in
-    ( code ^ old_code,
-      constructor_import |> List.rev_append old_import,
-      constructor_params |> List.rev_append old_var_list )
+    (code ^ old_code, old_import, old_var_list)
   else
-    let code = class_name ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n" in
+    let constr_statement = constructor |> fst in
+    let constructor_info = MethodInfo.M.find constr_statement method_info in
+    let constructor_params = constructor_info.MethodInfo.formal_params in
     let constructor_params =
-      constructor_params |> List.tl
-      |> List.map (fun p -> (p, constructor_summary))
+      if
+        is_nested_class constr_statement
+        && is_static_class ~is_class:false constr_statement class_info
+      then
+        let params_hd = List.hd constructor_params in
+        let params_tl =
+          match List.tl constructor_params with [] -> [] | _ :: tl -> tl
+        in
+        params_hd :: params_tl
+      else constructor_params
     in
-    ( code ^ old_code,
-      constructor_import |> List.rev_append old_import,
-      constructor_params |> List.rev_append old_var_list )
+    let constructor_summary = constructor |> snd in
+    let constr_statement =
+      let param_list =
+        List.fold_left
+          (fun param_code (_, param) ->
+            match param with
+            | Language.This _ -> param_code
+            | Language.Var (_, id) -> param_code ^ ", " ^ id)
+          "" constructor_params
+      in
+      let param_list = rm_exp (Str.regexp "^, ") param_list in
+      let constr_statement =
+        Str.replace_first (Str.regexp ".<init>") "" constr_statement
+        |> rm_exp (Str.regexp "(.*)$")
+      in
+      constr_statement ^ "(" ^ param_list ^ ")"
+    in
+    let constructor_import = get_constructor_import constructor_info in
+    let constr_statement =
+      if
+        is_nested_class constr_statement
+        && is_static_class ~is_class:false constr_statement class_info
+      then replace_nested_symbol constr_statement
+      else constr_statement
+    in
+    if this_is_null constructor_summary then
+      let code = class_name ^ " " ^ id ^ " = null;\n" in
+      ( code ^ old_code,
+        constructor_import |> List.rev_append old_import,
+        old_var_list )
+    else if List.length constructor_params = 1 then
+      let constr_statement = constr_statement |> replace_nested_symbol in
+      let code = class_name ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n" in
+      ( code ^ old_code,
+        constructor_import |> List.rev_append old_import,
+        old_var_list )
+    else if
+      is_nested_class constr_statement
+      && is_static_class ~is_class:false constr_statement class_info |> not
+    then
+      let constr_statement, constructor_params =
+        let this = List.hd constructor_params in
+        let outer_import, outer_var = List.tl constructor_params |> List.hd in
+        let constr_statement, outer =
+          match outer_var with
+          | Language.Var (typ, id) ->
+              let constr_statement =
+                Str.replace_first (Str.regexp_string id) "" constr_statement
+                |> Str.replace_first (Str.regexp "(, ") "("
+                |> Str.replace_first (Str.regexp "^.*\\$") ""
+              in
+              outer := !outer + 1;
+              ( constr_statement,
+                ( outer_import,
+                  Language.Var (typ, "outer" ^ (!outer |> string_of_int)) ) )
+          | _ -> ("", (outer_import, outer_var))
+        in
+        let params_tl = List.tl constructor_params |> List.tl in
+        (constr_statement, params_tl |> List.cons outer |> List.cons this)
+      in
+      let code =
+        (class_name |> replace_nested_symbol)
+        ^ " " ^ id ^ " = outer" ^ (!outer |> string_of_int) ^ ".new "
+        ^ constr_statement ^ ";\n"
+      in
+      let constructor_params =
+        constructor_params |> List.tl
+        |> List.map (fun p -> (p, constructor_summary))
+      in
+      ( code ^ old_code,
+        constructor_import |> List.rev_append old_import,
+        constructor_params |> List.rev_append old_var_list )
+    else
+      let code = class_name ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n" in
+      let constructor_params =
+        constructor_params |> List.tl
+        |> List.map (fun p -> (p, constructor_summary))
+      in
+      ( code ^ old_code,
+        constructor_import |> List.rev_append old_import,
+        constructor_params |> List.rev_append old_var_list )
 
 let get_many_constructor constr_summary_list class_name id method_info
     class_info code import var_list =
   let constructor_list =
     sort_constructor_list constr_summary_list method_info
+  in
+  let constructor_list =
+    if Str.string_match (Str.regexp "gen") id 0 then constructor_list
+    else ("null", Language.empty_summary, 0) :: constructor_list
   in
   List.map
     (fun constructor ->
