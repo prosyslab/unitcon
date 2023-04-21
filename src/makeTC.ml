@@ -1261,9 +1261,12 @@ let is_static_class ~is_class name (class_info, _) =
   | None -> false
 
 let is_private_class class_package class_info =
-  let c_info = ClassInfo.M.find class_package (class_info |> fst) in
-  let class_type = c_info.ClassInfo.class_type in
-  match class_type with Language.Private -> true | _ -> false
+  let c_info = ClassInfo.M.find_opt class_package (class_info |> fst) in
+  match c_info with
+  | Some info -> (
+      let class_type = info.ClassInfo.class_type in
+      match class_type with Language.Private -> true | _ -> false)
+  | None -> false
 
 let is_static_method method_name method_info =
   let m_info = MethodInfo.M.find method_name method_info in
