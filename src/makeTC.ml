@@ -1497,6 +1497,10 @@ let sort_constructor_list constructor_list method_info =
 
 let replace_nested_symbol str = Str.global_replace (Str.regexp "\\$") "." str
 
+let replace_null id old_code =
+  Str.global_replace (id ^ "," |> Str.regexp) "null," old_code
+  |> Str.global_replace (id ^ ")" |> Str.regexp) "null)"
+
 let this_is_null summary =
   let s_var, s_mem = summary.Language.precond in
   let this_symbol = get_id_symbol "this" s_var s_mem in
@@ -1578,7 +1582,7 @@ let get_defined_statement class_package class_name id target_summary method_info
           old_var_list );
       ]
     else if normal_class_name = "null" then
-      let old_code = Str.global_replace (Str.regexp id) "null" old_code in
+      let old_code = replace_null id old_code in
       [ (old_code, old_import, old_var_list) ]
     else
       [
