@@ -1787,8 +1787,11 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
           |> List.rev_append old_import
       in
       let constructor_params =
-        constructor_params |> List.tl
-        |> List.map (fun p -> (p, constructor_summary))
+        if is_getter then
+          constructor_params |> List.map (fun p -> (p, constructor_summary))
+        else
+          constructor_params |> List.tl
+          |> List.map (fun p -> (p, constructor_summary))
       in
       ( code ^ old_code,
         import,
