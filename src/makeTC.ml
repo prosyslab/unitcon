@@ -1500,8 +1500,19 @@ let sort_constructor_list constructor_list method_info =
 let replace_nested_symbol str = Str.global_replace (Str.regexp "\\$") "." str
 
 let replace_null id old_code =
-  Str.global_replace (id ^ "," |> Str.regexp) "null," old_code
-  |> Str.global_replace (id ^ ")" |> Str.regexp) "null)"
+  let candidate =
+    [
+      ("(" ^ id ^ ")", "(null)");
+      ("(" ^ id ^ ", ", "(null, ");
+      (", " ^ id ^ ",", ", null,");
+      (", " ^ id ^ ")", ", null)");
+    ]
+  in
+  List.fold_left
+    (fun modified_code (c, rc) ->
+      let mc = Str.replace_first (c |> Str.regexp) rc old_code in
+      if mc <> old_code then mc else modified_code)
+    old_code candidate
 
 let this_is_null summary =
   let s_var, s_mem = summary.Language.precond in
@@ -1624,7 +1635,7 @@ let get_return_object (class_package, class_name) method_info
 let get_one_constructor ~is_getter ~origin_private constructor class_package
     class_name id method_info class_info old_code old_import old_var_list =
   if constructor |> fst = "null" then
-    let old_code = Str.global_replace (Str.regexp id) "null" old_code in
+    let old_code = replace_null id old_code in
     (old_code, old_import, old_var_list)
   else
     let constr_statement = constructor |> fst in
@@ -2019,10 +2030,10 @@ let find_all_parameter ps_method ps_method_summary summary method_info
       List.fold_left
         (fun str_params variable ->
           match variable |> snd with
-          | Language.Var (_, id) -> str_params ^ "," ^ id
+          | Language.Var (_, id) -> str_params ^ ", " ^ id
           | _ -> str_params)
         "" ps_params
-      |> rm_exp (Str.regexp "^,")
+      |> rm_exp (Str.regexp "^, ")
     in
     let str_params = "(" ^ str_params ^ ")" in
     let ps_method =
