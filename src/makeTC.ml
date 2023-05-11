@@ -1350,13 +1350,13 @@ let match_constructor_name class_name method_name =
   let class_name = Str.global_replace (Str.regexp "\\$") "\\$" class_name in
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
-(* let match_return_object class_name method_name method_info =
-   let class_name =
-     Str.split (Str.regexp "\\.") class_name |> List.rev |> List.hd
-   in
-   let info = MethodInfo.M.find method_name method_info in
-   let return = info.MethodInfo.return in
-   Str.string_match (Str.regexp class_name) return 0 *)
+let match_return_object class_name method_name method_info =
+  let class_name =
+    Str.split (Str.regexp "\\.") class_name |> List.rev |> List.hd
+  in
+  let info = MethodInfo.M.find method_name method_info in
+  let return = info.MethodInfo.return in
+  Str.string_match (Str.regexp class_name) return 0
 
 let is_java_io_class class_name =
   if class_name = "PrintStream" || class_name = "InputStream" then true
@@ -1594,30 +1594,30 @@ let get_defined_statement class_package class_name id target_summary method_info
         old_var_list );
     ]
 
-(* let get_return_object (class_package, class_name) method_info
-     (class_info, hierarchy_graph) =
-   let full_class_name =
-     if class_package = "" then class_name else class_package
-   in
-   let class_to_find =
-     try HG.succ hierarchy_graph full_class_name |> List.cons full_class_name
-     with Invalid_argument _ -> [ full_class_name ]
-   in
-   MethodInfo.M.fold
-     (fun method_name _ method_list ->
-       List.fold_left
-         (fun init_list class_name_to_find ->
-           if
-             is_normal_class class_name_to_find class_info
-             && is_private method_name method_info |> not
-             && match_return_object class_name_to_find method_name method_info
-           then method_name :: init_list
-           else init_list)
-         method_list class_to_find)
-     method_info [] *)
+let get_return_object (class_package, class_name) method_info
+    (class_info, hierarchy_graph) =
+  let full_class_name =
+    if class_package = "" then class_name else class_package
+  in
+  let class_to_find =
+    try HG.succ hierarchy_graph full_class_name |> List.cons full_class_name
+    with Invalid_argument _ -> [ full_class_name ]
+  in
+  MethodInfo.M.fold
+    (fun method_name _ method_list ->
+      List.fold_left
+        (fun init_list class_name_to_find ->
+          if
+            is_normal_class class_name_to_find class_info
+            && is_private method_name method_info |> not
+            && match_return_object class_name_to_find method_name method_info
+          then method_name :: init_list
+          else init_list)
+        method_list class_to_find)
+    method_info []
 
-let get_one_constructor ~origin_private constructor class_package class_name id
-    method_info class_info old_code old_import old_var_list =
+let get_one_constructor ~is_getter ~origin_private constructor class_package
+    class_name id method_info class_info old_code old_import old_var_list =
   if constructor |> fst = "null" then
     let old_code = Str.global_replace (Str.regexp id) "null" old_code in
     (old_code, old_import, old_var_list)
@@ -1674,7 +1674,11 @@ let get_one_constructor ~origin_private constructor class_package class_name id
       (code ^ old_code, import, old_var_list)
     else if List.length constructor_params = 1 then
       let constr_statement = constr_statement |> replace_nested_symbol in
-      let code = class_name ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n" in
+      let code =
+        if is_getter then
+          class_name ^ " " ^ id ^ " = " ^ constr_statement ^ ";\n"
+        else class_name ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n"
+      in
       let import =
         if origin_private then constructor_import |> List.rev_append old_import
         else
@@ -1734,8 +1738,12 @@ let get_one_constructor ~origin_private constructor class_package class_name id
         (constr_statement, params_tl |> List.cons this)
       in
       let code =
-        (class_name |> replace_nested_symbol)
-        ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n"
+        if is_getter then
+          (class_name |> replace_nested_symbol)
+          ^ " " ^ id ^ " = " ^ constr_statement ^ ";\n"
+        else
+          (class_name |> replace_nested_symbol)
+          ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n"
       in
       let import =
         if origin_private then constructor_import |> List.rev_append old_import
@@ -1751,7 +1759,11 @@ let get_one_constructor ~origin_private constructor class_package class_name id
         import,
         constructor_params |> List.rev_append old_var_list )
     else
-      let code = class_name ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n" in
+      let code =
+        if is_getter then
+          class_name ^ " " ^ id ^ " = " ^ constr_statement ^ ";\n"
+        else class_name ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n"
+      in
       let import =
         if origin_private then constructor_import |> List.rev_append old_import
         else
@@ -1766,8 +1778,8 @@ let get_one_constructor ~origin_private constructor class_package class_name id
         import,
         constructor_params |> List.rev_append old_var_list )
 
-let get_many_constructor constr_summary_list class_package class_name id
-    method_info class_info code import var_list =
+let get_many_constructor ~is_getter constr_summary_list class_package class_name
+    id method_info class_info code import var_list =
   let constructor_list =
     sort_constructor_list constr_summary_list method_info
   in
@@ -1780,8 +1792,9 @@ let get_many_constructor constr_summary_list class_package class_name id
     (fun constructor ->
       let c, s, _ = constructor in
       let constructor = (c, s) in
-      get_one_constructor ~origin_private:is_origin_private constructor
-        class_package class_name id method_info class_info code import var_list)
+      get_one_constructor ~is_getter ~origin_private:is_origin_private
+        constructor class_package class_name id method_info class_info code
+        import var_list)
     constructor_list
 
 let get_constructor (class_package, class_name) id target_summary recv_package
@@ -1789,10 +1802,12 @@ let get_constructor (class_package, class_name) id target_summary recv_package
   let constr_summary_list =
     get_constructor_list (class_package, class_name) method_info class_info
   in
-  (* let constr_summary_list =
-       get_return_object (class_package, class_name) method_info class_info
-       |> List.rev_append constr_summary_list
-     in *)
+  let is_getter, constr_summary_list =
+    if constr_summary_list |> List.length = 0 then
+      ( true,
+        get_return_object (class_package, class_name) method_info class_info )
+    else (false, constr_summary_list)
+  in
   let constr_summary_list =
     List.fold_left
       (fun list constructor ->
@@ -1814,8 +1829,8 @@ let get_constructor (class_package, class_name) id target_summary recv_package
     get_defined_statement class_package class_name id target_summary method_info
       code import var_list
   else
-    get_many_constructor constr_summary_list class_package class_name id
-      method_info class_info code import var_list
+    get_many_constructor ~is_getter constr_summary_list class_package class_name
+      id method_info class_info code import var_list
 
 let get_statement param target_summary r_package summary method_info class_info
     old_code old_import old_var_list =
