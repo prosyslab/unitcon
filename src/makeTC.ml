@@ -1276,7 +1276,7 @@ let is_private method_name method_info =
   let info = MethodInfo.M.find method_name method_info in
   match info.MethodInfo.modifier with Private -> true | _ -> false
 
-let is_public_or_default recv_package method_name method_info =
+let is_public_or_default ~is_getter recv_package method_name method_info =
   let info = MethodInfo.M.find method_name method_info in
   let m_package =
     List.fold_left
@@ -1284,7 +1284,9 @@ let is_public_or_default recv_package method_name method_info =
         match var with Language.This _ -> import | _ -> found)
       "" info.MethodInfo.formal_params
   in
-  if m_package = "" then false
+  if is_getter then
+    match info.MethodInfo.modifier with Public -> true | _ -> false
+  else if m_package = "" then false
   else
     let name =
       Str.split (Str.regexp "\\.") m_package
@@ -1599,7 +1601,7 @@ let get_defined_statement class_package class_name id target_summary method_info
     ]
 
 let get_return_object (class_package, class_name) method_info
-    (class_info, hierarchy_graph) =
+    (_, hierarchy_graph) =
   let full_class_name =
     if class_package = "" then class_name else class_package
   in
@@ -1612,8 +1614,7 @@ let get_return_object (class_package, class_name) method_info
       List.fold_left
         (fun init_list class_name_to_find ->
           if
-            is_normal_class class_name_to_find class_info
-            && is_private method_name method_info |> not
+            is_static_method method_name method_info
             && match_return_object class_name_to_find method_name method_info
           then method_name :: init_list
           else init_list)
@@ -1823,7 +1824,8 @@ let get_constructor (class_package, class_name) id target_summary recv_package
   in
   let constr_summary_list =
     List.filter
-      (fun (c, _, _) -> is_public_or_default recv_package c method_info)
+      (fun (c, _, _) ->
+        is_public_or_default ~is_getter recv_package c method_info)
       constr_summary_list
     |> List.filter (fun (c, _, _) ->
            is_recursive_param class_name c method_info |> not)
