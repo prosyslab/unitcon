@@ -1599,6 +1599,9 @@ let get_defined_statement class_package class_name id target_summary method_info
       [ (old_code, old_import, old_var_list) ]
     else
       [
+        ( class_name ^ " " ^ id ^ " = null;\n" ^ old_code,
+          old_import,
+          old_var_list );
         ( class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();\n"
           ^ old_code,
           import |> List.rev_append old_import,
@@ -1822,7 +1825,8 @@ let get_constructor (class_package, class_name) id target_summary recv_package
     get_constructor_list (class_package, class_name) method_info class_info
   in
   let is_getter, constr_summary_list =
-    if constr_summary_list |> List.length = 0 then
+    let java_package, _ = get_java_package_normal_class class_name in
+    if java_package = "null" && constr_summary_list |> List.length = 0 then
       ( true,
         get_return_object (class_package, class_name) method_info class_info )
     else (false, constr_summary_list)
