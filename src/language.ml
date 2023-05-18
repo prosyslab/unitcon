@@ -1,11 +1,15 @@
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 
-type method_name = string
+let compare_string = String.compare
 
-type class_name = string
+let compare_list = List.compare
 
-type file_name = string
+type method_name = string [@@deriving compare]
+
+type class_name = string [@@deriving compare]
+
+type file_name = string [@@deriving compare]
 
 type modifier = Public | Private | Protected | Default [@@deriving compare]
 
@@ -29,16 +33,17 @@ type typ =
   | Object of class_name
   | Array of typ
   | None
+[@@deriving compare]
 
-type id = string (*e.g. i *)
+type id = string (*e.g. i *) [@@deriving compare]
 
-type variable = This of typ | Var of typ * id
+type variable = This of typ | Var of typ * id [@@deriving compare]
 
-type import = string (* package.class *)
+type import = string (* package.class *) [@@deriving compare]
 
-type params = (import * variable) list
+type params = (import * variable) list [@@deriving compare]
 
-type symbol = string (*e.g. v1 *)
+type symbol = string (*e.g. v1 *) [@@deriving compare]
 
 let modifier_of_json json =
   JsonUtil.to_string json |> function
@@ -50,9 +55,7 @@ let modifier_of_json json =
 
 module MethodInfo = struct
   module M = Map.Make (struct
-    type t = method_name
-
-    let compare = compare
+    type t = method_name [@@deriving compare]
   end)
 
   type info = {
@@ -68,9 +71,7 @@ end
 
 module Relation = struct
   module M = Map.Make (struct
-    type t = symbol
-
-    let compare = compare
+    type t = symbol [@@deriving compare]
   end)
 
   type t = symbol M.t
@@ -100,9 +101,7 @@ module Value = struct
     | Outside of value * value
 
   module M = Map.Make (struct
-    type t = symbol
-
-    let compare = compare
+    type t = symbol [@@deriving compare]
   end)
 
   type t = op M.t
@@ -132,11 +131,10 @@ end
 
 module Condition = struct
   type rh = RH_Var of id | RH_Symbol of symbol | RH_Index of symbol | RH_Any
+  [@@deriving compare]
 
   module M = Map.Make (struct
-    type t = rh
-
-    let compare = compare
+    type t = rh [@@deriving compare]
   end)
 
   type var = rh M.t
@@ -165,9 +163,7 @@ let empty_summary =
 
 module SummaryMap = struct
   module M = Map.Make (struct
-    type t = method_name
-
-    let compare = compare
+    type t = method_name [@@deriving compare]
   end)
 
   type t = summary list M.t
@@ -176,9 +172,7 @@ end
 module CallPropMap = struct
   module M = Map.Make (struct
     (* (caller * callee) *)
-    type t = method_name * method_name
-
-    let compare = compare
+    type t = method_name * method_name [@@deriving compare]
   end)
 
   type t = summary list M.t
@@ -186,9 +180,7 @@ end
 
 module ClassInfo = struct
   module M = Map.Make (struct
-    type t = class_name
-
-    let compare = compare
+    type t = class_name [@@deriving compare]
   end)
 
   type info = { class_type : class_type }
@@ -198,9 +190,7 @@ end
 
 module SetterMap = struct
   module M = Map.Make (struct
-    type t = class_name
-
-    let compare = compare
+    type t = class_name [@@deriving compare]
   end)
 
   type setter = method_name * id list
@@ -210,9 +200,7 @@ end
 
 module FieldMap = struct
   module M = Map.Make (struct
-    type t = string
-
-    let compare = compare
+    type t = string [@@deriving compare]
   end)
 
   type t = Value.op M.t

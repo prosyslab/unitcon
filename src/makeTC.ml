@@ -94,16 +94,13 @@ let get_id_symbol id variable memory =
           in
           symbol)
 
-let more_find_head_symbol head_symbol memory =
-  let trace_traverse trace_memory =
-    Condition.M.fold
-      (fun _ value list ->
-        match value with
-        | Condition.RH_Symbol s when head_symbol = s -> s :: list
-        | _ -> list)
-      trace_memory []
+let more_find_head_symbol head_symbol _ memory =
+  let is_head_symbol _ value =
+    match value with
+    | Condition.RH_Symbol s when head_symbol = s -> true
+    | _ -> false
   in
-  if trace_traverse memory |> List.length = 0 then false else true
+  Condition.M.exists is_head_symbol memory
 
 let get_symbol_list values =
   Value.M.fold (fun symbol _ symbol_list -> symbol :: symbol_list) values []
@@ -113,18 +110,17 @@ let get_symbol_list values =
 (* if head = "" then this symbol can be any value *)
 let get_head_symbol_list symbols (_, memory) =
   let rec find_real_head head_symbol memory =
-    let exist_head_list =
-      Condition.M.fold
-        (fun head_cand symbols cand_list ->
-          if more_find_head_symbol head_symbol symbols then
-            match head_cand with
-            | Condition.RH_Symbol s -> s :: cand_list
-            | _ -> cand_list
-          else cand_list)
-        memory []
+    let exist_head_symbol =
+      Condition.M.filter (more_find_head_symbol head_symbol) memory
     in
-    if List.length exist_head_list = 0 then head_symbol
-    else find_real_head (exist_head_list |> List.hd) memory
+    let exist_head_symbol =
+      Condition.M.fold
+        (fun head_cand _ cand ->
+          match head_cand with Condition.RH_Symbol s -> s | _ -> cand)
+        exist_head_symbol ""
+    in
+    if exist_head_symbol = "" then head_symbol
+    else find_real_head exist_head_symbol memory
   in
   let get_head_symbol symbol memory =
     Condition.M.fold
@@ -135,8 +131,7 @@ let get_head_symbol_list symbols (_, memory) =
         Condition.M.fold
           (fun _ trace_tail head_list ->
             match trace_tail with
-            | Condition.RH_Symbol s when symbol = s ->
-                (symbol, head) :: head_list
+            | Condition.RH_Symbol s when symbol = s -> [ (symbol, head) ]
             | _ -> head_list)
           trace head_list)
       memory []
@@ -857,14 +852,13 @@ let rec find_ps_method s_method source_summary call_graph summary call_prop_map
                   in
                   if check_match then
                     let new_call_prop = new_value_summary call_prop new_value in
-                    List.rev_append
+                    List.rev_append caller_preconds
                       (find_ps_method caller_method new_call_prop call_graph
                          summary call_prop_map method_info)
-                      caller_preconds
                   else caller_preconds)
                 [] prop_list
         in
-        list @ caller_prop_list)
+        List.rev_append list caller_prop_list)
       [] caller_list
 
 let calc_z3 id z3exp =
