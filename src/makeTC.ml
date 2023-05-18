@@ -1362,9 +1362,20 @@ let is_file_class class_name = if class_name = "File" then true else false
 
 let is_class_class class_name = if class_name = "Class" then true else false
 
+let is_graphics_class class_name =
+  if Str.string_match ("Graphics" ^ "[0-9]*" |> Str.regexp) class_name 0 then
+    true
+  else false
+
 let file_code = "File gen_file = new File(\"unitgen_file\");\n"
 
 let create_file_code file_name = file_name ^ ".createNewFile();\n"
+
+let image_code =
+  "BufferedImage gen_image = new BufferedImage(100, 100, \
+   BufferedImage.TYPE_INT_RGB);\n"
+
+let create_graphics_code graphics_name = graphics_name ^ ".createGraphics();\n"
 
 let class_code = "Object gen_obj = new Object();\n"
 
@@ -1586,6 +1597,15 @@ let get_defined_statement class_package class_name id target_summary method_info
         ( class_code ^ class_name ^ " " ^ id ^ " = " ^ get_class_code "gen_obj"
           ^ old_code,
           import |> List.rev_append old_import,
+          old_var_list );
+      ]
+    else if is_graphics_class class_name then
+      [
+        ( image_code ^ class_name ^ " " ^ id ^ " = "
+          ^ create_graphics_code "gen_image"
+          ^ old_code,
+          [ "java.awt.image.BufferedImage"; class_package ]
+          |> List.rev_append old_import,
           old_var_list );
       ]
     else if normal_class_name = "null" then
