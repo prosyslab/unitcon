@@ -54,7 +54,7 @@ let parse_boitv boitv =
     Str.global_replace (Str.regexp "[{}]") "" str |> rm_space
   in
   let relation_list = remove_bk boitv |> Str.split (Str.regexp ",") in
-  if List.length relation_list = 0 then Relation.M.empty
+  if relation_list = [] then Relation.M.empty
   else
     List.fold_left
       (fun mmap relation ->
@@ -84,7 +84,7 @@ let parse_boitv boitv =
 let parse_citv citv =
   let remove_bk str = rm_exp (Str.regexp "[{}]") str |> rm_space in
   let value_list = remove_bk citv |> Str.split (Str.regexp ",") in
-  if List.length value_list = 0 then Value.M.empty
+  if value_list = [] then Value.M.empty
   else
     List.fold_left
       (fun mmap mapping_value ->
@@ -257,7 +257,7 @@ let parse_condition condition =
             |> Str.split (Str.regexp ",")
           in
           if
-            List.length ref_trace = 0
+            ref_trace = []
             || Str.string_match
                  ("^[ \t\r\n]*->[ \t\r\n]*$" |> Str.regexp)
                  (List.hd ref_trace) 0

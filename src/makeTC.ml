@@ -828,7 +828,7 @@ let match_precond callee_method callee_summary call_prop method_info =
     (values, check)
   in
   let values, check = intersect_value in
-  if List.length check <> 0 then (values, false) else (values, true)
+  if check = [] then (values, true) else (values, false)
 
 let is_public s_method method_info =
   let s_method_info = MethodInfo.M.find s_method method_info in
@@ -1230,8 +1230,7 @@ let check_correct_constructor method_summary id candidate_constructor summary =
         in
         let new_values = combine_value c_summary.Language.value check_summary in
         let new_c_summary = new_value_summary c_summary new_values in
-        if List.length check <> 0 then check_value
-        else (true, new_c_summary, t_count))
+        if check = [] then (true, new_c_summary, t_count) else check_value)
       (false, Language.empty_summary, 0)
       check_summarys
 
@@ -1842,7 +1841,7 @@ let get_constructor (class_package, class_name) id target_summary recv_package
   in
   let is_getter, constr_summary_list =
     let java_package, _ = get_java_package_normal_class class_name in
-    if java_package = "null" && constr_summary_list |> List.length = 0 then
+    if java_package = "null" && constr_summary_list = [] then
       ( true,
         get_return_object (class_package, class_name) method_info class_info )
     else (false, constr_summary_list)
@@ -1865,7 +1864,7 @@ let get_constructor (class_package, class_name) id target_summary recv_package
            is_recursive_param class_name c method_info |> not)
     |> remove_same_name
   in
-  if List.length constr_summary_list = 0 then
+  if constr_summary_list = [] then
     get_defined_statement class_package class_name id target_summary method_info
       code import var_list
   else
@@ -2021,7 +2020,9 @@ let pretty_tc_format all_param =
   codes ^ "}\n\n"
 
 let make_tc_file code import =
-  let tc_file_name =  String.concat "" ["unitgen_test_"; !tc_num |> string_of_int; ".java"] in
+  let tc_file_name =
+    String.concat "" [ "unitgen_test_"; !tc_num |> string_of_int; ".java" ]
+  in
   let oc = open_out (Filename.concat !Cmdline.out_dir tc_file_name) in
   pretty_tc_format (code, import) |> output_string oc;
   flush_all ();
