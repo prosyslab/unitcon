@@ -27,6 +27,8 @@ end)
 
 let outer = ref 0
 
+let tc_num = ref 0
+
 let z3ctx =
   Z3.mk_context
     [
@@ -1989,7 +1991,43 @@ let get_statement param target_summary r_package summary method_info class_info
           ]
       | _ -> failwith ("not allowed type var" ^ id))
 
-let rec all_statement candidate r_package summary method_info class_info =
+let pretty_tc_format all_param =
+  let imports =
+    let import_set =
+      all_param |> snd
+      |> List.fold_left
+           (fun set import ->
+             ImportSet.add (import |> replace_nested_symbol) set)
+           ImportSet.empty
+    in
+    ImportSet.fold
+      (fun import stm ->
+        if import = "" then stm else stm ^ "import " ^ import ^ ";\n")
+      import_set ""
+  in
+  let start = imports ^ "\n@Test\npublic void test() throws Exception {\n" in
+  let param_code =
+    all_param |> fst
+    |> Str.split (Str.regexp "\n")
+    |> List.fold_left
+         (fun code_list code ->
+           if List.mem code code_list then code_list else code :: code_list)
+         []
+    |> List.rev
+  in
+  let codes =
+    List.fold_left (fun code param -> code ^ param ^ "\n") start param_code
+  in
+  codes ^ "}\n\n"
+
+let make_tc_file code import =
+  let tc_file_name =  String.concat "" ["unitgen_test_"; !tc_num |> string_of_int; ".java"] in
+  let oc = open_out (Filename.concat !Cmdline.out_dir tc_file_name) in
+  pretty_tc_format (code, import) |> output_string oc;
+  flush_all ();
+  tc_num := !tc_num + 1
+
+let rec all_statement ps candidate r_package summary method_info class_info =
   match candidate with
   | (code, import, mk_var_list) :: tl -> (
       match mk_var_list with
@@ -2000,43 +2038,11 @@ let rec all_statement candidate r_package summary method_info class_info =
             |> List.rev
           in
           let state_list = List.rev_append state_list tl in
-          all_statement state_list r_package summary method_info class_info
+          all_statement ps state_list r_package summary method_info class_info
       | [] ->
-          all_statement tl r_package summary method_info class_info
-          |> List.rev_append [ (code, import) ])
+          make_tc_file code import;
+          all_statement ps tl r_package summary method_info class_info)
   | [] -> []
-
-let mk_testcase all_param =
-  let make all_param =
-    let imports =
-      let import_set =
-        all_param |> snd
-        |> List.fold_left
-             (fun set import ->
-               ImportSet.add (import |> replace_nested_symbol) set)
-             ImportSet.empty
-      in
-      ImportSet.fold
-        (fun import stm ->
-          if import = "" then stm else stm ^ "import " ^ import ^ ";\n")
-        import_set ""
-    in
-    let start = imports ^ "\n@Test\npublic void test() throws Exception {\n" in
-    let param_code =
-      all_param |> fst
-      |> Str.split (Str.regexp "\n")
-      |> List.fold_left
-           (fun code_list code ->
-             if List.mem code code_list then code_list else code :: code_list)
-           []
-      |> List.rev
-    in
-    let codes =
-      List.fold_left (fun code param -> code ^ param ^ "\n") start param_code
-    in
-    codes ^ "}\n\n"
-  in
-  List.map (fun x -> make x) all_param
 
 let find_all_parameter ps_method ps_method_summary summary method_info
     class_info =
@@ -2074,11 +2080,11 @@ let find_all_parameter ps_method ps_method_summary summary method_info
   let codes =
     let ps_statement = execute_ps (id ^ ".") ps_method in
     let ps_statement = ps_statement ^ ";" in
-    all_statement
+    all_statement ps_method
       [ (ps_statement, [ import ], params) ]
       r_package summary method_info class_info
   in
-  mk_testcase codes
+  codes
 
 let mk_testcases s_method error_summary call_graph summary call_prop_map
     method_info class_info _ =
