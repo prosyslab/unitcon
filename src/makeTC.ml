@@ -740,13 +740,13 @@ let get_value typ id summary =
   let values = summary.Language.value in
   let default_value =
     match typ with
-    | Language.Int -> Value.Eq (Int 0)
-    | Language.Long -> Value.Eq (Long 0)
-    | Language.Float -> Value.Eq (Float 0.0)
-    | Language.Double -> Value.Eq (Double 0.0)
+    | Language.Int -> Value.Eq (Int (Random.int 100))
+    | Language.Long -> Value.Eq (Long (Random.int 100))
+    | Language.Float -> Value.Eq (Float (Random.float 100.0))
+    | Language.Double -> Value.Eq (Double (Random.float 100.0))
     | Language.Bool -> Value.Eq (Bool false)
     | Language.Char -> Value.Eq (Char 'x')
-    | Language.String -> Value.Eq (String "string")
+    | Language.String -> Value.Eq (String String.empty)
     | _ -> Value.Eq Null
   in
   let find_value =
