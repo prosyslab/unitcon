@@ -12,6 +12,15 @@ let rm_space str =
   let str = Str.replace_first (Str.regexp "^[ \t\r\n]+") "" str in
   Str.replace_first (Str.regexp "[ \t\r\n]+$") "" str
 
+let mk_rh_type v =
+  let check_symbol v = Str.string_match (Str.regexp "^v[0-9]+$") v 0 in
+  let check_index v = Str.string_match (Str.regexp "^\\[v[0-9]+\\]$") v 0 in
+  let check_any_value v = Str.string_match (Str.regexp "\\*") v 0 in
+  if check_symbol v then Condition.RH_Symbol v
+  else if check_index v then Condition.RH_Index v
+  else if check_any_value v then Condition.RH_Any
+  else Condition.RH_Var v
+
 let parse_boitv boitv =
   let remove_bk str =
     Str.global_replace (Str.regexp "[{}]") "" str |> rm_space
@@ -175,21 +184,13 @@ let parse_condition condition =
       |> rm_space
       |> Str.split (Str.regexp "}")
     in
-    let mk_rh_type v =
-      let check_symbol v = Str.string_match (Str.regexp "^v[0-9]+$") v 0 in
-      let check_index v = Str.string_match (Str.regexp "^\\[v[0-9]+\\]$") v 0 in
-      let check_any_value v = Str.string_match (Str.regexp "\\*") v 0 in
-      if check_symbol v then Condition.RH_Symbol v
-      else if check_index v then Condition.RH_Index v
-      else if check_any_value v then Condition.RH_Any
-      else Condition.RH_Var v
-    in
     let variables =
       List.fold_left
         (fun mmap var ->
           let i_and_s = String.split_on_char '=' var in
           let id = List.hd i_and_s |> rm_space in
           if String.length id = 0 then mmap
+          else if List.tl i_and_s = [] then mmap
           else
             let symbol = List.tl i_and_s |> List.hd |> rm_space in
             Condition.M.add (symbol |> mk_rh_type) (Condition.RH_Var id) mmap)
