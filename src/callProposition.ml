@@ -293,6 +293,7 @@ let mapping_callprop callprop mmap =
     callprop_map
 
 let from_callprop_json json =
+  let json = JsonUtil.to_list json in
   List.fold_left
     (fun mmap callprop -> mapping_callprop callprop mmap)
     CallPropMap.M.empty json

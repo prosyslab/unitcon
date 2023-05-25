@@ -11,7 +11,8 @@
   callProposition
   hierarchy
   setter
-  modeling)
+  modeling
+  parser)
  (libraries ocamlgraph unix yojson str core z3 logger)
  (preprocess
   (pps ppx_compare)))

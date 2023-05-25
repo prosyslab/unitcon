@@ -281,6 +281,7 @@ let mapping_error_summary error_summary mmap =
     SummaryMap.M.add source_method summary mmap
 
 let from_error_summary_json json =
+  let json = JsonUtil.to_list json in
   List.fold_left
     (fun mmap error_summary -> mapping_error_summary error_summary mmap)
     SummaryMap.M.empty json
