@@ -295,102 +295,102 @@ let append_post_err_prop str prop =
   }
 
 let rec parse_call_prop_dict data call_prop =
-  try
-    let str = input_line data |> rm_space in
-    if str = "{start" then (
-      is_start := true;
-      parse_call_prop_dict data empty_call_prop)
-    else if str = "end}" then (
-      is_start := false;
-      is_boitv := false;
-      is_citv := false;
-      is_precond := false;
-      is_postcond := false;
-      call_prop_list := call_prop :: !call_prop_list)
-    else if Str.string_match (Str.regexp "caller:") str 0 then
-      parse_call_prop_dict data (caller_call_prop str call_prop)
-    else if Str.string_match (Str.regexp "callee:") str 0 then
-      parse_call_prop_dict data (callee_call_prop str call_prop)
-    else if Str.string_match (Str.regexp "^.*BoItv:") str 0 then (
-      is_boitv := true;
-      parse_call_prop_dict data (boitv_call_prop str call_prop))
-    else if Str.string_match (Str.regexp "^.*CItv:") str 0 then (
-      is_citv := true;
-      is_boitv := false;
-      parse_call_prop_dict data (citv_call_prop str call_prop))
-    else if Str.string_match (Str.regexp "^.*Precond:") str 0 then (
-      is_precond := true;
-      is_citv := false;
-      parse_call_prop_dict data (pre_call_prop str call_prop))
-    else if Str.string_match (Str.regexp "^.*Postcond:") str 0 then (
-      is_postcond := true;
-      is_precond := false;
-      parse_call_prop_dict data (post_call_prop str call_prop))
-    else if Str.string_match (Str.regexp "^.*actual:") str 0 then
-      parse_call_prop_dict data (arg_call_prop str call_prop)
-    else if !is_boitv then
-      parse_call_prop_dict data (append_boitv_call_prop str call_prop)
-    else if !is_citv then
-      parse_call_prop_dict data (append_citv_call_prop str call_prop)
-    else if !is_precond then
-      parse_call_prop_dict data (append_pre_call_prop str call_prop)
-    else if !is_postcond then
-      parse_call_prop_dict data (append_post_call_prop str call_prop)
-    else parse_call_prop_dict data call_prop
-  with End_of_file -> ()
+  match input_line data with
+  | s ->
+      let str = s |> rm_space in
+      if str = "{start" then (
+        is_start := true;
+        parse_call_prop_dict data empty_call_prop)
+      else if str = "end}" then (
+        is_start := false;
+        is_boitv := false;
+        is_citv := false;
+        is_precond := false;
+        is_postcond := false;
+        call_prop_list := call_prop :: !call_prop_list)
+      else if Str.string_match (Str.regexp "caller:") str 0 then
+        parse_call_prop_dict data (caller_call_prop str call_prop)
+      else if Str.string_match (Str.regexp "callee:") str 0 then
+        parse_call_prop_dict data (callee_call_prop str call_prop)
+      else if Str.string_match (Str.regexp "^.*BoItv:") str 0 then (
+        is_boitv := true;
+        parse_call_prop_dict data (boitv_call_prop str call_prop))
+      else if Str.string_match (Str.regexp "^.*CItv:") str 0 then (
+        is_citv := true;
+        is_boitv := false;
+        parse_call_prop_dict data (citv_call_prop str call_prop))
+      else if Str.string_match (Str.regexp "^.*Precond:") str 0 then (
+        is_precond := true;
+        is_citv := false;
+        parse_call_prop_dict data (pre_call_prop str call_prop))
+      else if Str.string_match (Str.regexp "^.*Postcond:") str 0 then (
+        is_postcond := true;
+        is_precond := false;
+        parse_call_prop_dict data (post_call_prop str call_prop))
+      else if Str.string_match (Str.regexp "^.*actual:") str 0 then
+        parse_call_prop_dict data (arg_call_prop str call_prop)
+      else if !is_boitv then
+        parse_call_prop_dict data (append_boitv_call_prop str call_prop)
+      else if !is_citv then
+        parse_call_prop_dict data (append_citv_call_prop str call_prop)
+      else if !is_precond then
+        parse_call_prop_dict data (append_pre_call_prop str call_prop)
+      else if !is_postcond then
+        parse_call_prop_dict data (append_post_call_prop str call_prop)
+      else parse_call_prop_dict data call_prop
+  | exception End_of_file -> raise End_of_file
 
 let rec parse_err_prop_dict data err_prop =
-  try
-    let str = input_line data |> rm_space in
-    if str = "{start" then (
-      is_start := true;
-      parse_err_prop_dict data empty_err_prop)
-    else if str = "end}" then (
-      is_start := false;
-      is_boitv := false;
-      is_citv := false;
-      is_precond := false;
-      is_postcond := false;
-      err_prop_list := err_prop :: !err_prop_list)
-    else if Str.string_match (Str.regexp "^.*procname:") str 0 then
-      parse_err_prop_dict data (method_name_err_prop str err_prop)
-    else if Str.string_match (Str.regexp "^.*BoItv:") str 0 then (
-      is_boitv := true;
-      parse_err_prop_dict data (boitv_err_prop str err_prop))
-    else if Str.string_match (Str.regexp "^.*CItv:") str 0 then (
-      is_citv := true;
-      is_boitv := false;
-      parse_err_prop_dict data (citv_err_prop str err_prop))
-    else if Str.string_match (Str.regexp "^.*Precond:") str 0 then (
-      is_precond := true;
-      is_citv := false;
-      parse_err_prop_dict data (pre_err_prop str err_prop))
-    else if Str.string_match (Str.regexp "^.*Postcond:") str 0 then (
-      is_postcond := true;
-      is_precond := false;
-      parse_err_prop_dict data (post_err_prop str err_prop))
-    else if !is_boitv then
-      parse_err_prop_dict data (append_boitv_err_prop str err_prop)
-    else if !is_citv then
-      parse_err_prop_dict data (append_citv_err_prop str err_prop)
-    else if !is_precond then
-      parse_err_prop_dict data (append_pre_err_prop str err_prop)
-    else if !is_postcond then
-      parse_err_prop_dict data (append_post_err_prop str err_prop)
-    else parse_err_prop_dict data err_prop
-  with End_of_file -> ()
+  match input_line data with
+  | s ->
+      let str = s |> rm_space in
+      if str = "{start" then (
+        is_start := true;
+        parse_err_prop_dict data empty_err_prop)
+      else if str = "end}" then (
+        is_start := false;
+        is_boitv := false;
+        is_citv := false;
+        is_precond := false;
+        is_postcond := false;
+        err_prop_list := err_prop :: !err_prop_list)
+      else if Str.string_match (Str.regexp "^.*procname:") str 0 then
+        parse_err_prop_dict data (method_name_err_prop str err_prop)
+      else if Str.string_match (Str.regexp "^.*BoItv:") str 0 then (
+        is_boitv := true;
+        parse_err_prop_dict data (boitv_err_prop str err_prop))
+      else if Str.string_match (Str.regexp "^.*CItv:") str 0 then (
+        is_citv := true;
+        is_boitv := false;
+        parse_err_prop_dict data (citv_err_prop str err_prop))
+      else if Str.string_match (Str.regexp "^.*Precond:") str 0 then (
+        is_precond := true;
+        is_citv := false;
+        parse_err_prop_dict data (pre_err_prop str err_prop))
+      else if Str.string_match (Str.regexp "^.*Postcond:") str 0 then (
+        is_postcond := true;
+        is_precond := false;
+        parse_err_prop_dict data (post_err_prop str err_prop))
+      else if !is_boitv then
+        parse_err_prop_dict data (append_boitv_err_prop str err_prop)
+      else if !is_citv then
+        parse_err_prop_dict data (append_citv_err_prop str err_prop)
+      else if !is_precond then
+        parse_err_prop_dict data (append_pre_err_prop str err_prop)
+      else if !is_postcond then
+        parse_err_prop_dict data (append_post_err_prop str err_prop)
+      else parse_err_prop_dict data err_prop
+  | exception End_of_file -> raise End_of_file
 
 let rec parse_call_prop_dict_all data =
-  try
-    parse_call_prop_dict data empty_call_prop;
-    parse_call_prop_dict_all data
-  with End_of_file -> ()
+  match parse_call_prop_dict data empty_call_prop with
+  | exception End_of_file -> ()
+  | _ -> parse_call_prop_dict_all data
 
 let rec parse_err_prop_dict_all data =
-  try
-    parse_err_prop_dict data empty_err_prop;
-    parse_err_prop_dict_all data
-  with End_of_file -> ()
+  match parse_err_prop_dict data empty_err_prop with
+  | exception End_of_file -> ()
+  | _ -> parse_err_prop_dict_all data
 
 let to_call_prop_json data =
   let mk_assoc elem =
