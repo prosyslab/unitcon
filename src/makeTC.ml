@@ -40,8 +40,6 @@ let z3ctx =
 
 let solver = Z3.Solver.mk_solver z3ctx None
 
-let rm_exp exp str = Str.global_replace exp "" str
-
 let rec find_relation given_symbol relation =
   match Relation.M.find_opt given_symbol relation with
   | Some find_symbol -> find_relation find_symbol relation
@@ -987,8 +985,8 @@ let rec collect_field m_symbol c_symbol m_value c_value m_mem c_mem field_map =
   with _ -> field_map
 
 let get_class_name ~infer method_name =
-  if infer then rm_exp ("\\..+(.*)" |> Str.regexp) method_name
-  else rm_exp ("(.*)" |> Str.regexp) method_name
+  if infer then Regexp.global_rm_exp ("\\..+(.*)" |> Str.regexp) method_name
+  else Regexp.global_rm_exp ("(.*)" |> Str.regexp) method_name
 
 let get_setter_list constructor field_map setter_map =
   let class_name = get_class_name ~infer:false constructor in
@@ -1085,7 +1083,9 @@ let is_normal_class class_name class_info =
 let is_static_class ~is_class name (class_info, _) =
   let class_name =
     if is_class then name
-    else rm_exp (Str.regexp "\\.<.*>(.*)$") name |> rm_exp (Str.regexp "(.*)$")
+    else
+      Regexp.global_rm_exp (Str.regexp "\\.<.*>(.*)$") name
+      |> Regexp.global_rm_exp (Str.regexp "(.*)$")
   in
   match ClassInfo.M.find_opt class_name class_info with
   | Some typ -> (
@@ -1124,12 +1124,12 @@ let is_public_or_default ~is_getter recv_package method_name method_info =
   else if m_package = "" then false
   else
     let name =
-      Str.split (Str.regexp "\\.") m_package
+      Str.split Regexp.dot m_package
       |> List.rev |> List.hd
-      |> Str.global_replace (Str.regexp "\\$") "\\$"
+      |> Str.global_replace Regexp.dollar "\\$"
     in
     let s = name ^ "$" in
-    let m_package = rm_exp (Str.regexp s) m_package in
+    let m_package = Regexp.global_rm_exp (Str.regexp s) m_package in
     if recv_package = m_package then
       match info.MethodInfo.modifier with
       | Default | Public -> true
@@ -1168,29 +1168,23 @@ let get_recv_package t_method (class_info, _) =
   let full_class_name =
     ClassInfo.M.fold
       (fun full_name _ find_name ->
-        let name =
-          Str.split (Str.regexp "\\.") full_name |> List.rev |> List.hd
-        in
+        let name = Str.split Regexp.dot full_name |> List.rev |> List.hd in
         if class_name = name then
-          let name = Str.global_replace (Str.regexp "\\$") "\\$" name in
+          let name = Str.global_replace Regexp.dollar "\\$" name in
           let s = name ^ "$" in
-          rm_exp (Str.regexp s) full_name
+          Regexp.global_rm_exp (Str.regexp s) full_name
         else find_name)
       class_info ""
   in
   full_class_name
 
 let match_constructor_name class_name method_name =
-  let class_name =
-    Str.split (Str.regexp "\\.") class_name |> List.rev |> List.hd
-  in
-  let class_name = Str.global_replace (Str.regexp "\\$") "\\$" class_name in
+  let class_name = Str.split Regexp.dot class_name |> List.rev |> List.hd in
+  let class_name = Str.global_replace Regexp.dollar "\\$" class_name in
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
 let match_return_object class_name method_name method_info =
-  let class_name =
-    Str.split (Str.regexp "\\.") class_name |> List.rev |> List.hd
-  in
+  let class_name = Str.split Regexp.dot class_name |> List.rev |> List.hd in
   let info = MethodInfo.M.find method_name method_info in
   let return = info.MethodInfo.return in
   Str.string_match (Str.regexp class_name) return 0
@@ -1344,7 +1338,7 @@ let sort_constructor_list constructor_list method_info =
         compare c1_formal c2_formal)
     constructor_list
 
-let replace_nested_symbol str = Str.global_replace (Str.regexp "\\$") "." str
+let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 
 let replace_null id old_code =
   let candidate =
@@ -1383,7 +1377,7 @@ let get_constructor_import constructor_info =
         Str.replace_first ("\\$.*" |> Str.regexp) "" constructor_import
       in
       let next_constructor_import =
-        Str.replace_first ("\\$" |> Str.regexp) "." constructor_import
+        Str.replace_first Regexp.dollar "." constructor_import
       in
       nested_import next_constructor_import |> List.cons new_import
     else [ constructor_import ]
@@ -1401,9 +1395,7 @@ let get_static_constructor t_method class_info =
   let full_class_name =
     ClassInfo.M.fold
       (fun full_name _ find_name ->
-        let name =
-          Str.split (Str.regexp "\\.") full_name |> List.rev |> List.hd
-        in
+        let name = Str.split Regexp.dot full_name |> List.rev |> List.hd in
         if class_name = name then full_name else find_name)
       class_info ""
   in
@@ -1514,7 +1506,7 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
       if origin_private then
         constr_statement |> replace_nested_symbol
         |> Str.replace_first (Str.regexp ".<init>") ""
-        |> rm_exp (Str.regexp "(.*)$")
+        |> Regexp.global_rm_exp (Str.regexp "(.*)$")
       else class_name
     in
     let constructor_info = MethodInfo.M.find constr_statement method_info in
@@ -1535,10 +1527,10 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
             | Language.Var (_, id) -> param_code ^ ", " ^ id)
           "" constructor_params
       in
-      let param_list = rm_exp (Str.regexp "^, ") param_list in
+      let param_list = Regexp.global_rm_exp Regexp.start_bm2 param_list in
       let constr_statement =
         Str.replace_first (Str.regexp ".<init>") "" constr_statement
-        |> rm_exp (Str.regexp "(.*)$")
+        |> Regexp.global_rm_exp (Str.regexp "(.*)$")
       in
       constr_statement ^ "(" ^ param_list ^ ")"
     in
@@ -1815,7 +1807,7 @@ let get_statement param target_summary r_package summary method_info class_info
           let get_string =
             if get_string = "null" then get_string
             else if Str.string_match (Str.regexp "^not ") get_string 0 then
-              let get_string = rm_exp (Str.regexp " ") get_string in
+              let get_string = Regexp.global_rm_exp Regexp.space get_string in
               "\"" ^ get_string ^ "\""
             else "\"" ^ get_string ^ "\""
           in
@@ -1914,15 +1906,15 @@ let find_all_parameter ps_method ps_method_summary summary method_info
           | Language.Var (_, id) -> str_params ^ ", " ^ id
           | _ -> str_params)
         "" ps_params
-      |> rm_exp (Str.regexp "^, ")
+      |> Regexp.global_rm_exp Regexp.start_bm2
     in
     let str_params = "(" ^ str_params ^ ")" in
     let ps_method =
-      Str.split (Str.regexp "\\.") ps_method
+      Str.split Regexp.dot ps_method
       |> List.tl |> List.hd
       |> Str.split (Str.regexp "(")
       |> List.hd
-      |> rm_exp (Str.regexp "<init>")
+      |> Regexp.global_rm_exp (Str.regexp "<init>")
     in
     id ^ ps_method ^ str_params
   in
@@ -1936,7 +1928,7 @@ let find_all_parameter ps_method ps_method_summary summary method_info
           | Language.Var (_, id) -> str_params ^ ", " ^ id
           | _ -> str_params)
         "" ps_params
-      |> rm_exp (Str.regexp "^, ")
+      |> Regexp.global_rm_exp Regexp.start_bm2
     in
     let str_params = "(" ^ str_params ^ ")" in
     class_name ^ " " ^ id ^ " = new " ^ class_name ^ str_params

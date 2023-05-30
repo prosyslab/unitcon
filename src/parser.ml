@@ -47,10 +47,6 @@ let call_prop_list = ref []
 
 let err_prop_list = ref []
 
-let rm_space str =
-  let str = Str.replace_first (Str.regexp "^[ \t\r\n]+") "" str in
-  Str.replace_first (Str.regexp "[ \t\r\n]+$") "" str
-
 let output name data =
   let dirname = !Cmdline.out_dir ^ "/marshal" in
   if not (Sys.file_exists dirname) then Unix.mkdir dirname 0o755;
@@ -69,7 +65,7 @@ let input name =
 let caller_call_prop str prop =
   let name = String.split_on_char ':' str |> List.tl |> List.hd in
   {
-    caller = name |> rm_space;
+    caller = name |> Regexp.rm_space;
     callee = prop.callee;
     boitv = prop.boitv;
     citv = prop.citv;
@@ -82,7 +78,7 @@ let callee_call_prop str prop =
   let name = String.split_on_char ':' str |> List.tl |> List.hd in
   {
     caller = prop.caller;
-    callee = name |> rm_space;
+    callee = name |> Regexp.rm_space;
     boitv = prop.boitv;
     citv = prop.citv;
     precond = prop.precond;
@@ -93,8 +89,9 @@ let callee_call_prop str prop =
 let boitv_call_prop str prop =
   let lst = String.split_on_char ':' str |> List.tl in
   let boitv =
-    if List.hd lst |> rm_space = "BoItv" then List.tl lst |> List.hd |> rm_space
-    else List.hd lst |> rm_space
+    if List.hd lst |> Regexp.rm_space = "BoItv" then
+      List.tl lst |> List.hd |> Regexp.rm_space
+    else List.hd lst |> Regexp.rm_space
   in
   {
     caller = prop.caller;
@@ -112,7 +109,7 @@ let citv_call_prop str prop =
     caller = prop.caller;
     callee = prop.callee;
     boitv = prop.boitv;
-    citv = citv |> rm_space;
+    citv = citv |> Regexp.rm_space;
     precond = prop.precond;
     postcond = prop.postcond;
     arg = prop.arg;
@@ -125,7 +122,7 @@ let pre_call_prop str prop =
     callee = prop.callee;
     boitv = prop.boitv;
     citv = prop.citv;
-    precond = pre |> rm_space;
+    precond = pre |> Regexp.rm_space;
     postcond = prop.postcond;
     arg = prop.arg;
   }
@@ -138,14 +135,16 @@ let post_call_prop str prop =
     boitv = prop.boitv;
     citv = prop.citv;
     precond = prop.precond;
-    postcond = post |> rm_space;
+    postcond = post |> Regexp.rm_space;
     arg = prop.arg;
   }
 
 let arg_call_prop str prop =
-  let args = String.split_on_char ':' str |> List.tl |> List.hd |> rm_space in
+  let args =
+    String.split_on_char ':' str |> List.tl |> List.hd |> Regexp.rm_space
+  in
   let arg_list = Str.split (Str.regexp "  ") args in
-  let arg_list = List.map rm_space arg_list in
+  let arg_list = List.map Regexp.rm_space arg_list in
   {
     caller = prop.caller;
     callee = prop.callee;
@@ -157,7 +156,7 @@ let arg_call_prop str prop =
   }
 
 let append_boitv_call_prop str prop =
-  let next_boitv = rm_space str in
+  let next_boitv = Regexp.rm_space str in
   {
     caller = prop.caller;
     callee = prop.callee;
@@ -169,7 +168,7 @@ let append_boitv_call_prop str prop =
   }
 
 let append_citv_call_prop str prop =
-  let next_citv = rm_space str in
+  let next_citv = Regexp.rm_space str in
   {
     caller = prop.caller;
     callee = prop.callee;
@@ -181,7 +180,7 @@ let append_citv_call_prop str prop =
   }
 
 let append_pre_call_prop str prop =
-  let next_precond = rm_space str in
+  let next_precond = Regexp.rm_space str in
   {
     caller = prop.caller;
     callee = prop.callee;
@@ -193,7 +192,7 @@ let append_pre_call_prop str prop =
   }
 
 let append_post_call_prop str prop =
-  let next_postcond = rm_space str in
+  let next_postcond = Regexp.rm_space str in
   {
     caller = prop.caller;
     callee = prop.callee;
@@ -207,7 +206,7 @@ let append_post_call_prop str prop =
 let method_name_err_prop str prop =
   let name = String.split_on_char ':' str |> List.rev |> List.hd in
   {
-    method_name = name |> rm_space;
+    method_name = name |> Regexp.rm_space;
     boitv = prop.boitv;
     citv = prop.citv;
     precond = prop.precond;
@@ -218,7 +217,7 @@ let boitv_err_prop str prop =
   let boitv = String.split_on_char ':' str |> List.rev |> List.hd in
   {
     method_name = prop.method_name;
-    boitv = boitv |> rm_space;
+    boitv = boitv |> Regexp.rm_space;
     citv = prop.citv;
     precond = prop.precond;
     postcond = prop.postcond;
@@ -229,7 +228,7 @@ let citv_err_prop str prop =
   {
     method_name = prop.method_name;
     boitv = prop.boitv;
-    citv = citv |> rm_space;
+    citv = citv |> Regexp.rm_space;
     precond = prop.precond;
     postcond = prop.postcond;
   }
@@ -240,7 +239,7 @@ let pre_err_prop str prop =
     method_name = prop.method_name;
     boitv = prop.boitv;
     citv = prop.citv;
-    precond = pre |> rm_space;
+    precond = pre |> Regexp.rm_space;
     postcond = prop.postcond;
   }
 
@@ -251,11 +250,11 @@ let post_err_prop str prop =
     boitv = prop.boitv;
     citv = prop.citv;
     precond = prop.precond;
-    postcond = post |> rm_space;
+    postcond = post |> Regexp.rm_space;
   }
 
 let append_boitv_err_prop str prop =
-  let next_boitv = rm_space str in
+  let next_boitv = Regexp.rm_space str in
   {
     method_name = prop.method_name;
     boitv = prop.boitv ^ next_boitv;
@@ -265,7 +264,7 @@ let append_boitv_err_prop str prop =
   }
 
 let append_citv_err_prop str prop =
-  let next_citv = rm_space str in
+  let next_citv = Regexp.rm_space str in
   {
     method_name = prop.method_name;
     boitv = prop.boitv;
@@ -275,7 +274,7 @@ let append_citv_err_prop str prop =
   }
 
 let append_pre_err_prop str prop =
-  let next_precond = rm_space str in
+  let next_precond = Regexp.rm_space str in
   {
     method_name = prop.method_name;
     boitv = prop.boitv;
@@ -285,7 +284,7 @@ let append_pre_err_prop str prop =
   }
 
 let append_post_err_prop str prop =
-  let next_postcond = rm_space str in
+  let next_postcond = Regexp.rm_space str in
   {
     method_name = prop.method_name;
     boitv = prop.boitv;
@@ -297,7 +296,7 @@ let append_post_err_prop str prop =
 let rec parse_call_prop_dict data call_prop =
   match input_line data with
   | s ->
-      let str = s |> rm_space in
+      let str = s |> Regexp.rm_space in
       if str = "{start" then (
         is_start := true;
         parse_call_prop_dict data empty_call_prop)
@@ -343,7 +342,7 @@ let rec parse_call_prop_dict data call_prop =
 let rec parse_err_prop_dict data err_prop =
   match input_line data with
   | s ->
-      let str = s |> rm_space in
+      let str = s |> Regexp.rm_space in
       if str = "{start" then (
         is_start := true;
         parse_err_prop_dict data empty_err_prop)

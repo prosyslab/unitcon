@@ -54,11 +54,19 @@ let any = Str.regexp "\\*"
 
 let start_bm = Str.regexp "^,[ \t\r\n]*"
 
+let start_bm2 = Str.regexp "^, "
+
 let ref = Str.regexp "^[ \t\r\n]*->[ \t\r\n]*$"
 
 let array = Str.regexp ".+\\[_\\*_\\].*"
 
 let rm_array = Str.regexp "\\[_\\*_\\](\\*)"
+
+let dollar = Str.regexp "\\$"
+
+let dot = Str.regexp "\\."
+
+let space = Str.regexp " "
 
 let global_rm_exp exp str = Str.global_replace exp "" str
 
