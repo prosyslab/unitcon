@@ -144,7 +144,10 @@ let arg_call_prop str prop =
     String.split_on_char ':' str |> List.tl |> List.hd |> Regexp.rm_space
   in
   let arg_list = Str.split Regexp.space2 args in
-  let arg_list = List.map Regexp.rm_space arg_list in
+  let arg_list =
+    List.fold_left (fun list arg -> Regexp.rm_space arg :: list) [] arg_list
+    |> List.rev
+  in
   {
     caller = prop.caller;
     callee = prop.callee;
@@ -401,11 +404,20 @@ let to_call_prop_json data =
         ("CItv", `String elem.citv);
         ("Precond", `String elem.precond);
         ("Postcond", `String elem.postcond);
-        ("Arg", `List (List.map (fun x -> `String x) elem.arg));
+        ( "Arg",
+          `List
+            (List.fold_left (fun list x -> `String x :: list) [] elem.arg
+            |> List.rev) );
       ]
   in
   parse_call_prop_dict_all data;
-  let json = `List (List.map (fun elem -> mk_assoc elem) !call_prop_list) in
+  let json =
+    `List
+      (List.fold_left
+         (fun list elem -> mk_assoc elem :: list)
+         [] !call_prop_list
+      |> List.rev)
+  in
   json
 
 let to_err_prop_json data =
@@ -420,7 +432,11 @@ let to_err_prop_json data =
       ]
   in
   parse_err_prop_dict_all data;
-  let json = `List (List.map (fun elem -> mk_assoc elem) !err_prop_list) in
+  let json =
+    `List
+      (List.fold_left (fun list elem -> mk_assoc elem :: list) [] !err_prop_list
+      |> List.rev)
+  in
   json
 
 let parse_callprop filename =
