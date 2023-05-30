@@ -1104,6 +1104,9 @@ let is_static_method method_name method_info =
   let m_info = MethodInfo.M.find method_name method_info in
   m_info.MethodInfo.is_static
 
+let is_init_method method_name =
+  Str.string_match (".*\\.<init>" |> Str.regexp) method_name 0
+
 let is_private method_name method_info =
   let info = MethodInfo.M.find method_name method_info in
   match info.MethodInfo.modifier with Private -> true | _ -> false
@@ -1226,7 +1229,8 @@ let get_java_package_normal_class class_name =
   let import_input = "java.io.FileInputStream" in
   if class_name = "Collection" || class_name = "List" then
     ("ArrayList", [ import_array_list ])
-  else if class_name = "Map" then ("HashMap", [ import_hash_map ])
+  else if class_name = "Map" || class_name = "HashMap" then
+    ("HashMap", [ import_hash_map ])
   else if class_name = "Object" then ("Object", [])
   else if class_name = "File" then ("File(\"unitgen_file\")", [ import_file ])
   else if class_name = "PrintStream" then
@@ -1404,6 +1408,18 @@ let get_static_constructor t_method class_info =
       class_info ""
   in
   (class_name, full_class_name)
+
+let get_init_constructor t_method method_info =
+  let class_name = get_class_name ~infer:true t_method in
+  let c_info = MethodInfo.M.find t_method method_info in
+  let constructor_import =
+    List.fold_left
+      (fun this_import param ->
+        match param with import, Language.This _ -> import | _ -> this_import)
+      "" c_info.MethodInfo.formal_params
+  in
+
+  (class_name, constructor_import)
 
 (* statement data structure: code * import * mk_var_list *)
 let get_defined_statement class_package class_name id target_summary method_info
@@ -1906,17 +1922,38 @@ let find_all_parameter ps_method ps_method_summary summary method_info
       |> List.tl |> List.hd
       |> Str.split (Str.regexp "(")
       |> List.hd
-      |> rm_exp (Str.regexp "init")
+      |> rm_exp (Str.regexp "<init>")
     in
     id ^ ps_method ^ str_params
+  in
+  let execute_init_ps id class_name ps_method =
+    let ps_info = MethodInfo.M.find ps_method method_info in
+    let ps_params = ps_info.MethodInfo.formal_params in
+    let str_params =
+      List.fold_left
+        (fun str_params variable ->
+          match variable |> snd with
+          | Language.Var (_, id) -> str_params ^ ", " ^ id
+          | _ -> str_params)
+        "" ps_params
+      |> rm_exp (Str.regexp "^, ")
+    in
+    let str_params = "(" ^ str_params ^ ")" in
+    class_name ^ " " ^ id ^ " = new " ^ class_name ^ str_params
   in
   let id, import =
     if is_static_method ps_method method_info then
       get_static_constructor ps_method (class_info |> fst)
+    else if is_init_method ps_method then
+      get_init_constructor ps_method method_info
     else ("gen1", "")
   in
   let codes =
-    let ps_statement = execute_ps (id ^ ".") ps_method in
+    let ps_statement, params =
+      if is_init_method ps_method then
+        (execute_init_ps "gen1" id ps_method, params |> List.tl)
+      else (execute_ps (id ^ ".") ps_method, params)
+    in
     let ps_statement = ps_statement ^ ";" in
     all_statement ps_method
       [ (ps_statement, [ import ], params) ]
