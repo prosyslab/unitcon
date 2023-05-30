@@ -6,47 +6,38 @@ module Condition = Language.Condition
 module MethodInfo = Language.MethodInfo
 module CallPropMap = Language.CallPropMap
 
-let rm_exp exp str = Str.global_replace exp "" str
-
-let rm_space str =
-  let str = Str.replace_first (Str.regexp "^[ \t\r\n]+") "" str in
-  Str.replace_first (Str.regexp "[ \t\r\n]+$") "" str
-
 let mk_rh_type v =
-  let check_symbol v = Str.string_match (Str.regexp "^v[0-9]+$") v 0 in
-  let check_index v = Str.string_match (Str.regexp "^\\[v[0-9]+\\]$") v 0 in
-  let check_any_value v = Str.string_match (Str.regexp "\\*") v 0 in
+  let check_symbol v = Str.string_match Regexp.symbol v 0 in
+  let check_index v = Str.string_match Regexp.index v 0 in
+  let check_any_value v = Str.string_match Regexp.any v 0 in
   if check_symbol v then Condition.RH_Symbol v
   else if check_index v then Condition.RH_Index v
   else if check_any_value v then Condition.RH_Any
   else Condition.RH_Var v
 
 let parse_boitv boitv =
-  let remove_bk str =
-    Str.global_replace (Str.regexp "[{}]") "" str |> rm_space
-  in
-  let relation_list = remove_bk boitv |> Str.split (Str.regexp ",") in
+  let relation_list = Regexp.remove_bk boitv |> Str.split Regexp.bm in
   if relation_list = [] then Relation.M.empty
   else
     List.fold_left
       (fun mmap relation ->
-        let relation = Str.split (Str.regexp "->") relation in
+        let relation = Str.split Regexp.arrow relation in
         let check_relation head tail =
           match int_of_string_opt tail with
           | Some _ -> false
           | None -> if head = tail then false else true
         in
-        let head = List.hd relation |> rm_space in
+        let head = List.hd relation |> Regexp.rm_space in
         let value_list =
           List.tl relation |> List.hd |> String.split_on_char ' '
         in
         List.fold_left
           (fun mmap tail ->
             let tail =
-              rm_exp (Str.regexp "max(") tail
-              |> rm_exp (Str.regexp "min(")
-              |> rm_exp (Str.regexp "[)\\[\\]]")
-              |> rm_space
+              Regexp.first_rm_exp Regexp.max tail
+              |> Regexp.first_rm_exp Regexp.min
+              |> Regexp.global_rm_exp Regexp.bk2
+              |> Regexp.rm_space
             in
             if check_relation head tail then Relation.M.add head tail mmap
             else mmap)
@@ -54,54 +45,53 @@ let parse_boitv boitv =
       Relation.M.empty relation_list
 
 let parse_citv citv =
-  let remove_bk str = rm_exp (Str.regexp "[{}]") str |> rm_space in
-  let value_list = remove_bk citv |> Str.split (Str.regexp ",") in
+  let value_list = Regexp.remove_bk citv |> Str.split Regexp.bm in
   if value_list = [] then Value.M.empty
   else
     List.fold_left
       (fun mmap mapping_value ->
-        let mapping_value = Str.split (Str.regexp "->") mapping_value in
-        let head = List.hd mapping_value |> rm_space in
-        let tail = List.tl mapping_value |> List.hd |> rm_space in
+        let mapping_value = Str.split Regexp.arrow mapping_value in
+        let head = List.hd mapping_value |> Regexp.rm_space in
+        let tail = List.tl mapping_value |> List.hd |> Regexp.rm_space in
         if Value.is_eq tail then
-          let value = rm_exp (Str.regexp "=") tail in
+          let value = Regexp.first_rm_exp Regexp.eq tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Eq (Int v)) mmap
           | None ->
               if value = "null" then Value.M.add head (Value.Eq Null) mmap
               else Value.M.add head (Value.Eq (String value)) mmap
         else if Value.is_neq tail then
-          let value = rm_exp (Str.regexp "!=") tail in
+          let value = Regexp.first_rm_exp Regexp.neq tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Neq (Int v)) mmap
           | None ->
               if value = "null" then Value.M.add head (Value.Neq Null) mmap
               else Value.M.add head (Value.Neq (String value)) mmap
         else if Value.is_ge tail then
-          let value = rm_exp (Str.regexp ">=") tail in
+          let value = Regexp.first_rm_exp Regexp.ge tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Ge (Int v)) mmap
           | None -> Value.M.add head (Value.Ge MinusInf) mmap
         else if Value.is_gt tail then
-          let value = rm_exp (Str.regexp ">") tail in
+          let value = Regexp.first_rm_exp Regexp.gt tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Gt (Int v)) mmap
           | None -> Value.M.add head (Value.Gt MinusInf) mmap
         else if Value.is_le tail then
-          let value = rm_exp (Str.regexp "<=") tail in
+          let value = Regexp.first_rm_exp Regexp.le tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Le (Int v)) mmap
           | None -> Value.M.add head (Value.Le PlusInf) mmap
         else if Value.is_lt tail then
-          let value = rm_exp (Str.regexp "<") tail in
+          let value = Regexp.first_rm_exp Regexp.lt tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Lt (Int v)) mmap
           | None -> Value.M.add head (Value.Lt PlusInf) mmap
         else if Value.is_between tail then
           let values =
-            rm_exp (Str.regexp "in_N") tail
-            |> rm_exp (Str.regexp "in\\[")
-            |> rm_exp (Str.regexp "\\]")
+            Regexp.first_rm_exp Regexp.in_n tail
+            |> Regexp.first_rm_exp Regexp.in_bk
+            |> Regexp.first_rm_exp Regexp.end_bk
             |> String.split_on_char ' '
           in
           if List.length values = 1 then
@@ -135,8 +125,8 @@ let parse_citv citv =
                       Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap)
         else if Value.is_outside tail then
           let values =
-            rm_exp (Str.regexp "not_in\\[") tail
-            |> rm_exp (Str.regexp "\\]")
+            Regexp.first_rm_exp Regexp.ots tail
+            |> Regexp.first_rm_exp Regexp.end_bk
             |> String.split_on_char ' '
           in
           let min_value = List.hd values in
@@ -172,39 +162,40 @@ let parse_condition condition =
   else
     let var_list =
       List.hd v_and_m
-      |> Str.replace_first (Str.regexp "Stack=") ""
-      |> rm_exp (Str.regexp "[&{}]")
+      |> Regexp.first_rm_exp Regexp.stack
+      |> Regexp.global_rm_exp Regexp.remain_symbol
       |> String.split_on_char ','
     in
     let mem =
       List.tl v_and_m |> List.hd
-      |> Str.replace_first (Str.regexp "Heap=") ""
-      |> rm_exp (Str.regexp "}*[ \t\r\n]+}$")
-      |> rm_exp (Str.regexp "{")
-      |> rm_space
-      |> Str.split (Str.regexp "}")
+      |> Regexp.first_rm_exp Regexp.heap
+      |> Regexp.global_rm_exp Regexp.remain_symbol2
+      |> Regexp.global_rm_exp Regexp.o_bk
+      |> Regexp.rm_space |> Str.split Regexp.c_bk
     in
     let variables =
       List.fold_left
         (fun mmap var ->
           let i_and_s = String.split_on_char '=' var in
-          let id = List.hd i_and_s |> rm_space in
+          let id = List.hd i_and_s |> Regexp.rm_space in
           if String.length id = 0 then mmap
           else if List.tl i_and_s = [] then mmap
           else
-            let symbol = List.tl i_and_s |> List.hd |> rm_space in
+            let symbol = List.tl i_and_s |> List.hd |> Regexp.rm_space in
             Condition.M.add (symbol |> mk_rh_type) (Condition.RH_Var id) mmap)
         Condition.M.empty var_list
     in
     let rec mk_ref_map ref_trace mmap =
       match ref_trace with
       | hd :: tl -> (
-          if hd |> rm_space = "" then mmap
+          if hd |> Regexp.rm_space = "" then mmap
           else
             let ref = Str.split (Str.regexp "->") hd in
             try
-              let field = List.hd ref |> rm_space |> mk_rh_type in
-              let value = List.tl ref |> List.hd |> rm_space |> mk_rh_type in
+              let field = List.hd ref |> Regexp.rm_space |> mk_rh_type in
+              let value =
+                List.tl ref |> List.hd |> Regexp.rm_space |> mk_rh_type
+              in
               Condition.M.add field value mmap |> mk_ref_map tl
             with _ -> mk_ref_map tl mmap)
       | [] -> mmap
@@ -213,26 +204,20 @@ let parse_condition condition =
       List.fold_left
         (fun mmap ref ->
           let ref_trace =
-            rm_exp (Str.regexp "^,[ \t\r\n]*") ref
-            |> rm_space
-            |> Str.split (Str.regexp ",")
+            Regexp.global_rm_exp Regexp.start_bm ref
+            |> Regexp.rm_space |> Str.split Regexp.bm
           in
-          if
-            ref_trace = []
-            || Str.string_match
-                 ("^[ \t\r\n]*->[ \t\r\n]*$" |> Str.regexp)
-                 (List.hd ref_trace) 0
+          if ref_trace = [] || Str.string_match Regexp.ref (List.hd ref_trace) 0
           then mmap
           else
             let head =
-              List.hd ref_trace
-              |> Str.split (Str.regexp "->")
-              |> List.hd |> rm_space
+              List.hd ref_trace |> Str.split Regexp.arrow |> List.hd
+              |> Regexp.rm_space
             in
             let partial_tl =
               List.hd ref_trace
-              |> rm_exp ("^" ^ head ^ "[ \t\r\n]+->" |> Str.regexp)
-              |> rm_space
+              |> Regexp.global_rm_exp ("^" ^ head ^ "[ \t\r\n]+->" |> Str.regexp)
+              |> Regexp.rm_space
             in
             let trace = List.tl ref_trace |> List.cons partial_tl in
             let trace = mk_ref_map trace Condition.M.empty in
