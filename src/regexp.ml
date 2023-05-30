@@ -68,6 +68,24 @@ let dot = Str.regexp "\\."
 
 let space = Str.regexp " "
 
+let space2 = Str.regexp "  "
+
+let caller = Str.regexp "caller:"
+
+let callee = Str.regexp "callee:"
+
+let procname = Str.regexp "^.*procname:"
+
+let boitv = Str.regexp "^.*BoItv:"
+
+let citv = Str.regexp "^.*CItv:"
+
+let precond = Str.regexp "^.*Precond:"
+
+let postcond = Str.regexp "^.*Postcond:"
+
+let fparam = Str.regexp "^.*actual:"
+
 let global_rm_exp exp str = Str.global_replace exp "" str
 
 let first_rm_exp exp str = Str.replace_first exp "" str

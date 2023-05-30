@@ -143,7 +143,7 @@ let arg_call_prop str prop =
   let args =
     String.split_on_char ':' str |> List.tl |> List.hd |> Regexp.rm_space
   in
-  let arg_list = Str.split (Str.regexp "  ") args in
+  let arg_list = Str.split Regexp.space2 args in
   let arg_list = List.map Regexp.rm_space arg_list in
   {
     caller = prop.caller;
@@ -307,26 +307,26 @@ let rec parse_call_prop_dict data call_prop =
         is_precond := false;
         is_postcond := false;
         call_prop_list := call_prop :: !call_prop_list)
-      else if Str.string_match (Str.regexp "caller:") str 0 then
+      else if Str.string_match Regexp.caller str 0 then
         parse_call_prop_dict data (caller_call_prop str call_prop)
-      else if Str.string_match (Str.regexp "callee:") str 0 then
+      else if Str.string_match Regexp.callee str 0 then
         parse_call_prop_dict data (callee_call_prop str call_prop)
-      else if Str.string_match (Str.regexp "^.*BoItv:") str 0 then (
+      else if Str.string_match Regexp.boitv str 0 then (
         is_boitv := true;
         parse_call_prop_dict data (boitv_call_prop str call_prop))
-      else if Str.string_match (Str.regexp "^.*CItv:") str 0 then (
+      else if Str.string_match Regexp.citv str 0 then (
         is_citv := true;
         is_boitv := false;
         parse_call_prop_dict data (citv_call_prop str call_prop))
-      else if Str.string_match (Str.regexp "^.*Precond:") str 0 then (
+      else if Str.string_match Regexp.precond str 0 then (
         is_precond := true;
         is_citv := false;
         parse_call_prop_dict data (pre_call_prop str call_prop))
-      else if Str.string_match (Str.regexp "^.*Postcond:") str 0 then (
+      else if Str.string_match Regexp.postcond str 0 then (
         is_postcond := true;
         is_precond := false;
         parse_call_prop_dict data (post_call_prop str call_prop))
-      else if Str.string_match (Str.regexp "^.*actual:") str 0 then
+      else if Str.string_match Regexp.fparam str 0 then
         parse_call_prop_dict data (arg_call_prop str call_prop)
       else if !is_boitv then
         parse_call_prop_dict data (append_boitv_call_prop str call_prop)
@@ -353,20 +353,20 @@ let rec parse_err_prop_dict data err_prop =
         is_precond := false;
         is_postcond := false;
         err_prop_list := err_prop :: !err_prop_list)
-      else if Str.string_match (Str.regexp "^.*procname:") str 0 then
+      else if Str.string_match Regexp.procname str 0 then
         parse_err_prop_dict data (method_name_err_prop str err_prop)
-      else if Str.string_match (Str.regexp "^.*BoItv:") str 0 then (
+      else if Str.string_match Regexp.boitv str 0 then (
         is_boitv := true;
         parse_err_prop_dict data (boitv_err_prop str err_prop))
-      else if Str.string_match (Str.regexp "^.*CItv:") str 0 then (
+      else if Str.string_match Regexp.citv str 0 then (
         is_citv := true;
         is_boitv := false;
         parse_err_prop_dict data (citv_err_prop str err_prop))
-      else if Str.string_match (Str.regexp "^.*Precond:") str 0 then (
+      else if Str.string_match Regexp.precond str 0 then (
         is_precond := true;
         is_citv := false;
         parse_err_prop_dict data (pre_err_prop str err_prop))
-      else if Str.string_match (Str.regexp "^.*Postcond:") str 0 then (
+      else if Str.string_match Regexp.postcond str 0 then (
         is_postcond := true;
         is_precond := false;
         parse_err_prop_dict data (post_err_prop str err_prop))
