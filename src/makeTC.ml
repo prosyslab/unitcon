@@ -1065,7 +1065,6 @@ let get_class_name ~infer method_name =
   else Regexp.global_rm_exp ("(.*)" |> Str.regexp) method_name
 
 let get_setter_list constructor field_map method_info setter_map =
-  "constructor: " ^ constructor |> print_endline;
   let class_name = get_class_name ~infer:false constructor in
   let setter_list = try SetterMap.M.find class_name setter_map with _ -> [] in
   let rec find_then_remove_field setter_list field_map =
@@ -1457,7 +1456,12 @@ let get_setter_code constructor id method_summary constructor_summary
   in
   let new_summary = new_value_summary constructor_summary met_value_map in
   let iter_params params =
-    List.fold_left (fun list param -> (param, new_summary) :: list) [] params
+    List.fold_left
+      (fun list (import, var) ->
+        match var with
+        | Language.This _ -> list
+        | _ -> ((import, var), new_summary) :: list)
+      [] params
   in
   List.fold_left
     (fun list setter ->
