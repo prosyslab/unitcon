@@ -1088,8 +1088,15 @@ let get_setter_list constructor field_map method_info setter_map =
         else find_then_remove_field tl field_map
     | _ -> []
   in
-  find_then_remove_field setter_list field_map
+  let rec all_setter setter_list =
+    match setter_list with
+    | (method_name, _) :: tl -> all_setter tl |> List.cons method_name
+    | _ -> []
+  in
+  all_setter setter_list
   |> List.filter (fun setter -> is_private setter method_info |> not)
+(* find_then_remove_field setter_list field_map
+   |> List.filter (fun setter -> is_private setter method_info |> not) *)
 
 let get_setter constructor id method_summary constructor_summary method_info
     setter_map =
@@ -1473,7 +1480,7 @@ let get_setter_code constructor id method_summary constructor_summary
 
 (* statement data structure: code * import * mk_var_list *)
 let get_defined_statement class_package class_name id target_summary method_info
-    old_code old_import old_var_list =
+    setter_map old_code old_import old_var_list =
   let class_initializer =
     get_class_initializer_list class_name target_summary method_info
   in
@@ -1516,15 +1523,27 @@ let get_defined_statement class_package class_name id target_summary method_info
       let old_code = replace_null id old_code in
       [ (old_code, old_import, old_var_list) ]
     else
-      [
-        ( class_name ^ " " ^ id ^ " = null;\n" ^ old_code,
-          old_import,
-          old_var_list );
-        ( class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();\n"
-          ^ old_code,
-          import |> List.rev_append old_import,
-          old_var_list );
-      ]
+      let setter_code_list =
+        get_setter_code normal_class_name id target_summary
+          Language.empty_summary method_info setter_map
+      in
+      List.fold_left
+        (fun list (setter, var_list) ->
+          ( class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();\n"
+            ^ setter ^ old_code,
+            import |> List.rev_append old_import,
+            List.rev_append var_list old_var_list )
+          :: list)
+        [
+          ( class_name ^ " " ^ id ^ " = null;\n" ^ old_code,
+            old_import,
+            old_var_list );
+          ( class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();\n"
+            ^ old_code,
+            import |> List.rev_append old_import,
+            old_var_list );
+        ]
+        setter_code_list
   else
     [
       ( class_name ^ " " ^ id ^ " = " ^ class_initializer ^ ";\n" ^ old_code,
@@ -1814,7 +1833,7 @@ let get_constructor (class_package, class_name) id target_summary recv_package
   in
   if constr_summary_list = [] then
     get_defined_statement class_package class_name id target_summary method_info
-      code import var_list
+      setter_map code import var_list
   else
     get_many_constructor ~is_getter constr_summary_list class_package class_name
       id target_summary method_info class_info setter_map code import var_list
