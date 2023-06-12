@@ -757,7 +757,9 @@ let rec find_ps_method s_method source_summary call_graph summary call_prop_map
           match
             CallPropMap.M.find_opt (caller_method, s_method) call_prop_map
           with
-          | None -> list
+          | None ->
+              (* It is possible without any specific conditions *)
+              (caller_method, Language.empty_summary) :: list
           | Some prop_list ->
               List.fold_left
                 (fun caller_preconds call_prop ->
