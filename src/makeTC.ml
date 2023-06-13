@@ -1527,8 +1527,10 @@ let get_defined_statement class_package class_name id target_summary method_info
       [ (old_code, old_import, old_var_list) ]
     else
       let setter_code_list =
-        get_setter_code normal_class_name id target_summary
-          Language.empty_summary method_info setter_map
+        try
+          get_setter_code normal_class_name id target_summary
+            Language.empty_summary method_info setter_map
+        with _ -> []
       in
       List.fold_left
         (fun list (setter, var_list) ->
