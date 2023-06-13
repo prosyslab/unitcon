@@ -1640,8 +1640,11 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
       let constr_statement = constr_statement |> replace_nested_symbol in
       let code =
         if is_getter then
-          class_name ^ " " ^ id ^ " = " ^ constr_statement ^ ";\n"
-        else class_name ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n"
+          (class_name |> replace_nested_symbol)
+          ^ " " ^ id ^ " = " ^ constr_statement ^ ";\n"
+        else
+          (class_name |> replace_nested_symbol)
+          ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n"
       in
       let import =
         if origin_private then constructor_import |> List.rev_append old_import
