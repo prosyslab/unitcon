@@ -701,8 +701,8 @@ let is_private_class class_package class_info =
   | None -> false
 
 let is_static_method method_name method_info =
-  let m_info = MethodInfo.M.find method_name method_info in
-  m_info.MethodInfo.is_static
+  let m_info = MethodInfo.M.find_opt method_name method_info in
+  match m_info with None -> false | Some m -> m.MethodInfo.is_static
 
 let is_init_method method_name =
   Str.string_match (".*\\.<init>" |> Str.regexp) method_name 0
@@ -1524,7 +1524,12 @@ let get_defined_statement class_package class_name id target_summary method_info
       ]
     else if normal_class_name = "null" then
       let old_code = replace_null id old_code in
-      [ (old_code, old_import, old_var_list) ]
+      [
+        (old_code, old_import, old_var_list);
+        ( class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();\n" ^ old_code,
+          List.cons class_package old_import,
+          old_var_list );
+      ]
     else
       let setter_code_list =
         try
@@ -1638,6 +1643,35 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
           |> List.rev_append old_import
       in
       [ (code ^ old_code, import, old_var_list) ]
+    else if is_static_method (constructor |> fst) method_info then
+      (* don't remove the first parameter because first parameter is not this. *)
+      let constr_statement = constr_statement |> replace_nested_symbol in
+      let code =
+        if is_getter then
+          (class_name |> replace_nested_symbol)
+          ^ " " ^ id ^ " = " ^ constr_statement ^ ";\n"
+        else
+          (class_name |> replace_nested_symbol)
+          ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n"
+      in
+      let new_var =
+        constructor_params |> List.map (fun p -> (p, constructor_summary))
+      in
+      let old_var_list = List.rev_append new_var old_var_list in
+      let import =
+        if origin_private then constructor_import |> List.rev_append old_import
+        else
+          constructor_import |> List.cons class_package
+          |> List.rev_append old_import
+      in
+      List.fold_left
+        (fun list (setter, var_list) ->
+          ( code ^ setter ^ old_code,
+            import,
+            List.rev_append var_list old_var_list )
+          :: list)
+        [ (code ^ old_code, import, old_var_list) ]
+        setter_code_list
     else if List.length constructor_params = 1 then
       let constr_statement = constr_statement |> replace_nested_symbol in
       let code =
@@ -1945,6 +1979,7 @@ let get_statement param target_summary r_package summary method_info class_info
               [ param |> fst ] |> List.rev_append old_import,
               old_var_list );
           ]
+      | None -> [ (old_code, old_import, old_var_list) ]
       | _ -> failwith ("not allowed type var" ^ id))
 
 let pretty_tc_format all_param =
