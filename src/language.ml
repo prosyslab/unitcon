@@ -89,6 +89,7 @@ module Value = struct
     | PlusInf
     | MinusInf
     | Null
+    | None (* Determining whether to use the default value *)
 
   type op =
     | Eq of value

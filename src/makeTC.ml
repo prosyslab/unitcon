@@ -801,6 +801,23 @@ let calc_z3 id z3exp =
       else Z3.Arithmetic.Integer.numeral_to_string v
   | None -> ""
 
+let default_value_list typ =
+  let default_value =
+    match typ with
+    | Language.Int -> [ "0"; "1"; "-1"; "100"; "-100" ]
+    | Language.Long -> [ "0"; "1"; "-1"; "100"; "-100" ]
+    | Language.Float -> [ "0.0"; "1.0"; "-1.0"; "100.0"; "-100.0" ]
+    | Language.Double -> [ "0.0"; "1.0"; "-1.0"; "100.0"; "-100.0" ]
+    | Language.Bool -> [ "false"; "true" ]
+    | Language.Char -> [ "x" ]
+    | Language.String -> [ "" ]
+    | _ -> [ "null" ]
+  in
+  default_value
+
+let not_found_value value =
+  match value with Value.Eq None -> true | _ -> false
+
 let get_value typ id summary =
   let variables, mem = summary.Language.precond in
   let target_variable =
@@ -827,179 +844,175 @@ let get_value typ id summary =
       mem ""
   in
   let values = summary.Language.value in
-  let default_value =
-    match typ with
-    | Language.Int -> Value.Eq (Int (Random.int 100))
-    | Language.Long -> Value.Eq (Long (Random.int 100))
-    | Language.Float -> Value.Eq (Float (Random.float 100.0))
-    | Language.Double -> Value.Eq (Double (Random.float 100.0))
-    | Language.Bool -> Value.Eq (Bool false)
-    | Language.Char -> Value.Eq (Char 'x')
-    | Language.String -> Value.Eq (String String.empty)
-    | _ -> Value.Eq Null
-  in
+  let default_values = default_value_list typ in
   let find_value =
     Value.M.fold
       (fun symbol value find_value ->
         if symbol = target_variable then value else find_value)
-      values default_value
+      values (Value.Eq None)
   in
-  let value =
-    match find_value with
-    | Value.Eq v -> (
-        match v with
-        | Int i | Long i ->
-            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-            let z3exp = Z3.Boolean.mk_eq z3ctx var value in
-            calc_z3 var [ z3exp ]
-        | Float f | Double f ->
-            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-            let value =
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-            in
-            let z3exp = Z3.Boolean.mk_eq z3ctx var value in
-            calc_z3 var [ z3exp ]
-        | Bool b -> b |> string_of_bool
-        | Char c -> String.make 1 c
-        | String s -> s
-        | Null -> "null"
-        | _ -> failwith "not implemented eq")
-    | Value.Neq v -> (
-        match v with
-        | Int i | Long i ->
-            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-            let z3exp =
-              Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
-            in
-            calc_z3 var [ z3exp ]
-        | Float f | Double f ->
-            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-            let value =
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-            in
-            let z3exp =
-              Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
-            in
-            calc_z3 var [ z3exp ]
-        | Bool b -> b |> not |> string_of_bool
-        | String s -> "not " ^ s
-        | Null -> "not null"
-        | _ -> failwith "not implemented neq")
-    | Value.Le v -> (
-        match v with
-        | Int i | Long i ->
-            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-            let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
-            calc_z3 var [ z3exp ]
-        | Float f | Double f ->
-            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-            let value =
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-            in
-            let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
-            calc_z3 var [ z3exp ]
-        | _ -> failwith "not implemented le")
-    | Value.Lt v -> (
-        match v with
-        | Int i | Long i ->
-            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-            let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
-            calc_z3 var [ z3exp ]
-        | Float f | Double f ->
-            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-            let value =
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-            in
-            let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
-            calc_z3 var [ z3exp ]
-        | _ -> failwith "not implemented lt")
-    | Value.Ge v -> (
-        match v with
-        | Int i | Long i ->
-            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-            let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
-            calc_z3 var [ z3exp ]
-        | Float f | Double f ->
-            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-            let value =
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-            in
-            let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
-            calc_z3 var [ z3exp ]
-        | _ -> failwith "not implemented ge")
-    | Value.Gt v -> (
-        match v with
-        | Int i | Long i ->
-            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-            let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-            let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
-            calc_z3 var [ z3exp ]
-        | Float f | Double f ->
-            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-            let value =
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-            in
-            let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
-            calc_z3 var [ z3exp ]
-        | _ -> failwith "not implemented gt")
-    | Value.Between (v1, v2) -> (
-        match (v1, v2) with
-        | Int i1, Int i2 | Long i1, Long i2 | Int i1, Long i2 | Long i1, Int i2
-          ->
-            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-            let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
-            let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
-            let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
-            let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
-            calc_z3 var [ z3exp1; z3exp2 ]
-        | Float f1, Float f2
-        | Double f1, Double f2
-        | Float f1, Double f2
-        | Double f1, Float f2 ->
-            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-            let value1 =
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
-            in
-            let value2 =
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
-            in
-            let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
-            let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
+  if not_found_value find_value then default_values
+  else
+    let value =
+      match find_value with
+      | Value.Eq v -> (
+          match v with
+          | Int i | Long i ->
+              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+              let z3exp = Z3.Boolean.mk_eq z3ctx var value in
+              calc_z3 var [ z3exp ]
+          | Float f | Double f ->
+              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+              let value =
+                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+              in
+              let z3exp = Z3.Boolean.mk_eq z3ctx var value in
+              calc_z3 var [ z3exp ]
+          | Bool b -> b |> string_of_bool
+          | Char c -> String.make 1 c
+          | String s -> s
+          | Null -> "null"
+          | _ -> failwith "not implemented eq")
+      | Value.Neq v -> (
+          match v with
+          | Int i | Long i ->
+              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+              let z3exp =
+                Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
+              in
+              calc_z3 var [ z3exp ]
+          | Float f | Double f ->
+              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+              let value =
+                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+              in
+              let z3exp =
+                Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
+              in
+              calc_z3 var [ z3exp ]
+          | Bool b -> b |> not |> string_of_bool
+          | String s -> "not " ^ s
+          | Null -> "not null"
+          | _ -> failwith "not implemented neq")
+      | Value.Le v -> (
+          match v with
+          | Int i | Long i ->
+              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+              let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
+              calc_z3 var [ z3exp ]
+          | Float f | Double f ->
+              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+              let value =
+                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+              in
+              let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
+              calc_z3 var [ z3exp ]
+          | _ -> failwith "not implemented le")
+      | Value.Lt v -> (
+          match v with
+          | Int i | Long i ->
+              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+              let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
+              calc_z3 var [ z3exp ]
+          | Float f | Double f ->
+              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+              let value =
+                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+              in
+              let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
+              calc_z3 var [ z3exp ]
+          | _ -> failwith "not implemented lt")
+      | Value.Ge v -> (
+          match v with
+          | Int i | Long i ->
+              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+              let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
+              calc_z3 var [ z3exp ]
+          | Float f | Double f ->
+              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+              let value =
+                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+              in
+              let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
+              calc_z3 var [ z3exp ]
+          | _ -> failwith "not implemented ge")
+      | Value.Gt v -> (
+          match v with
+          | Int i | Long i ->
+              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+              let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
+              calc_z3 var [ z3exp ]
+          | Float f | Double f ->
+              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+              let value =
+                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+              in
+              let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
+              calc_z3 var [ z3exp ]
+          | _ -> failwith "not implemented gt")
+      | Value.Between (v1, v2) -> (
+          match (v1, v2) with
+          | Int i1, Int i2
+          | Long i1, Long i2
+          | Int i1, Long i2
+          | Long i1, Int i2 ->
+              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+              let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
+              let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
+              let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
+              let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
+              calc_z3 var [ z3exp1; z3exp2 ]
+          | Float f1, Float f2
+          | Double f1, Double f2
+          | Float f1, Double f2
+          | Double f1, Float f2 ->
+              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+              let value1 =
+                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
+              in
+              let value2 =
+                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
+              in
+              let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
+              let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
 
-            calc_z3 var [ z3exp1; z3exp2 ]
-        | _ -> failwith "not implemented between")
-    | Value.Outside (v1, v2) -> (
-        match (v1, v2) with
-        | Int i1, Int i2 | Long i1, Long i2 | Int i1, Long i2 | Long i1, Int i2
-          ->
-            let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-            let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
-            let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
-            let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
-            let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
-            calc_z3 var [ z3exp1; z3exp2 ]
-        | Float f1, Float f2
-        | Double f1, Double f2
-        | Float f1, Double f2
-        | Double f1, Float f2 ->
-            let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-            let value1 =
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
-            in
-            let value2 =
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
-            in
-            let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
-            let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
-            calc_z3 var [ z3exp1; z3exp2 ]
-        | _ -> failwith "not implemented outside")
-  in
-  value
+              calc_z3 var [ z3exp1; z3exp2 ]
+          | _ -> failwith "not implemented between")
+      | Value.Outside (v1, v2) -> (
+          match (v1, v2) with
+          | Int i1, Int i2
+          | Long i1, Long i2
+          | Int i1, Long i2
+          | Long i1, Int i2 ->
+              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+              let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
+              let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
+              let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
+              let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
+              calc_z3 var [ z3exp1; z3exp2 ]
+          | Float f1, Float f2
+          | Double f1, Double f2
+          | Float f1, Double f2
+          | Double f1, Float f2 ->
+              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+              let value1 =
+                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
+              in
+              let value2 =
+                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
+              in
+              let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
+              let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
+              calc_z3 var [ z3exp1; z3exp2 ]
+          | _ -> failwith "not implemented outside")
+    in
+    [ value ]
 
 let get_field_value_map field_name value_map field_map value memory =
   Condition.M.fold
@@ -1921,55 +1934,65 @@ let get_statement param target_summary r_package summary method_info class_info
             setter_map old_code old_import old_var_list
       | _ -> failwith "not allowed type this")
   | Language.Var (typ, id) -> (
+      let values = get_value typ id target_summary in
       match typ with
       | Int ->
-          let stm =
-            "int " ^ id ^ " = " ^ get_value typ id target_summary ^ ";\n"
-          in
-          [ (stm ^ old_code, old_import, old_var_list) ]
+          List.fold_left
+            (fun list value ->
+              let stm = "int " ^ id ^ " = " ^ value ^ ";\n" in
+              (stm ^ old_code, old_import, old_var_list) :: list)
+            [] values
       | Long ->
-          let stm =
-            "long " ^ id ^ " = " ^ get_value typ id target_summary ^ ";\n"
-          in
-          [ (stm ^ old_code, old_import, old_var_list) ]
+          List.fold_left
+            (fun list value ->
+              let stm = "long " ^ id ^ " = " ^ value ^ ";\n" in
+              (stm ^ old_code, old_import, old_var_list) :: list)
+            [] values
       | Float ->
-          let stm =
-            "float " ^ id ^ " = " ^ get_value typ id target_summary ^ ";\n"
-          in
-          [ (stm ^ old_code, old_import, old_var_list) ]
+          List.fold_left
+            (fun list value ->
+              let stm = "float " ^ id ^ " = " ^ value ^ ";\n" in
+              (stm ^ old_code, old_import, old_var_list) :: list)
+            [] values
       | Double ->
-          let stm =
-            "double " ^ id ^ " = " ^ get_value typ id target_summary ^ ";\n"
-          in
-          [ (stm ^ old_code, old_import, old_var_list) ]
+          List.fold_left
+            (fun list value ->
+              let stm = "double " ^ id ^ " = " ^ value ^ ";\n" in
+              (stm ^ old_code, old_import, old_var_list) :: list)
+            [] values
       | Bool ->
-          let get_boolean = get_value typ id target_summary in
-          let get_boolean =
-            match int_of_string_opt get_boolean with
-            | Some i -> if i = 0 then "false" else "true"
-            | _ -> get_boolean
-          in
-          let stm = "boolean " ^ id ^ " = " ^ get_boolean ^ ";\n" in
-          [ (stm ^ old_code, old_import, old_var_list) ]
+          List.fold_left
+            (fun list value ->
+              let value =
+                match int_of_string_opt value with
+                | Some i -> if i = 0 then "false" else "true"
+                | _ -> value
+              in
+              let stm = "boolean " ^ id ^ " = " ^ value ^ ";\n" in
+              (stm ^ old_code, old_import, old_var_list) :: list)
+            [] values
       | Char ->
-          let stm =
-            "char " ^ id ^ " = \'" ^ get_value typ id target_summary ^ "\';\n"
-          in
-          [ (stm ^ old_code, old_import, old_var_list) ]
+          List.fold_left
+            (fun list value ->
+              let stm = "char " ^ id ^ " = \'" ^ value ^ "\';\n" in
+              (stm ^ old_code, old_import, old_var_list) :: list)
+            [] values
       | String ->
-          let get_string = get_value typ id target_summary in
-          let get_string =
-            if get_string = "null" then get_string
-            else if Str.string_match (Str.regexp "^not ") get_string 0 then
-              let get_string = Regexp.global_rm_exp Regexp.space get_string in
-              "\"" ^ get_string ^ "\""
-            else "\"" ^ get_string ^ "\""
-          in
-          [
-            ( "String " ^ id ^ " = " ^ get_string ^ ";\n" ^ old_code,
-              [ param |> fst ] |> List.rev_append old_import,
-              old_var_list );
-          ]
+          List.fold_left
+            (fun list value ->
+              let value =
+                if value = "null" then value
+                else if Str.string_match (Str.regexp "^not ") value 0 then
+                  let value = Regexp.global_rm_exp Regexp.space value in
+                  "\"" ^ value ^ "\""
+                else "\"" ^ value ^ "\""
+              in
+              let stm = "String " ^ id ^ " = " ^ value ^ ";\n" in
+              ( stm ^ old_code,
+                [ param |> fst ] |> List.rev_append old_import,
+                old_var_list )
+              :: list)
+            [] values
       | Object name ->
           get_constructor
             (param |> fst, name)
