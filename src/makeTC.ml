@@ -711,8 +711,16 @@ let is_private method_name method_info =
   let info = MethodInfo.M.find method_name method_info in
   match info.MethodInfo.modifier with Private -> true | _ -> false
 
+let is_test_file file_name =
+  Str.string_match (Str.regexp ".*/test/.*") file_name 0
+
 let is_public_or_default ~is_getter recv_package method_name method_info =
   let info = MethodInfo.M.find method_name method_info in
+  let is_test_file =
+    (* If this method is a method in the test file,
+       don't use it even if the modifier is public*)
+    is_test_file info.MethodInfo.filename
+  in
   let m_package =
     List.fold_left
       (fun found (import, var) ->
@@ -734,7 +742,10 @@ let is_public_or_default ~is_getter recv_package method_name method_info =
       match info.MethodInfo.modifier with
       | Default | Public -> true
       | _ -> false
-    else match info.MethodInfo.modifier with Public -> true | _ -> false
+    else
+      match info.MethodInfo.modifier with
+      | Public when not is_test_file -> true
+      | _ -> false
 
 let is_recursive_param parent_class method_name method_info =
   let info = MethodInfo.M.find method_name method_info in
@@ -1524,12 +1535,7 @@ let get_defined_statement class_package class_name id target_summary method_info
       ]
     else if normal_class_name = "null" then
       let old_code = replace_null id old_code in
-      [
-        (old_code, old_import, old_var_list);
-        ( class_name ^ " " ^ id ^ " = new " ^ class_name ^ "();\n" ^ old_code,
-          List.cons class_package old_import,
-          old_var_list );
-      ]
+      [ (old_code, old_import, old_var_list) ]
     else
       let setter_code_list =
         try
