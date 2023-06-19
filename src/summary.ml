@@ -346,9 +346,12 @@ let mapping_summary method_summarys mmap =
 
 let from_method_json json =
   let json = JsonUtil.to_list json in
-  List.fold_left
-    (fun mmap method_info -> mapping_method_info method_info mmap)
-    MethodInfo.M.empty json
+  let method_info =
+    List.fold_left
+      (fun mmap method_info -> mapping_method_info method_info mmap)
+      MethodInfo.M.empty json
+  in
+  Modeling.add_java_package_method method_info
 
 let from_summary_json json =
   let json = JsonUtil.to_list json in

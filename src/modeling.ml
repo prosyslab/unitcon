@@ -2,6 +2,7 @@ module Relation = Language.Relation
 module Value = Language.Value
 module Condition = Language.Condition
 module SummaryMap = Language.SummaryMap
+module MethodInfo = Language.MethodInfo
 
 let mk_hashmap_var =
   Condition.M.empty
@@ -53,6 +54,23 @@ let mk_hashmap_summary =
       args = [];
     }
 
+let mk_hashmap_info =
+  let typ = Language.Object "Object" in
+  let arg1 = ("", Language.Var (typ, "obj1")) in
+  let arg2 = ("", Language.Var (typ, "obj2")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ arg1; arg2 ];
+      return = "void";
+      filename = "";
+    }
+
 let add_java_package_summary mmap =
   let hash_map = "HashMap.put(Object,Object)" in
   SummaryMap.M.add hash_map [ mk_hashmap_summary ] mmap
+
+let add_java_package_method mmap =
+  let hash_map = "HashMap.put(Object,Object)" in
+  MethodInfo.M.add hash_map mk_hashmap_info mmap
