@@ -981,7 +981,6 @@ let get_value typ id summary =
               in
               let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
               let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
-
               calc_z3 var [ z3exp1; z3exp2 ]
           | _ -> failwith "not implemented between")
       | Value.Outside (v1, v2) -> (
@@ -1192,14 +1191,14 @@ let check_correct_constructor method_summary id candidate_constructor summary =
 let remove_same_name c_list =
   let get_same_one target list =
     List.filter
-      (fun (c_name, _, _) ->
+      (fun (c_name, _, _, _) ->
         let class_name = get_class_name ~infer:true c_name in
         target = class_name)
       list
     |> List.hd
   in
   List.fold_left
-    (fun new_list (c, _, _) ->
+    (fun new_list (c, _, _, _) ->
       let name = get_class_name ~infer:true c in
       let one = get_same_one name c_list in
       if List.mem one new_list then new_list else one :: new_list)
@@ -1293,7 +1292,7 @@ let get_constructor_list (class_package, class_name) method_info
             is_normal_class class_name_to_find class_info
             && is_private method_name method_info |> not
             && match_constructor_name class_name_to_find method_name
-          then method_name :: init_list
+          then (method_name, class_package) :: init_list
           else init_list)
         method_list class_to_find)
     method_info []
@@ -1371,7 +1370,7 @@ let get_array_constructor typ size =
 
 let sort_constructor_list constructor_list method_info =
   List.sort
-    (fun (c1, _, k1) (c2, _, k2) ->
+    (fun (c1, _, k1, _) (c2, _, k2, _) ->
       if compare k1 k2 <> 0 then compare k2 k1
       else
         let c1_info = MethodInfo.M.find c1 method_info in
@@ -1580,8 +1579,12 @@ let get_defined_statement class_package class_name id target_summary method_info
         old_var_list );
     ]
 
+let find_import method_name class_info =
+  let _, import = get_static_constructor method_name class_info in
+  import
+
 let get_return_object (class_package, class_name) method_info
-    (_, hierarchy_graph) =
+    (class_info, hierarchy_graph) =
   let full_class_name =
     if class_package = "" then class_name else class_package
   in
@@ -1596,7 +1599,7 @@ let get_return_object (class_package, class_name) method_info
           if
             is_static_method method_name method_info
             && match_return_object class_name_to_find method_name method_info
-          then method_name :: init_list
+          then (method_name, find_import method_name class_info) :: init_list
           else init_list)
         method_list class_to_find)
     method_info []
@@ -1604,11 +1607,12 @@ let get_return_object (class_package, class_name) method_info
 let get_one_constructor ~is_getter ~origin_private constructor class_package
     class_name id target_summary method_info class_info setter_map old_code
     old_import old_var_list =
-  if constructor |> fst = "null" then
+  let c, s, i = constructor in
+  if c = "null" then
     let old_code = replace_null id old_code in
     [ (old_code, old_import, old_var_list) ]
   else
-    let constr_statement = constructor |> fst in
+    let constr_statement = c in
     let class_name =
       if origin_private then
         constr_statement |> replace_nested_symbol
@@ -1624,7 +1628,7 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
           match param with Language.This _ -> import | _ -> find)
         "" constructor_params
     in
-    let constructor_summary = constructor |> snd in
+    let constructor_summary = s in
     let setter_code_list =
       get_setter_code class_name id target_summary constructor_summary
         method_info setter_map
@@ -1662,7 +1666,7 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
           |> List.rev_append old_import
       in
       [ (code ^ old_code, import, old_var_list) ]
-    else if is_static_method (constructor |> fst) method_info then
+    else if is_static_method c method_info then
       (* don't remove the first parameter because first parameter is not this. *)
       let constr_statement = constr_statement |> replace_nested_symbol in
       let code =
@@ -1678,6 +1682,10 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
       in
       let old_var_list = List.rev_append new_var old_var_list in
       let import =
+        let constructor_import =
+          if is_getter then List.cons i constructor_import
+          else constructor_import
+        in
         if origin_private then constructor_import |> List.rev_append old_import
         else
           constructor_import |> List.cons class_package
@@ -1702,6 +1710,10 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
           ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n"
       in
       let import =
+        let constructor_import =
+          if is_getter then List.cons i constructor_import
+          else constructor_import
+        in
         if origin_private then constructor_import |> List.rev_append old_import
         else
           constructor_import |> List.cons class_package
@@ -1785,6 +1797,10 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
           ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n"
       in
       let import =
+        let constructor_import =
+          if is_getter then List.cons i constructor_import
+          else constructor_import
+        in
         if origin_private then constructor_import |> List.rev_append old_import
         else
           constructor_import |> List.cons class_package
@@ -1814,6 +1830,10 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
         else class_name ^ " " ^ id ^ " = new " ^ constr_statement ^ ";\n"
       in
       let import =
+        let constructor_import =
+          if is_getter then List.cons i constructor_import
+          else constructor_import
+        in
         if origin_private then constructor_import |> List.rev_append old_import
         else
           constructor_import |> List.cons class_package
@@ -1847,13 +1867,13 @@ let get_many_constructor ~is_getter constr_summary_list class_package class_name
   in
   let constructor_list =
     if Str.string_match (Str.regexp "gen") id 0 then constructor_list
-    else ("null", Language.empty_summary, 0) :: constructor_list
+    else ("null", Language.empty_summary, 0, "") :: constructor_list
   in
   let is_origin_private = is_private_class class_package class_info in
   List.fold_left
     (fun list constructor ->
-      let c, s, _ = constructor in
-      let constructor = (c, s) in
+      let c, s, _, i = constructor in
+      let constructor = (c, s, i) in
       let new_list =
         get_one_constructor ~is_getter ~origin_private:is_origin_private
           constructor class_package class_name id target_summary method_info
@@ -1876,19 +1896,19 @@ let get_constructor (class_package, class_name) id target_summary recv_package
   in
   let constr_summary_list =
     List.fold_left
-      (fun list constructor ->
+      (fun list (constructor, import) ->
         let check, summary, count =
           check_correct_constructor target_summary id constructor summary
         in
-        if check then (constructor, summary, count) :: list else list)
+        if check then (constructor, summary, count, import) :: list else list)
       [] constr_summary_list
   in
   let constr_summary_list =
     List.filter
-      (fun (c, _, _) ->
+      (fun (c, _, _, _) ->
         is_public_or_default ~is_getter recv_package c method_info)
       constr_summary_list
-    |> List.filter (fun (c, _, _) ->
+    |> List.filter (fun (c, _, _, _) ->
            is_recursive_param class_name c method_info |> not)
     |> remove_same_name
   in
