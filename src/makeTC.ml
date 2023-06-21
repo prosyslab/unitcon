@@ -105,62 +105,62 @@ let more_find_head_symbol head_symbol _ memory =
 let get_symbol_list values =
   Value.M.fold (fun symbol _ symbol_list -> symbol :: symbol_list) values []
 
+let rec find_real_head head_symbol memory =
+  let exist_head_symbol =
+    Condition.M.filter (more_find_head_symbol head_symbol) memory
+  in
+  let exist_head_symbol =
+    Condition.M.fold
+      (fun head_cand _ cand ->
+        match head_cand with Condition.RH_Symbol s -> s | _ -> cand)
+      exist_head_symbol ""
+  in
+  if exist_head_symbol = "" then head_symbol
+  else find_real_head exist_head_symbol memory
+
+let get_head_symbol symbol memory =
+  Condition.M.fold
+    (fun head_symbol trace head_list ->
+      let head =
+        find_real_head (get_rh_name ~is_var:false head_symbol) memory
+      in
+      Condition.M.fold
+        (fun _ trace_tail head_list ->
+          match trace_tail with
+          | Condition.RH_Symbol s when symbol = s -> [ (symbol, head) ]
+          | _ -> head_list)
+        trace head_list)
+    memory []
+
 (* memory: Condition.mem *)
 (* return: (callee_actual_symbol * head_symbol) list *)
 (* if head = "" then this symbol can be any value *)
 let get_head_symbol_list symbols (_, memory) =
-  let rec find_real_head head_symbol memory =
-    let exist_head_symbol =
-      Condition.M.filter (more_find_head_symbol head_symbol) memory
-    in
-    let exist_head_symbol =
-      Condition.M.fold
-        (fun head_cand _ cand ->
-          match head_cand with Condition.RH_Symbol s -> s | _ -> cand)
-        exist_head_symbol ""
-    in
-    if exist_head_symbol = "" then head_symbol
-    else find_real_head exist_head_symbol memory
-  in
-  let get_head_symbol symbol memory =
-    Condition.M.fold
-      (fun head_symbol trace head_list ->
-        let head =
-          find_real_head (get_rh_name ~is_var:false head_symbol) memory
-        in
-        Condition.M.fold
-          (fun _ trace_tail head_list ->
-            match trace_tail with
-            | Condition.RH_Symbol s when symbol = s -> [ (symbol, head) ]
-            | _ -> head_list)
-          trace head_list)
-      memory []
-  in
   List.map
     (fun symbol ->
       try get_head_symbol symbol memory |> List.hd with _ -> (symbol, ""))
     symbols
 
+let get_param_index head_symbol variables formal_params =
+  let variable = find_variable head_symbol variables in
+  let index =
+    let rec get_index count params =
+      match params with
+      | hd :: tl -> (
+          match hd |> snd with
+          | Language.This _ -> get_index (count + 1) tl
+          | Var (_, id) when id = variable -> count
+          | _ -> get_index (count + 1) tl)
+      | [] -> -1
+    in
+    get_index 0 formal_params
+  in
+  index
+
 (* variables: Condition.var *)
 (* return: (callee_actual_symbol * head_symbol * param_index) list *)
 (* if param_index = -1 then this symbol can be any value *)
 let get_param_index_list head_symbol_list (variables, _) formal_params =
-  let get_param_index head_symbol variables formal_params =
-    let variable = find_variable head_symbol variables in
-    let index =
-      let rec get_index count params =
-        match params with
-        | hd :: tl -> (
-            match hd |> snd with
-            | Language.This _ -> get_index (count + 1) tl
-            | Var (_, id) ->
-                if id = variable then count else get_index (count + 1) tl)
-        | [] -> -1
-      in
-      get_index 0 formal_params
-    in
-    index
-  in
   List.map
     (fun (symbol, head_symbol) ->
       if head_symbol = "" then (symbol, head_symbol, -1)
@@ -180,6 +180,29 @@ let get_caller_value_symbol_list caller_prop callee_param_index_list =
         (caller_value_symbol, callee_value_symbol))
     callee_param_index_list
 
+let get_field_symbol id symbol mem =
+  get_tail_symbol
+    (id |> get_rh_name ~is_var:true)
+    (Condition.RH_Symbol symbol) mem
+
+let get_value_symbol key sym c t_mem c_mem =
+  let c_sym =
+    match Condition.M.find_opt key c with
+    | Some s -> s
+    | None -> (
+        match Condition.M.find_opt Condition.RH_Any c with
+        | Some s -> s
+        | None -> Condition.RH_Any (*fail to match*))
+  in
+  let field_name = get_rh_name ~is_var:true key in
+  let tail_t_symbol =
+    get_tail_symbol field_name sym t_mem |> get_rh_name ~is_var:false
+  in
+  let tail_c_symbol =
+    get_tail_symbol field_name c_sym c_mem |> get_rh_name ~is_var:false
+  in
+  (tail_t_symbol, tail_c_symbol)
+
 let get_value_symbol_list ~is_init t_summary c_summary vs_list =
   let vs_list =
     if is_init then
@@ -187,51 +210,22 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
       let t_symbol, c_symbol = vs_list |> List.hd in
       let t_var, t_mem = t_summary.Language.precond in
       let c_var, c_mem = c_summary.Language.precond in
-      let compare_t_mem =
-        Condition.M.find_opt (Condition.RH_Symbol t_symbol) t_var
-      in
-      let compare_c_mem =
-        Condition.M.find_opt (Condition.RH_Symbol c_symbol) c_var
-      in
-      match (compare_t_mem, compare_c_mem) with
+      let c_t_mem = Condition.M.find_opt (Condition.RH_Symbol t_symbol) t_var in
+      let c_c_mem = Condition.M.find_opt (Condition.RH_Symbol c_symbol) c_var in
+      match (c_t_mem, c_c_mem) with
       | None, _ | _, None -> [ (t_symbol, c_symbol) ]
       | Some t_id, Some c_id -> (
-          let t_symbol =
-            get_tail_symbol
-              (t_id |> get_rh_name ~is_var:true)
-              (Condition.RH_Symbol t_symbol) t_mem
-          in
-          let c_symbol =
-            get_tail_symbol
-              (c_id |> get_rh_name ~is_var:true)
-              (Condition.RH_Symbol c_symbol) c_mem
-          in
-          let compare_t_mem = Condition.M.find_opt t_symbol t_mem in
-          let compare_c_mem = Condition.M.find_opt c_symbol c_mem in
-          match (compare_t_mem, compare_c_mem) with
+          let t_symbol = get_field_symbol t_id t_symbol t_mem in
+          let c_symbol = get_field_symbol c_id c_symbol c_mem in
+          let c_t_mem = Condition.M.find_opt t_symbol t_mem in
+          let c_c_mem = Condition.M.find_opt c_symbol c_mem in
+          match (c_t_mem, c_c_mem) with
           | None, _ -> []
           | _, None -> []
           | Some t, Some c ->
               Condition.M.fold
                 (fun key sym sym_list ->
-                  let c_sym =
-                    match Condition.M.find_opt key c with
-                    | Some s -> s
-                    | None -> (
-                        match Condition.M.find_opt Condition.RH_Any c with
-                        | Some s -> s
-                        | None -> Condition.RH_Any (*fail to match*))
-                  in
-                  let field_name = get_rh_name ~is_var:true key in
-                  let tail_t_symbol =
-                    get_tail_symbol field_name sym t_mem
-                    |> get_rh_name ~is_var:false
-                  in
-                  let tail_c_symbol =
-                    get_tail_symbol field_name c_sym c_mem
-                    |> get_rh_name ~is_var:false
-                  in
-                  (tail_t_symbol, tail_c_symbol) :: sym_list)
+                  get_value_symbol key sym c t_mem c_mem :: sym_list)
                 t [])
     else vs_list
   in
@@ -665,6 +659,12 @@ let match_precond callee_method callee_summary call_prop method_info =
   let values, check = intersect_value in
   if check = [] then (values, true) else (values, false)
 
+let get_package formal_params =
+  List.fold_left
+    (fun found (import, var) ->
+      match var with Language.This _ -> import | _ -> found)
+    "" formal_params
+
 let is_public s_method method_info =
   let s_method_info = MethodInfo.M.find s_method method_info in
   match s_method_info.MethodInfo.modifier with Public -> true | _ -> false
@@ -672,7 +672,6 @@ let is_public s_method method_info =
 let is_nested_class name = String.contains name '$'
 
 let is_normal_class class_name class_info =
-  (* let class_name = Str.global_replace (Str.regexp "\\.") "$" class_name in *)
   match ClassInfo.M.find_opt class_name class_info with
   | Some typ -> (
       match typ.ClassInfo.class_type with
@@ -721,12 +720,7 @@ let is_public_or_default ~is_getter recv_package method_name method_info =
        don't use it even if the modifier is public*)
     is_test_file info.MethodInfo.filename
   in
-  let m_package =
-    List.fold_left
-      (fun found (import, var) ->
-        match var with Language.This _ -> import | _ -> found)
-      "" info.MethodInfo.formal_params
-  in
+  let m_package = get_package info.MethodInfo.formal_params in
   if is_getter then
     match info.MethodInfo.modifier with Public -> true | _ -> false
   else if m_package = "" then false
@@ -759,6 +753,17 @@ let is_recursive_param parent_class method_name method_info =
 
 let rec find_ps_method s_method source_summary call_graph summary call_prop_map
     method_info =
+  let propagation caller_method caller_preconds call_prop =
+    let new_value, check_match =
+      match_precond s_method source_summary call_prop method_info
+    in
+    if check_match then
+      let new_call_prop = new_value_summary call_prop new_value in
+      List.rev_append caller_preconds
+        (find_ps_method caller_method new_call_prop call_graph summary
+           call_prop_map method_info)
+    else caller_preconds
+  in
   if is_public s_method method_info then [ (s_method, source_summary) ]
   else
     let caller_list = CG.succ call_graph s_method in
@@ -775,15 +780,7 @@ let rec find_ps_method s_method source_summary call_graph summary call_prop_map
           | Some prop_list ->
               List.fold_left
                 (fun caller_preconds call_prop ->
-                  let new_value, check_match =
-                    match_precond s_method source_summary call_prop method_info
-                  in
-                  if check_match then
-                    let new_call_prop = new_value_summary call_prop new_value in
-                    List.rev_append caller_preconds
-                      (find_ps_method caller_method new_call_prop call_graph
-                         summary call_prop_map method_info)
-                  else caller_preconds)
+                  propagation caller_method caller_preconds call_prop)
                 [] prop_list
         in
         List.rev_append list caller_prop_list)
@@ -815,8 +812,158 @@ let default_value_list typ =
   in
   default_value
 
-let not_found_value value =
-  match value with Value.Eq None -> true | _ -> false
+let not_found_value = function Value.Eq None -> true | _ -> false
+
+let calc_value id = function
+  | Value.Eq v -> (
+      match v with
+      | Int i | Long i ->
+          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+          let z3exp = Z3.Boolean.mk_eq z3ctx var value in
+          calc_z3 var [ z3exp ]
+      | Float f | Double f ->
+          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+          let value =
+            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+          in
+          let z3exp = Z3.Boolean.mk_eq z3ctx var value in
+          calc_z3 var [ z3exp ]
+      | Bool b -> b |> string_of_bool
+      | Char c -> String.make 1 c
+      | String s -> s
+      | Null -> "null"
+      | _ -> failwith "not implemented eq")
+  | Value.Neq v -> (
+      match v with
+      | Int i | Long i ->
+          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+          let z3exp =
+            Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
+          in
+          calc_z3 var [ z3exp ]
+      | Float f | Double f ->
+          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+          let value =
+            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+          in
+          let z3exp =
+            Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
+          in
+          calc_z3 var [ z3exp ]
+      | Bool b -> b |> not |> string_of_bool
+      | String s -> "not " ^ s
+      | Null -> "not null"
+      | _ -> failwith "not implemented neq")
+  | Value.Le v -> (
+      match v with
+      | Int i | Long i ->
+          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+          let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
+          calc_z3 var [ z3exp ]
+      | Float f | Double f ->
+          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+          let value =
+            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+          in
+          let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
+          calc_z3 var [ z3exp ]
+      | _ -> failwith "not implemented le")
+  | Value.Lt v -> (
+      match v with
+      | Int i | Long i ->
+          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+          let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
+          calc_z3 var [ z3exp ]
+      | Float f | Double f ->
+          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+          let value =
+            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+          in
+          let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
+          calc_z3 var [ z3exp ]
+      | _ -> failwith "not implemented lt")
+  | Value.Ge v -> (
+      match v with
+      | Int i | Long i ->
+          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+          let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
+          calc_z3 var [ z3exp ]
+      | Float f | Double f ->
+          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+          let value =
+            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+          in
+          let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
+          calc_z3 var [ z3exp ]
+      | _ -> failwith "not implemented ge")
+  | Value.Gt v -> (
+      match v with
+      | Int i | Long i ->
+          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
+          let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
+          calc_z3 var [ z3exp ]
+      | Float f | Double f ->
+          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+          let value =
+            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+          in
+          let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
+          calc_z3 var [ z3exp ]
+      | _ -> failwith "not implemented gt")
+  | Value.Between (v1, v2) -> (
+      match (v1, v2) with
+      | Int i1, Int i2 | Long i1, Long i2 | Int i1, Long i2 | Long i1, Int i2 ->
+          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+          let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
+          let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
+          let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
+          let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
+          calc_z3 var [ z3exp1; z3exp2 ]
+      | Float f1, Float f2
+      | Double f1, Double f2
+      | Float f1, Double f2
+      | Double f1, Float f2 ->
+          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+          let value1 =
+            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
+          in
+          let value2 =
+            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
+          in
+          let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
+          let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
+          calc_z3 var [ z3exp1; z3exp2 ]
+      | _ -> failwith "not implemented between")
+  | Value.Outside (v1, v2) -> (
+      match (v1, v2) with
+      | Int i1, Int i2 | Long i1, Long i2 | Int i1, Long i2 | Long i1, Int i2 ->
+          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
+          let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
+          let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
+          let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
+          let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
+          calc_z3 var [ z3exp1; z3exp2 ]
+      | Float f1, Float f2
+      | Double f1, Double f2
+      | Float f1, Double f2
+      | Double f1, Float f2 ->
+          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
+          let value1 =
+            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
+          in
+          let value2 =
+            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
+          in
+          let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
+          let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
+          calc_z3 var [ z3exp1; z3exp2 ]
+      | _ -> failwith "not implemented outside")
 
 let get_value typ id summary =
   let variables, mem = summary.Language.precond in
@@ -852,166 +999,7 @@ let get_value typ id summary =
       values (Value.Eq None)
   in
   if not_found_value find_value then default_values
-  else
-    let value =
-      match find_value with
-      | Value.Eq v -> (
-          match v with
-          | Int i | Long i ->
-              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-              let z3exp = Z3.Boolean.mk_eq z3ctx var value in
-              calc_z3 var [ z3exp ]
-          | Float f | Double f ->
-              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-              let value =
-                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-              in
-              let z3exp = Z3.Boolean.mk_eq z3ctx var value in
-              calc_z3 var [ z3exp ]
-          | Bool b -> b |> string_of_bool
-          | Char c -> String.make 1 c
-          | String s -> s
-          | Null -> "null"
-          | _ -> failwith "not implemented eq")
-      | Value.Neq v -> (
-          match v with
-          | Int i | Long i ->
-              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-              let z3exp =
-                Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
-              in
-              calc_z3 var [ z3exp ]
-          | Float f | Double f ->
-              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-              let value =
-                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-              in
-              let z3exp =
-                Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
-              in
-              calc_z3 var [ z3exp ]
-          | Bool b -> b |> not |> string_of_bool
-          | String s -> "not " ^ s
-          | Null -> "not null"
-          | _ -> failwith "not implemented neq")
-      | Value.Le v -> (
-          match v with
-          | Int i | Long i ->
-              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-              let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
-              calc_z3 var [ z3exp ]
-          | Float f | Double f ->
-              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-              let value =
-                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-              in
-              let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
-              calc_z3 var [ z3exp ]
-          | _ -> failwith "not implemented le")
-      | Value.Lt v -> (
-          match v with
-          | Int i | Long i ->
-              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-              let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
-              calc_z3 var [ z3exp ]
-          | Float f | Double f ->
-              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-              let value =
-                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-              in
-              let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
-              calc_z3 var [ z3exp ]
-          | _ -> failwith "not implemented lt")
-      | Value.Ge v -> (
-          match v with
-          | Int i | Long i ->
-              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-              let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
-              calc_z3 var [ z3exp ]
-          | Float f | Double f ->
-              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-              let value =
-                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-              in
-              let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
-              calc_z3 var [ z3exp ]
-          | _ -> failwith "not implemented ge")
-      | Value.Gt v -> (
-          match v with
-          | Int i | Long i ->
-              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-              let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-              let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
-              calc_z3 var [ z3exp ]
-          | Float f | Double f ->
-              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-              let value =
-                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
-              in
-              let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
-              calc_z3 var [ z3exp ]
-          | _ -> failwith "not implemented gt")
-      | Value.Between (v1, v2) -> (
-          match (v1, v2) with
-          | Int i1, Int i2
-          | Long i1, Long i2
-          | Int i1, Long i2
-          | Long i1, Int i2 ->
-              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-              let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
-              let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
-              let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
-              let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
-              calc_z3 var [ z3exp1; z3exp2 ]
-          | Float f1, Float f2
-          | Double f1, Double f2
-          | Float f1, Double f2
-          | Double f1, Float f2 ->
-              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-              let value1 =
-                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
-              in
-              let value2 =
-                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
-              in
-              let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
-              let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
-              calc_z3 var [ z3exp1; z3exp2 ]
-          | _ -> failwith "not implemented between")
-      | Value.Outside (v1, v2) -> (
-          match (v1, v2) with
-          | Int i1, Int i2
-          | Long i1, Long i2
-          | Int i1, Long i2
-          | Long i1, Int i2 ->
-              let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-              let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
-              let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
-              let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
-              let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
-              calc_z3 var [ z3exp1; z3exp2 ]
-          | Float f1, Float f2
-          | Double f1, Double f2
-          | Float f1, Double f2
-          | Double f1, Float f2 ->
-              let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-              let value1 =
-                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
-              in
-              let value2 =
-                Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
-              in
-              let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
-              let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
-              calc_z3 var [ z3exp1; z3exp2 ]
-          | _ -> failwith "not implemented outside")
-    in
-    [ value ]
+  else [ calc_value id find_value ]
 
 let get_field_value_map field_name value_map field_map value memory =
   Condition.M.fold
@@ -1297,6 +1285,26 @@ let get_constructor_list (class_package, class_name) method_info
         method_list class_to_find)
     method_info []
 
+let find_cinitializer c_name t_variable mem method_info =
+  let compare_variable t_variable s_trace find_init =
+    Condition.M.fold
+      (fun trace_head _ trace_find_init ->
+        match trace_head with
+        | Condition.RH_Var var when var = t_variable -> c_name ^ "." ^ var
+        | _ -> trace_find_init)
+      s_trace find_init
+  in
+  MethodInfo.M.fold
+    (fun init_name _ find_init ->
+      if Str.string_match (c_name ^ "\\.<clinit>" |> Str.regexp) init_name 0
+      then
+        Condition.M.fold
+          (fun _ symbol_trace find_init ->
+            compare_variable t_variable symbol_trace find_init)
+          mem ""
+      else find_init)
+    method_info ""
+
 let get_class_initializer_list class_name target_summary method_info =
   let variables, mem = target_summary.Language.precond in
   let target_variable =
@@ -1325,22 +1333,7 @@ let get_class_initializer_list class_name target_summary method_info =
         else find_variable)
       mem ""
   in
-  MethodInfo.M.fold
-    (fun init_name _ find_init ->
-      if Str.string_match (class_name ^ "\\.<clinit>" |> Str.regexp) init_name 0
-      then
-        Condition.M.fold
-          (fun _ symbol_trace find_init ->
-            Condition.M.fold
-              (fun trace_head _ trace_find_init ->
-                match trace_head with
-                | Condition.RH_Var var when var = target_variable ->
-                    class_name ^ "." ^ var
-                | _ -> trace_find_init)
-              symbol_trace find_init)
-          mem ""
-      else find_init)
-    method_info ""
+  find_cinitializer class_name target_variable mem method_info
 
 let rec get_array_type typ =
   match typ with
@@ -1512,19 +1505,18 @@ let get_defined_statement class_package class_name id target_summary method_info
   in
   let class_name = class_name |> replace_nested_symbol in
   if class_initializer = "" then
-    let normal_class_name, import = get_java_package_normal_class class_name in
+    let nc_name, import = get_java_package_normal_class class_name in
     if is_java_io_class class_name then
       [
         ( file_code
           ^ create_file_code "gen_file"
-          ^ class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ ";\n"
-          ^ old_code,
+          ^ class_name ^ " " ^ id ^ " = new " ^ nc_name ^ ";\n" ^ old_code,
           import |> List.rev_append old_import,
           old_var_list );
       ]
     else if is_file_class class_name then
       [
-        ( class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ ";\n"
+        ( class_name ^ " " ^ id ^ " = new " ^ nc_name ^ ";\n"
           ^ create_file_code id ^ old_code,
           import |> List.rev_append old_import,
           old_var_list );
@@ -1545,20 +1537,20 @@ let get_defined_statement class_package class_name id target_summary method_info
           |> List.rev_append old_import,
           old_var_list );
       ]
-    else if normal_class_name = "null" then
+    else if nc_name = "null" then
       let old_code = replace_null id old_code in
       [ (old_code, old_import, old_var_list) ]
     else
       let setter_code_list =
         try
-          get_setter_code normal_class_name id target_summary
-            Language.empty_summary method_info setter_map
+          get_setter_code nc_name id target_summary Language.empty_summary
+            method_info setter_map
         with _ -> []
       in
       List.fold_left
         (fun list (setter, var_list) ->
-          ( class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();\n"
-            ^ setter ^ old_code,
+          ( class_name ^ " " ^ id ^ " = new " ^ nc_name ^ "();\n" ^ setter
+            ^ old_code,
             import |> List.rev_append old_import,
             List.rev_append var_list old_var_list )
           :: list)
@@ -1566,8 +1558,7 @@ let get_defined_statement class_package class_name id target_summary method_info
           ( class_name ^ " " ^ id ^ " = null;\n" ^ old_code,
             old_import,
             old_var_list );
-          ( class_name ^ " " ^ id ^ " = new " ^ normal_class_name ^ "();\n"
-            ^ old_code,
+          ( class_name ^ " " ^ id ^ " = new " ^ nc_name ^ "();\n" ^ old_code,
             import |> List.rev_append old_import,
             old_var_list );
         ]
@@ -2028,8 +2019,7 @@ let get_statement param target_summary r_package summary method_info class_info
               [ param |> fst ] |> List.rev_append old_import,
               old_var_list );
           ]
-      | None -> [ (old_code, old_import, old_var_list) ]
-      | _ -> failwith ("not allowed type var" ^ id))
+      | None -> [ (old_code, old_import, old_var_list) ])
 
 let pretty_tc_format all_param =
   let imports =
@@ -2064,10 +2054,12 @@ let make_tc_file code import =
   let tc_file_name =
     String.concat "" [ "unitgen_test_"; !tc_num |> string_of_int; ".java" ]
   in
-  let oc = open_out (Filename.concat !Cmdline.out_dir tc_file_name) in
-  pretty_tc_format (code, import) |> output_string oc;
-  flush_all ();
-  tc_num := !tc_num + 1
+  match open_out (Filename.concat !Cmdline.out_dir tc_file_name) with
+  | oc ->
+      pretty_tc_format (code, import) |> output_string oc;
+      flush_all ();
+      tc_num := !tc_num + 1
+  | exception _ -> ()
 
 let rec all_statement ps candidate r_package summary method_info class_info
     setter_map =
