@@ -56,9 +56,9 @@ let parse_callprop filename =
 
 let get_setter summary = Setter.from_summary_map summary
 
-let print_callgraph call_graph =
+let print_callgraph callgraph =
   let oc = open_out (Filename.concat !Cmdline.out_dir "callgraph.dot") in
-  Callgraph.Graphviz.output_graph oc call_graph
+  Callgraph.Graphviz.output_graph oc callgraph
 
 let initialize () =
   (try Unix.mkdir !Cmdline.out_dir 0o775
@@ -78,16 +78,16 @@ let main () =
       let method_info = parse_method_info summary_file in
       let setter_map = get_setter summary in
       let call_prop_map = parse_callprop call_proposition_file in
-      let call_graph = parse_callgraph summary_file in
+      let callgraph = parse_callgraph summary_file in
       let class_info = parse_class_info hierarchy_file in
       let error_summary_map = parse_error_summary error_summary_file in
       Language.SummaryMap.M.iter
         (fun source_method error_summary ->
-          MakeTC.mk_testcases source_method error_summary call_graph summary
+          MakeTC.mk_testcases source_method error_summary callgraph summary
             call_prop_map method_info class_info setter_map
           |> print_endline)
         error_summary_map
-      (* if !Cmdline.print_callgraph then print_callgraph call_graph *)
+      (* if !Cmdline.print_callgraph then print_callgraph callgraph *)
   | _ -> failwith "Invalid Inputs"
 
 let _ =
