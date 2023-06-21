@@ -1078,45 +1078,24 @@ let get_class_name ~infer method_name =
   if infer then Regexp.global_rm_exp ("\\..+(.*)" |> Str.regexp) method_name
   else Regexp.global_rm_exp ("(.*)" |> Str.regexp) method_name
 
-let get_setter_list constructor field_map method_info setter_map =
+let get_setter_list constructor method_info setter_map =
   let class_name = get_class_name ~infer:false constructor in
   let setter_list = try SetterMap.M.find class_name setter_map with _ -> [] in
-  let rec find_then_remove_field setter_list field_map =
+  let rec filter_setter setter_list =
     match setter_list with
     | (method_name, change_field) :: tl ->
-        let check =
-          List.fold_left
-            (fun check field ->
-              match FieldMap.M.find_opt field field_map with
-              | None -> false
-              | _ -> check)
-            true change_field
-        in
-        if check then
-          let field_map =
-            List.fold_left
-              (fun old_field_map field -> FieldMap.M.remove field old_field_map)
-              field_map change_field
-          in
-          find_then_remove_field tl field_map |> List.cons method_name
-        else find_then_remove_field tl field_map
+        if List.length change_field < 3 then
+          filter_setter tl |> List.cons method_name
+        else filter_setter tl
     | _ -> []
   in
-  let rec all_setter setter_list =
-    match setter_list with
-    | (method_name, _) :: tl -> all_setter tl |> List.cons method_name
-    | _ -> []
-  in
-  all_setter setter_list
+  filter_setter setter_list
   |> List.filter (fun setter -> is_private setter method_info |> not)
-(* find_then_remove_field setter_list field_map
-   |> List.filter (fun setter -> is_private setter method_info |> not) *)
 
 let get_setter constructor id method_summary constructor_summary method_info
     setter_map =
   if constructor_summary = Language.empty_summary then
-    ( FieldMap.M.empty,
-      get_setter_list constructor FieldMap.M.empty method_info setter_map )
+    (FieldMap.M.empty, get_setter_list constructor method_info setter_map)
   else
     let m_pre_var, m_pre_mem = method_summary.Language.precond in
     let m_pre_value = method_summary.Language.value in
@@ -1131,8 +1110,7 @@ let get_setter constructor id method_summary constructor_summary method_info
       collect_field m_id_symbol c_this_symbol m_pre_value c_post_value m_pre_mem
         c_post_mem FieldMap.M.empty
     in
-    ( need_setter_field,
-      get_setter_list constructor need_setter_field method_info setter_map )
+    (need_setter_field, get_setter_list constructor method_info setter_map)
 
 let check_correct_constructor method_summary id candidate_constructor summary =
   let constructor_summarys = SummaryMap.M.find candidate_constructor summary in
