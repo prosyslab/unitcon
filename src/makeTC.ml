@@ -1730,6 +1730,7 @@ let get_many_constructor ~is_getter c_summary_list class_package class_name id
       in
       List.rev_append new_list list)
     [] c_list
+  |> List.rev
 
 let get_constructor (class_package, class_name) id t_summary recv_package
     summary method_info class_info setter_map code import var_list =
