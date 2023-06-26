@@ -27,6 +27,8 @@ end)
 
 let outer = ref 0
 
+let getter = ref 0
+
 let tc_num = ref 0
 
 let z3ctx =
@@ -1108,6 +1110,18 @@ let get_setter constructor id method_summary c_summary method_info setter_map =
     in
     (need_setter_field, get_setter_list constructor method_info setter_map)
 
+let mk_params_format params =
+  let params =
+    List.fold_left
+      (fun param_code (_, param) ->
+        match param with
+        | Language.This _ -> param_code
+        | Language.Var (_, id) -> param_code ^ ", " ^ id)
+      "" params
+  in
+  let params = Regexp.global_rm_exp Regexp.start_bm2 params in
+  "(" ^ params ^ ")"
+
 let check_correct_constructor method_summary id candidate_constructor summary =
   let c_summarys = SummaryMap.M.find candidate_constructor summary in
   let method_symbols, method_memory = method_summary.Language.precond in
@@ -1167,7 +1181,7 @@ let remove_same_name c_list =
     [] c_list
   |> List.rev
 
-let get_recv_package t_method (class_info, _) =
+let get_import t_method (class_info, _) =
   let class_name = get_class_name ~infer:true t_method in
   let full_class_name =
     ClassInfo.M.fold
@@ -1192,6 +1206,31 @@ let match_return_object class_name method_name method_info =
   let info = MethodInfo.M.find method_name method_info in
   let return = info.MethodInfo.return in
   Str.string_match (Str.regexp class_name) return 0
+
+let check_real_getter getter_var =
+  match getter_var |> fst |> snd with Language.This None -> false | _ -> true
+
+let mk_getter_var getter_method getter_summary method_info class_info =
+  let class_name = get_class_name ~infer:true getter_method in
+  let import = get_import getter_method class_info in
+  let var_name = "gen_get" ^ (!getter |> string_of_int) in
+  getter := !getter + 1;
+  let var = Language.Var (Language.Object class_name, var_name) in
+  let info = MethodInfo.M.find getter_method method_info in
+  let params_statement = mk_params_format info.MethodInfo.formal_params in
+  let getter_statement =
+    if is_static_method getter_method method_info then
+      let s = getter_method |> Regexp.global_rm_exp (Str.regexp "(.*)$") in
+      s ^ params_statement
+    else
+      let s =
+        Str.split Regexp.dot getter_method
+        |> List.tl |> List.hd
+        |> Regexp.global_rm_exp (Str.regexp "(.*)$")
+      in
+      var_name ^ "." ^ s ^ params_statement
+  in
+  (getter_statement, ((import, var), getter_summary))
 
 let is_java_io_class class_name =
   if class_name = "PrintStream" || class_name = "InputStream" then true
@@ -1407,18 +1446,6 @@ let get_init_constructor t_method method_info =
   let c_import = get_package c_info.MethodInfo.formal_params in
   (class_name, c_import)
 
-let mk_params_format params =
-  let params =
-    List.fold_left
-      (fun param_code (_, param) ->
-        match param with
-        | Language.This _ -> param_code
-        | Language.Var (_, id) -> param_code ^ ", " ^ id)
-      "" params
-  in
-  let params = Regexp.global_rm_exp Regexp.start_bm2 params in
-  "(" ^ params ^ ")"
-
 let mk_setter_format setter method_info =
   let m_info = MethodInfo.M.find setter method_info in
   let formal_params = m_info.MethodInfo.formal_params in
@@ -1530,10 +1557,6 @@ let get_defined_statement class_package class_name id t_summary method_info
         old_var_list );
     ]
 
-let find_import method_name class_info =
-  let _, import = get_static_constructor method_name class_info in
-  import
-
 let get_return_object (class_package, class_name) method_info
     (class_info, hierarchy_graph) =
   let full_class_name =
@@ -1547,10 +1570,9 @@ let get_return_object (class_package, class_name) method_info
     (fun method_name _ method_list ->
       List.fold_left
         (fun init_list class_name_to_find ->
-          if
-            is_static_method method_name method_info
-            && match_return_object class_name_to_find method_name method_info
-          then (method_name, find_import method_name class_info) :: init_list
+          if match_return_object class_name_to_find method_name method_info then
+            (method_name, get_import method_name (class_info, hierarchy_graph))
+            :: init_list
           else init_list)
         method_list class_to_find)
     method_info []
@@ -1604,12 +1626,22 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
       [ (code ^ old_code, import, old_var_list) ]
     else if is_static_method c method_info then
       (* don't remove the first parameter because first parameter is not this. *)
-      let c_statement = c_statement |> replace_nested_symbol in
+      let c_statement, getter_var =
+        if is_getter then
+          let stat, getter_var = mk_getter_var c s method_info class_info in
+          (stat |> replace_nested_symbol, getter_var)
+        else
+          ( c_statement |> replace_nested_symbol,
+            (("", Language.This None), Language.empty_summary) )
+      in
       let code =
         (class_name |> replace_nested_symbol)
         ^ " " ^ id ^ assign ^ c_statement ^ ";\n"
       in
       let new_var = c_params |> List.map (fun p -> (p, c_summary)) in
+      let new_var =
+        if check_real_getter getter_var then getter_var :: new_var else new_var
+      in
       let old_var_list = List.rev_append new_var old_var_list in
       List.fold_left
         (fun list (setter, var_list) ->
@@ -1621,10 +1653,21 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
         setter_code_list
     else if List.length c_params = 1 then
       (* method only have this (receiver variable) *)
-      let c_statement = c_statement |> replace_nested_symbol in
+      let c_statement, getter_var =
+        if is_getter then
+          let stat, getter_var = mk_getter_var c s method_info class_info in
+          (stat |> replace_nested_symbol, getter_var)
+        else
+          ( c_statement |> replace_nested_symbol,
+            (("", Language.This None), Language.empty_summary) )
+      in
       let code =
         (class_name |> replace_nested_symbol)
         ^ " " ^ id ^ assign ^ c_statement ^ ";\n"
+      in
+      let old_var_list =
+        if check_real_getter getter_var then getter_var :: old_var_list
+        else old_var_list
       in
       List.fold_left
         (fun list (setter, var_list) ->
@@ -1697,10 +1740,20 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
         setter_code_list
     else
       (* generation format: new Normal(); *)
+      let c_statement, getter_var =
+        if is_getter then
+          let stat, getter_var = mk_getter_var c s method_info class_info in
+          (stat, getter_var)
+        else (c_statement, (("", Language.This None), Language.empty_summary))
+      in
       let code = class_name ^ " " ^ id ^ assign ^ c_statement ^ ";\n" in
       let c_params =
         if is_getter then c_params |> List.map (fun p -> (p, c_summary))
         else c_params |> List.tl |> List.map (fun p -> (p, c_summary))
+      in
+      let c_params =
+        if check_real_getter getter_var then getter_var :: c_params
+        else c_params
       in
       List.fold_left
         (fun list (setter, var_list) ->
@@ -1732,42 +1785,50 @@ let get_many_constructor ~is_getter c_summary_list class_package class_name id
     [] c_list
   |> List.rev
 
+let check_correct_constructor_list id t_summary summary summary_list =
+  List.fold_left
+    (fun list (constructor, import) ->
+      let check, summary, count =
+        check_correct_constructor t_summary id constructor summary
+      in
+      if check then (constructor, summary, count, import) :: list else list)
+    [] summary_list
+
 let get_constructor (class_package, class_name) id t_summary recv_package
     summary method_info class_info setter_map code import var_list =
-  let c_summary_list =
-    get_constructor_list (class_package, class_name) method_info class_info
-  in
-  let is_getter, c_summary_list =
-    let java_package, _ = get_java_package_normal_class class_name in
-    if java_package = "null" && c_summary_list = [] then
-      ( true,
-        get_return_object (class_package, class_name) method_info class_info )
-    else (false, c_summary_list)
-  in
-  let c_summary_list =
-    List.fold_left
-      (fun list (constructor, import) ->
-        let check, summary, count =
-          check_correct_constructor t_summary id constructor summary
-        in
-        if check then (constructor, summary, count, import) :: list else list)
-      [] c_summary_list
-  in
-  let c_summary_list =
+  let summary_filtering typ list =
     List.filter
       (fun (c, _, _, _) ->
-        is_public_or_default ~is_getter recv_package c method_info)
-      c_summary_list
+        is_public_or_default ~is_getter:typ recv_package c method_info)
+      list
     |> List.filter (fun (c, _, _, _) ->
            is_recursive_param class_name c method_info |> not)
     |> remove_same_name
   in
-  if c_summary_list = [] then
+  let c_summary_list =
+    get_constructor_list (class_package, class_name) method_info class_info
+  in
+  let g_summary_list =
+    get_return_object (class_package, class_name) method_info class_info
+  in
+  let c_summary_list =
+    check_correct_constructor_list id t_summary summary c_summary_list
+  in
+  let g_summary_list =
+    check_correct_constructor_list id t_summary summary g_summary_list
+  in
+  let c_summary_list = summary_filtering false c_summary_list in
+  let g_summary_list = summary_filtering true g_summary_list in
+  if c_summary_list = [] && g_summary_list = [] then
     get_defined_statement class_package class_name id t_summary method_info
       setter_map code import var_list
+  else if c_summary_list = [] then
+    get_many_constructor ~is_getter:true g_summary_list class_package class_name
+      id t_summary method_info class_info setter_map code import var_list
   else
-    get_many_constructor ~is_getter c_summary_list class_package class_name id
-      t_summary method_info class_info setter_map code import var_list
+    get_many_constructor ~is_getter:false c_summary_list class_package
+      class_name id t_summary method_info class_info setter_map code import
+      var_list
 
 let get_statement param t_summary r_package summary method_info class_info
     setter_map old_code old_import old_var_list =
@@ -1945,7 +2006,7 @@ let find_all_parameter ee_method ee_method_summary summary method_info
   let ee_method_info = MethodInfo.M.find ee_method method_info in
   let ee_method_params = ee_method_info.MethodInfo.formal_params in
   let params = List.map (fun p -> (p, ee_method_summary)) ee_method_params in
-  let r_package = get_recv_package ee_method class_info in
+  let r_package = get_import ee_method class_info in
   let execute_ee id ee_method =
     let ee_info = MethodInfo.M.find ee_method method_info in
     let ee_params = ee_info.MethodInfo.formal_params in
