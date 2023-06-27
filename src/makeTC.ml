@@ -1457,32 +1457,41 @@ let mk_setter_format setter method_info =
   in
   (setter_statement ^ params_statement, formal_params)
 
+let is_receiver id =
+  let new_id1 = Str.replace_first (Str.regexp "gen") "" id in
+  let new_id2 = Str.replace_first (Str.regexp "outer") "" id in
+  match (int_of_string_opt new_id1, int_of_string_opt new_id2) with
+  | None, None -> false
+  | _, _ -> true
+
 let get_setter_code constructor id method_summary c_summary method_info
     setter_map =
-  let met_field_map, setter_list =
-    get_setter constructor id method_summary c_summary method_info setter_map
-  in
-  let met_value_map =
-    FieldMap.M.fold
-      (fun s value map -> Value.M.add s value map)
-      met_field_map Value.M.empty
-  in
-  let new_summary = new_value_summary c_summary met_value_map in
-  let iter_params params =
+  if is_receiver id then []
+  else
+    let met_field_map, setter_list =
+      get_setter constructor id method_summary c_summary method_info setter_map
+    in
+    let met_value_map =
+      FieldMap.M.fold
+        (fun s value map -> Value.M.add s value map)
+        met_field_map Value.M.empty
+    in
+    let new_summary = new_value_summary c_summary met_value_map in
+    let iter_params params =
+      List.fold_left
+        (fun list (import, var) ->
+          match var with
+          | Language.This _ -> list
+          | _ -> ((import, var), new_summary) :: list)
+        [] params
+    in
     List.fold_left
-      (fun list (import, var) ->
-        match var with
-        | Language.This _ -> list
-        | _ -> ((import, var), new_summary) :: list)
-      [] params
-  in
-  List.fold_left
-    (fun list setter ->
-      let statement, params = mk_setter_format setter method_info in
-      let statement = id ^ "." ^ statement ^ ";\n" in
-      let new_mk_var_list = iter_params params in
-      (statement, new_mk_var_list) :: list)
-    [] setter_list
+      (fun list setter ->
+        let statement, params = mk_setter_format setter method_info in
+        let statement = id ^ "." ^ statement ^ ";\n" in
+        let new_mk_var_list = iter_params params in
+        (statement, new_mk_var_list) :: list)
+      [] setter_list
 
 (* statement data structure: code * import * mk_var_list *)
 let get_defined_statement class_package class_name id t_summary method_info
@@ -1955,7 +1964,9 @@ let pretty_tc_format all_param =
         if import = "" then stm else stm ^ "import " ^ import ^ ";\n")
       import_set ""
   in
-  let start = imports ^ "\n@Test\npublic void unitcon_test() throws Exception {\n" in
+  let start =
+    imports ^ "\n@Test\npublic void unitcon_test() throws Exception {\n"
+  in
   let param_code =
     all_param |> fst
     |> Str.split (Str.regexp "\n")
