@@ -56,5 +56,5 @@ lib64/
 wheels/
 __pycache__/
 
-unitgen
-unitgen-out
+unitcon
+unitcon-out
