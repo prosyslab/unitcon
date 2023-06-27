@@ -2,7 +2,7 @@ MAKE=@make
 DUNE=@dune
 LN=@ln -sf
 RM=@rm
-EXE=unitgen
+EXE=unitcon
 
 all:
 	$(DUNE) build src/main.exe
