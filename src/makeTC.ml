@@ -632,6 +632,8 @@ let new_value_summary old_summary new_value =
       args = old_summary.args;
     }
 
+let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
+
 let match_precond callee_method callee_summary call_prop method_info =
   let callee_method_info = MethodInfo.M.find callee_method method_info in
   let callee_params = callee_method_info.MethodInfo.formal_params in
@@ -666,7 +668,9 @@ let get_package formal_params =
 
 let is_public e_method method_info =
   let e_method_info = MethodInfo.M.find e_method method_info in
-  match e_method_info.MethodInfo.modifier with Public -> true | _ -> false
+  match e_method_info.MethodInfo.modifier with
+  | Protected | Public -> true
+  | _ -> false
 
 let is_nested_class name = String.contains name '$'
 
@@ -733,7 +737,7 @@ let is_public_or_default ~is_getter recv_package method_name method_info =
     let m_package = Regexp.global_rm_exp (Str.regexp s) m_package in
     if recv_package = m_package then
       match info.MethodInfo.modifier with
-      | Default | Public -> true
+      | Default | Protected | Public -> true
       | _ -> false
     else
       match info.MethodInfo.modifier with
@@ -1181,6 +1185,7 @@ let remove_same_name c_list =
     [] c_list
   |> List.rev
 
+(* e.g., java.util. --> not contain class name *)
 let get_import t_method (class_info, _) =
   let class_name = get_class_name ~infer:true t_method in
   let full_class_name =
@@ -1192,6 +1197,18 @@ let get_import t_method (class_info, _) =
           let s = name ^ "$" in
           Regexp.global_rm_exp (Str.regexp s) full_name
         else find_name)
+      class_info ""
+  in
+  full_class_name
+
+(* e.g., java.util.Date --> contain class name *)
+let get_package_from_method t_method (class_info, _) =
+  let class_name = get_class_name ~infer:true t_method in
+  let full_class_name =
+    ClassInfo.M.fold
+      (fun full_name _ find_name ->
+        let name = Str.split Regexp.dot full_name |> List.rev |> List.hd in
+        if class_name = name then full_name else find_name)
       class_info ""
   in
   full_class_name
@@ -1212,7 +1229,7 @@ let check_real_getter getter_var =
 
 let mk_getter_var getter_method getter_summary method_info class_info =
   let class_name = get_class_name ~infer:true getter_method in
-  let import = get_import getter_method class_info in
+  let import = get_package_from_method getter_method class_info in
   let var_name = "gen_get" ^ (!getter |> string_of_int) in
   getter := !getter + 1;
   let var = Language.Var (Language.Object class_name, var_name) in
@@ -1385,8 +1402,6 @@ let sort_constructor_list c_list method_info =
         let c2_formal = c2_info.MethodInfo.formal_params |> List.length in
         compare c1_formal c2_formal)
     c_list
-
-let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 
 let replace_null id old_code =
   let candidate =
@@ -1580,7 +1595,9 @@ let get_return_object (class_package, class_name) method_info
       List.fold_left
         (fun init_list class_name_to_find ->
           if match_return_object class_name_to_find method_name method_info then
-            (method_name, get_import method_name (class_info, hierarchy_graph))
+            ( method_name,
+              get_package_from_method method_name (class_info, hierarchy_graph)
+            )
             :: init_list
           else init_list)
         method_list class_to_find)
