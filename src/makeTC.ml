@@ -1955,7 +1955,7 @@ let pretty_tc_format all_param =
         if import = "" then stm else stm ^ "import " ^ import ^ ";\n")
       import_set ""
   in
-  let start = imports ^ "\n@Test\npublic void test() throws Exception {\n" in
+  let start = imports ^ "\n@Test\npublic void unitcon_test() throws Exception {\n" in
   let param_code =
     all_param |> fst
     |> Str.split (Str.regexp "\n")
@@ -1972,7 +1972,7 @@ let pretty_tc_format all_param =
 
 let make_tc_file code import =
   let tc_file_name =
-    String.concat "" [ "unitgen_test_"; !tc_num |> string_of_int; ".java" ]
+    String.concat "" [ "unitcon_test_"; !tc_num |> string_of_int; ".java" ]
   in
   match open_out (Filename.concat !Cmdline.out_dir tc_file_name) with
   | oc ->

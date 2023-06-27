@@ -67,7 +67,7 @@ let initialize () =
 (* Filename.concat !Cmdline.out_dir "log.txt" |> Logger.from_file *)
 
 let main () =
-  let usage = "Usage: unitgen [options] input_files" in
+  let usage = "Usage: unitcon [options] input_files" in
   Arg.parse Cmdline.options Cmdline.parse_arg usage;
   Cmdline.input_files := List.rev !Cmdline.input_files;
   initialize ();

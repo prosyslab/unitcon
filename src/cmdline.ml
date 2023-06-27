@@ -1,4 +1,4 @@
-let out_dir = ref "unitgen-out"
+let out_dir = ref "unitcon-out"
 
 let print_callgraph = ref false
 
@@ -8,7 +8,7 @@ let options =
   [
     ( "-outdir",
       Arg.Set_string out_dir,
-      "Output directory (default: unitgen-out)" );
+      "Output directory (default: unitcon-out)" );
     ("-print-callgraph", Arg.Set print_callgraph, "Print callgraph");
     ("-parse-summary", Arg.Set parse_summary, "Parse summary");
   ]
