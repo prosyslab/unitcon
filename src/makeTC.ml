@@ -668,9 +668,7 @@ let get_package formal_params =
 
 let is_public e_method method_info =
   let e_method_info = MethodInfo.M.find e_method method_info in
-  match e_method_info.MethodInfo.modifier with
-  | Protected | Public -> true
-  | _ -> false
+  match e_method_info.MethodInfo.modifier with Public -> true | _ -> false
 
 let is_nested_class name = String.contains name '$'
 
