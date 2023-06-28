@@ -735,7 +735,7 @@ let is_public_or_default ~is_getter recv_package method_name method_info =
     in
     let s = name ^ "$" in
     let m_package = Regexp.global_rm_exp (Str.regexp s) m_package in
-    if recv_package = m_package then
+    if Str.string_match (Str.regexp m_package) recv_package 0 then
       match info.MethodInfo.modifier with
       | Default | Protected | Public -> true
       | _ -> false
