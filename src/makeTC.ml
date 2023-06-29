@@ -1451,7 +1451,7 @@ let get_static_constructor t_method class_info =
         if class_name = name then full_name else find_name)
       class_info ""
   in
-  (class_name, full_class_name)
+  (class_name |> replace_nested_symbol, full_class_name)
 
 let get_init_constructor t_method method_info =
   let class_name = get_class_name ~infer:true t_method in
