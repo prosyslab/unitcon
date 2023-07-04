@@ -1472,10 +1472,15 @@ let mk_setter_format setter method_info =
 
 let is_receiver id =
   let new_id1 = Str.replace_first (Str.regexp "gen") "" id in
-  let new_id2 = Str.replace_first (Str.regexp "outer") "" id in
-  match (int_of_string_opt new_id1, int_of_string_opt new_id2) with
-  | None, None -> false
-  | _, _ -> true
+  let new_id2 = Str.replace_first (Str.regexp "gen_get") "" id in
+  let new_id3 = Str.replace_first (Str.regexp "outer") "" id in
+  match
+    ( int_of_string_opt new_id1,
+      int_of_string_opt new_id2,
+      int_of_string_opt new_id3 )
+  with
+  | None, None, None -> false
+  | _, _, _ -> true
 
 let get_setter_code constructor id method_summary c_summary method_info
     setter_map =
@@ -1654,22 +1659,17 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
       [ (code ^ old_code, import, old_var_list) ]
     else if is_static_method c method_info then
       (* don't remove the first parameter because first parameter is not this. *)
-      let c_statement, getter_var =
+      let c_statement =
         if is_getter then
-          let stat, getter_var = mk_getter_var c s method_info class_info in
-          (stat |> replace_nested_symbol, getter_var)
-        else
-          ( c_statement |> replace_nested_symbol,
-            (("", Language.This None), Language.empty_summary) )
+          let stat, _ = mk_getter_var c s method_info class_info in
+          stat |> replace_nested_symbol
+        else c_statement |> replace_nested_symbol
       in
       let code =
         (class_name |> replace_nested_symbol)
         ^ " " ^ id ^ assign ^ c_statement ^ ";\n"
       in
       let new_var = c_params |> List.map (fun p -> (p, c_summary)) in
-      let new_var =
-        if check_real_getter getter_var then getter_var :: new_var else new_var
-      in
       let old_var_list = List.rev_append new_var old_var_list in
       List.fold_left
         (fun list (setter, var_list) ->
