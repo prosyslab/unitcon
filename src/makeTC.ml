@@ -1606,8 +1606,12 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
     old_import old_var_list =
   let c, s, i = constructor in
   if c = "null" then
-    let old_code = replace_null id old_code in
-    [ (old_code, old_import, old_var_list) ]
+    let null_statement = class_name ^ " " ^ id ^ " = null;\n" in
+    let replace_old_code = replace_null id old_code in
+    [
+      (replace_old_code, old_import, old_var_list);
+      (null_statement ^ old_code, List.cons i old_import, old_var_list);
+    ]
   else
     let c_statement = c in
     let class_name =
@@ -1793,7 +1797,7 @@ let get_many_constructor ~is_getter c_summary_list class_package class_name id
   let c_list = sort_constructor_list c_summary_list method_info in
   let c_list =
     if Str.string_match (Str.regexp "gen") id 0 then c_list
-    else ("null", Language.empty_summary, 0, "") :: c_list
+    else ("null", Language.empty_summary, 0, class_package) :: c_list
   in
   let is_origin_private = is_private_class class_package class_info in
   List.fold_left
