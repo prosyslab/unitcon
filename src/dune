@@ -6,14 +6,15 @@
   callgraph
   cmdline
   summary
-  makeTC
   errorSummary
   callProposition
   hierarchy
   setter
   modeling
   parser
-  regexp)
+  regexp
+  generator
+  runProgram)
  (libraries ocamlgraph unix yojson str core z3 logger)
  (preprocess
   (pps ppx_compare)))

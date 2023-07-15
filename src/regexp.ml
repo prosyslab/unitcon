@@ -95,3 +95,5 @@ let rm_space str =
   first_rm_exp post_space str
 
 let remove_bk str = global_rm_exp bk str |> rm_space
+
+let package = Str.regexp "package"
