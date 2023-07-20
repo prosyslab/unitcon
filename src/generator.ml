@@ -8,7 +8,7 @@ module ClassInfo = Language.ClassInfo
 module SetterMap = Language.SetterMap
 module FieldMap = Language.FieldMap
 module CG = Callgraph.G
-module HG = Hierarchy.G
+module IG = Inheritance.G
 module AST = Language.AST
 
 (* defining for constructor priority.
@@ -1322,12 +1322,12 @@ let get_java_package_class class_name =
   else ("null", [])
 
 let get_constructor_list (class_package, class_name) method_info
-    (class_info, hierarchy_graph) =
+    (class_info, inheritance_graph) =
   let full_class_name =
     if class_package = "" then class_name else class_package
   in
   let class_to_find =
-    try HG.succ hierarchy_graph full_class_name |> List.cons full_class_name
+    try IG.succ inheritance_graph full_class_name |> List.cons full_class_name
     with Invalid_argument _ -> [ full_class_name ]
   in
   MethodInfo.M.fold
@@ -1697,12 +1697,12 @@ let get_defined_statement class_package class_name id t_summary method_info
       setter_code_list
 
 let get_return_object (class_package, class_name) method_info
-    (class_info, hierarchy_graph) =
+    (class_info, inheritance_graph) =
   let full_class_name =
     if class_package = "" then class_name else class_package
   in
   let class_to_find =
-    try HG.succ hierarchy_graph full_class_name |> List.cons full_class_name
+    try IG.succ inheritance_graph full_class_name |> List.cons full_class_name
     with Invalid_argument _ -> [ full_class_name ]
   in
   MethodInfo.M.fold
@@ -1711,7 +1711,7 @@ let get_return_object (class_package, class_name) method_info
         (fun init_list class_name_to_find ->
           if match_return_object class_name_to_find method_name method_info then
             ( method_name,
-              get_package_from_method method_name (class_info, hierarchy_graph)
+              get_package_from_method method_name (class_info, inheritance_graph)
             )
             :: init_list
           else init_list)

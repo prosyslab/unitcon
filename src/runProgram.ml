@@ -11,7 +11,7 @@ type t = {
   summary_file : string;
   error_summary_file : string;
   call_prop_file : string;
-  hierarchy_file : string;
+  inheritance_file : string;
   build_command : string;
   test_command : string;
   test_file : string;
@@ -75,7 +75,7 @@ let parse_callprop filename =
 let parse_class_info filename =
   let json = Json.from_file filename in
   let elem = JsonUtil.to_list json |> List.hd in
-  Hierarchy.of_json elem
+  Inheritance.of_json elem
 
 (* ************************************** *
    build program
@@ -237,7 +237,7 @@ let init program_dir =
     summary_file = Filename.concat program_dir "summary.json";
     error_summary_file = Filename.concat program_dir "error_summarys";
     call_prop_file = Filename.concat program_dir "call_proposition";
-    hierarchy_file = Filename.concat program_dir "hierarchy_info.json";
+    inheritance_file = Filename.concat program_dir "inheritance_info.json";
     build_command = Filename.concat program_dir "build_command";
     test_command = Filename.concat program_dir "test_command";
     test_file =
@@ -287,7 +287,7 @@ let run program_dir =
   let method_info = parse_method_info info.summary_file in
   let callgraph = parse_callgraph info.summary_file in
   let setter_map = get_setter summary in
-  let class_info = parse_class_info info.hierarchy_file in
+  let class_info = parse_class_info info.inheritance_file in
   let call_prop_map = parse_callprop info.call_prop_file in
   let error_method_info = parse_error_summary info.error_summary_file in
   run_test ~is_start:true info [] error_method_info

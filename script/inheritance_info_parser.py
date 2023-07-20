@@ -335,7 +335,7 @@ def get_nested_extends_interface_name(node, src):
                                            import_list)
 
 
-def one_file_hierarchy_info(src, encoding):
+def one_file_inheritance_info(src, encoding):
     f = open(src, 'r', encoding=encoding)
     src_lines = f.readlines()
 
@@ -353,29 +353,29 @@ def one_file_hierarchy_info(src, encoding):
     get_nested_extends_interface_name(tree.root_node, src_lines)
 
 
-def all_file_hierarchy_info(dirname, encoding):
+def all_file_inheritance_info(dirname, encoding):
     filenames = os.listdir(dirname)
     for filename in filenames:
         full_filename = os.path.join(dirname, filename)
         if os.path.isdir(full_filename):
-            all_file_hierarchy_info(full_filename, encoding)
+            all_file_inheritance_info(full_filename, encoding)
         else:
             ext = os.path.splitext(full_filename)[-1]
             if ext == '.java':
-                one_file_hierarchy_info(full_filename, encoding)
+                one_file_inheritance_info(full_filename, encoding)
 
 
 if len(sys.argv) != 3:
     print("Usage: directory_path encoding")
     sys.exit()
 
-hierarchy_info = []
+inheritance_info = []
 dir_path = sys.argv[1]
 encoding = sys.argv[2]
 
-all_file_hierarchy_info(dir_path, encoding)
+all_file_inheritance_info(dir_path, encoding)
 
-hierarchy_info.append({
+inheritance_info.append({
     'class_and_interface':
     list({name['name']: name
           for name in class_and_interface_list}.values()),
@@ -389,13 +389,13 @@ hierarchy_info.append({
     list({name['child']: name
           for name in extends_interface_list}.values())
 })
-hierarchy_info_json = json.dumps(hierarchy_info)
+inheritance_info_json = json.dumps(inheritance_info)
 
 name = ''
 if dir_path[-1] == '/':
-    name = 'hierarchy_info.json'
+    name = 'inheritance_info.json'
 else:
-    name = '/hierarchy_info.json'
+    name = '/inheritance_info.json'
 
 with open(dir_path + name, 'w', encoding='utf-8') as json_file:
-    json.dump(hierarchy_info, json_file, indent=2)
+    json.dump(inheritance_info, json_file, indent=2)
