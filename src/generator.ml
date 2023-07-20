@@ -9,23 +9,19 @@ module SetterMap = Language.SetterMap
 module FieldMap = Language.FieldMap
 module CG = Callgraph.G
 module HG = Hierarchy.G
+module AST = Language.AST
 
-(* defining for constructor priority *)
-type new_bool = T | F | DM
+(* defining for constructor priority.
+   if Range is wide then Range set 100 *)
+type domain = Top | Range of int
 
 type t = {
-  code : string;
+  code : AST.t;
   import : string list;
   variable : ((string * Language.variable) * Language.summary) list;
   score : int;
   recv_package : string;
 }
-
-module CodeSet = Set.Make (struct
-  type t = string
-
-  let compare = compare
-end)
 
 module ImportSet = Set.Make (struct
   type t = string
@@ -49,6 +45,18 @@ let z3ctx =
     ]
 
 let solver = Z3.Solver.mk_solver z3ctx None
+
+(* return last condition *)
+let condition partial func = failwith "not implemented"
+
+let point value =
+  (* if value = top then 100, value range > 10 then 10, otherwise value range*)
+  failwith "not implemented"
+
+let score t_summary p_summary partial =
+  (* partial.variable size + sum(card) *)
+  let length = partial.variable |> List.length in
+  failwith "not implemented"
 
 let rec find_relation given_symbol relation =
   match Relation.M.find_opt given_symbol relation with
@@ -238,8 +246,8 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
               t [])
   else vs_list
 
-let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
-  let check_intersect_value caller_symbol callee_symbol =
+let check_intersect ~is_init caller_prop callee_summary vs_list =
+  let check_one caller_symbol callee_symbol =
     try
       let caller_value =
         Value.M.find caller_symbol caller_prop.Language.value
@@ -249,25 +257,25 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
       in
       match (caller_value, callee_value) with
       | Eq eq_v1, Eq eq_v2 ->
-          if eq_v1 = eq_v2 then (caller_prop.Language.value, T)
-          else (caller_prop.Language.value, F)
+          if eq_v1 = eq_v2 then (caller_prop.Language.value, true)
+          else (caller_prop.Language.value, false)
       | Eq eq_v, Neq neq_v | Neq neq_v, Eq eq_v ->
-          if eq_v = neq_v then (caller_prop.Language.value, F)
-          else (caller_prop.Language.value, T)
+          if eq_v = neq_v then (caller_prop.Language.value, false)
+          else (caller_prop.Language.value, true)
       | Eq eq_v, Le le_v | Le le_v, Eq eq_v -> (
           match (eq_v, le_v) with
           | Int eq_i, Int le_i
           | Long eq_i, Long le_i
           | Int eq_i, Long le_i
           | Long eq_i, Int le_i ->
-              if eq_i <= le_i then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if eq_i <= le_i then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | Float eq_f, Float le_f
           | Double eq_f, Double le_f
           | Float eq_f, Double le_f
           | Double eq_f, Float le_f ->
-              if eq_f <= le_f then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if eq_f <= le_f then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | _ -> failwith "not allowed type in eq, le")
       | Eq eq_v, Lt lt_v | Lt lt_v, Eq eq_v -> (
           match (eq_v, lt_v) with
@@ -275,14 +283,14 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long eq_i, Long lt_i
           | Int eq_i, Long lt_i
           | Long eq_i, Int lt_i ->
-              if eq_i < lt_i then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if eq_i < lt_i then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | Float eq_f, Float lt_f
           | Double eq_f, Double lt_f
           | Float eq_f, Double lt_f
           | Double eq_f, Float lt_f ->
-              if eq_f < lt_f then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if eq_f < lt_f then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | _ -> failwith "not allowed type in eq, lt")
       | Eq eq_v, Ge ge_v | Ge ge_v, Eq eq_v -> (
           match (eq_v, ge_v) with
@@ -290,14 +298,14 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long eq_i, Long ge_i
           | Int eq_i, Long ge_i
           | Long eq_i, Int ge_i ->
-              if eq_i >= ge_i then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if eq_i >= ge_i then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | Float eq_f, Float ge_f
           | Double eq_f, Double ge_f
           | Float eq_f, Double ge_f
           | Double eq_f, Float ge_f ->
-              if eq_f >= ge_f then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if eq_f >= ge_f then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | _ -> failwith "not allowed type in eq, ge")
       | Eq eq_v, Gt gt_v | Gt gt_v, Eq eq_v -> (
           match (eq_v, gt_v) with
@@ -305,14 +313,14 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long eq_i, Long gt_i
           | Int eq_i, Long gt_i
           | Long eq_i, Int gt_i ->
-              if eq_i > gt_i then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if eq_i > gt_i then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | Float eq_f, Float gt_f
           | Double eq_f, Double gt_f
           | Float eq_f, Double gt_f
           | Double eq_f, Float gt_f ->
-              if eq_f > gt_f then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if eq_f > gt_f then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | _ -> failwith "not allowed type in eq, gt")
       | Eq eq_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Eq eq_v -> (
@@ -326,8 +334,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long eq_i, Long btw_min_i, Int btw_max_i
           | Long eq_i, Long btw_min_i, Long btw_max_i ->
               if eq_i >= btw_min_i && eq_i <= btw_max_i then
-                (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+                (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | Float eq_f, Float btw_min_f, Float btw_max_f
           | Float eq_f, Float btw_min_f, Double btw_max_f
           | Float eq_f, Double btw_min_f, Float btw_max_f
@@ -337,8 +345,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Double eq_f, Double btw_min_f, Float btw_max_f
           | Double eq_f, Double btw_min_f, Double btw_max_f ->
               if eq_f >= btw_min_f && eq_f <= btw_max_f then
-                (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+                (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | _ -> failwith "not allowed type in eq, between")
       | Eq eq_v, Outside (out_min, out_max)
       | Outside (out_min, out_max), Eq eq_v -> (
@@ -352,8 +360,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long eq_i, Long o_min_i, Int o_max_i
           | Long eq_i, Long o_min_i, Long o_max_i ->
               if eq_i < o_min_i && eq_i > o_max_i then
-                (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+                (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | Float eq_f, Float o_min_f, Float o_max_f
           | Float eq_f, Float o_min_f, Double o_max_f
           | Float eq_f, Double o_min_f, Float o_max_f
@@ -363,8 +371,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Double eq_f, Double o_min_f, Float o_max_f
           | Double eq_f, Double o_min_f, Double o_max_f ->
               if eq_f < o_min_f && eq_f > o_max_f then
-                (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+                (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | _ -> failwith "not allowed type in eq, outside")
       | Le le_v, Ge ge_v | Ge ge_v, Le le_v -> (
           match (le_v, ge_v) with
@@ -372,14 +380,14 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long le_i, Long ge_i
           | Int le_i, Long ge_i
           | Long le_i, Int ge_i ->
-              if le_i >= ge_i then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if le_i >= ge_i then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | Float le_f, Float ge_f
           | Double le_f, Double ge_f
           | Float le_f, Double ge_f
           | Double le_f, Float ge_f ->
-              if le_f >= ge_f then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if le_f >= ge_f then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | _ -> failwith "not allowed type in le, ge")
       | Le l_v, Gt g_v
       | Lt l_v, Ge g_v
@@ -392,14 +400,14 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long l_i, Long g_i
           | Int l_i, Long g_i
           | Long l_i, Int g_i ->
-              if l_i > g_i then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if l_i > g_i then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | Float l_f, Float g_f
           | Double l_f, Double g_f
           | Float l_f, Double g_f
           | Double l_f, Float g_f ->
-              if l_f > g_f then (caller_prop.Language.value, T)
-              else (caller_prop.Language.value, F)
+              if l_f > g_f then (caller_prop.Language.value, true)
+              else (caller_prop.Language.value, false)
           | _ -> failwith "not allowed type in le, ge")
       | Le le_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Le le_v -> (
@@ -412,8 +420,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Int le_i, Long btw_min_i, Long _
           | Long le_i, Int btw_min_i, Int _
           | Long le_i, Int btw_min_i, Long _ ->
-              if le_i < btw_min_i then (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+              if le_i < btw_min_i then (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | Float le_f, Float btw_min_f, Float _
           | Float le_f, Float btw_min_f, Double _
           | Double le_f, Double btw_min_f, Float _
@@ -422,8 +430,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Float le_f, Double btw_min_f, Double _
           | Double le_f, Float btw_min_f, Float _
           | Double le_f, Float btw_min_f, Double _ ->
-              if le_f < btw_min_f then (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+              if le_f < btw_min_f then (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | _ -> failwith "not allowed type in le, between")
       | Lt lt_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Lt lt_v -> (
@@ -436,8 +444,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Int lt_i, Long btw_min_i, Long _
           | Long lt_i, Int btw_min_i, Int _
           | Long lt_i, Int btw_min_i, Long _ ->
-              if lt_i <= btw_min_i then (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+              if lt_i <= btw_min_i then (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | Float lt_f, Float btw_min_f, Float _
           | Float lt_f, Float btw_min_f, Double _
           | Double lt_f, Double btw_min_f, Float _
@@ -446,8 +454,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Float lt_f, Double btw_min_f, Double _
           | Double lt_f, Float btw_min_f, Float _
           | Double lt_f, Float btw_min_f, Double _ ->
-              if lt_f <= btw_min_f then (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+              if lt_f <= btw_min_f then (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | _ -> failwith "not allowed type in lt, between")
       | Ge ge_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Ge ge_v -> (
@@ -460,8 +468,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Int ge_i, Long _, Long btw_max_i
           | Long ge_i, Int _, Int btw_max_i
           | Long ge_i, Long _, Int btw_max_i ->
-              if ge_i > btw_max_i then (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+              if ge_i > btw_max_i then (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | Float ge_f, Float _, Float btw_max_f
           | Float ge_f, Double _, Float btw_max_f
           | Double ge_f, Float _, Double btw_max_f
@@ -470,8 +478,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Float ge_f, Double _, Double btw_max_f
           | Double ge_f, Float _, Float btw_max_f
           | Double ge_f, Double _, Float btw_max_f ->
-              if ge_f > btw_max_f then (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+              if ge_f > btw_max_f then (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | _ -> failwith "not allowed type in ge, between")
       | Gt gt_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Gt gt_v -> (
@@ -484,8 +492,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Int gt_i, Long _, Long btw_max_i
           | Long gt_i, Int _, Int btw_max_i
           | Long gt_i, Long _, Int btw_max_i ->
-              if gt_i >= btw_max_i then (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+              if gt_i >= btw_max_i then (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | Float gt_f, Float _, Float btw_max_f
           | Float gt_f, Double _, Float btw_max_f
           | Double gt_f, Float _, Double btw_max_f
@@ -494,8 +502,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Float gt_f, Double _, Double btw_max_f
           | Double gt_f, Float _, Float btw_max_f
           | Double gt_f, Double _, Float btw_max_f ->
-              if gt_f >= btw_max_f then (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+              if gt_f >= btw_max_f then (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | _ -> failwith "not allowed type in gt, between")
       | Between (caller_min, caller_max), Between (callee_min, callee_max) -> (
           match (caller_min, caller_max, callee_min, callee_max) with
@@ -516,8 +524,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long r_min_i, Long r_max_i, Long e_min_i, Int e_max_i
           | Long r_min_i, Long r_max_i, Long e_min_i, Long e_max_i ->
               if r_max_i < e_min_i || e_max_i < r_min_i then
-                (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+                (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | Float r_min_f, Float r_max_f, Float e_min_f, Float e_max_f
           | Float r_min_f, Float r_max_f, Float e_min_f, Double e_max_f
           | Float r_min_f, Float r_max_f, Double e_min_f, Float e_max_f
@@ -535,8 +543,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Double r_min_f, Double r_max_f, Double e_min_f, Float e_max_f
           | Double r_min_f, Double r_max_f, Double e_min_f, Double e_max_f ->
               if r_max_f < e_min_f || e_max_f < r_min_f then
-                (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+                (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | _ -> failwith "not allowed type in between, between")
       | Between (btw_min, btw_max), Outside (out_min, out_max)
       | Outside (out_min, out_max), Between (btw_min, btw_max) -> (
@@ -558,8 +566,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Long btw_min_i, Long btw_max_i, Long o_min_i, Int o_max_i
           | Long btw_min_i, Long btw_max_i, Long o_min_i, Long o_max_i ->
               if o_min_i <= btw_min_i && o_max_i >= btw_max_i then
-                (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+                (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | Float btw_min_f, Float btw_max_f, Float o_min_f, Float o_max_f
           | Float btw_min_f, Float btw_max_f, Float o_min_f, Double o_max_f
           | Float btw_min_f, Float btw_max_f, Double o_min_f, Float o_max_f
@@ -578,8 +586,8 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
           | Double btw_min_f, Double btw_max_f, Double o_min_f, Double o_max_f
             ->
               if btw_min_f <= o_min_f && btw_max_f >= o_max_f then
-                (caller_prop.Language.value, F)
-              else (caller_prop.Language.value, T)
+                (caller_prop.Language.value, false)
+              else (caller_prop.Language.value, true)
           | _ -> failwith "not allowed type in between, outside")
       | _, Outside _
       | Outside _, _
@@ -593,13 +601,13 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
       | Ge _, Gt _
       | Neq _, _
       | _, Neq _ ->
-          (caller_prop.Language.value, T)
+          (caller_prop.Language.value, true)
     with Not_found -> (
       try
         let callee_value =
           Value.M.find callee_symbol callee_summary.Language.value
         in
-        (Value.M.add caller_symbol callee_value caller_prop.Language.value, DM)
+        (Value.M.add caller_symbol callee_value caller_prop.Language.value, true)
       with Not_found -> (
         try
           (* constructor prop propagation *)
@@ -607,15 +615,15 @@ let check_intersect_value_list ~is_init caller_prop callee_summary vs_list =
             Value.M.find caller_symbol caller_prop.Language.value
           in
           ( Value.M.add callee_symbol caller_value callee_summary.Language.value,
-            DM )
-        with Not_found -> (caller_prop.Language.value, DM)))
+            true )
+        with Not_found -> (caller_prop.Language.value, true)))
   in
   let vs_list =
     get_value_symbol_list ~is_init caller_prop callee_summary vs_list
   in
   List.map
     (fun (caller_symbol, callee_symbol) ->
-      check_intersect_value caller_symbol callee_symbol)
+      check_one caller_symbol callee_symbol)
     vs_list
 
 let combine_value base_value vc_list =
@@ -630,7 +638,7 @@ let combine_value base_value vc_list =
         prop_values prop_value)
     base_value vc_list
 
-let match_precond callee_method callee_summary call_prop method_info =
+let satisfy callee_method callee_summary call_prop method_info =
   let callee_method_info = MethodInfo.M.find callee_method method_info in
   let callee_params = callee_method_info.MethodInfo.formal_params in
   let callee_symbols = callee_summary.Language.value |> get_symbol_list in
@@ -646,11 +654,10 @@ let match_precond callee_method callee_summary call_prop method_info =
   in
   let intersect_value =
     let values_and_check =
-      check_intersect_value_list ~is_init:false call_prop callee_summary
-        value_symbol_list
+      check_intersect ~is_init:false call_prop callee_summary value_symbol_list
     in
     let values = combine_value call_prop.Language.value values_and_check in
-    let check = List.filter (fun (_, c) -> c = F) values_and_check in
+    let check = List.filter (fun (_, c) -> c = false) values_and_check in
     (values, check)
   in
   let values, check = intersect_value in
@@ -691,24 +698,26 @@ let is_static_class ~is_class name (class_info, _) =
   | None -> false
 
 let is_private_class class_package class_info =
-  let c_info = ClassInfo.M.find_opt class_package (class_info |> fst) in
-  match c_info with
+  match ClassInfo.M.find_opt class_package (class_info |> fst) with
   | Some info -> (
       let class_type = info.ClassInfo.class_type in
       match class_type with Language.Private -> true | _ -> false)
   | None -> false
 
-let is_static_method method_name method_info =
-  let m_info = MethodInfo.M.find_opt method_name method_info in
-  match m_info with None -> false | Some m -> m.MethodInfo.is_static
+let is_static_method m_name method_info =
+  match MethodInfo.M.find_opt m_name method_info with
+  | None -> false
+  | Some m -> m.MethodInfo.is_static
 
-let is_private method_name method_info =
-  let info = MethodInfo.M.find method_name method_info in
-  match info.MethodInfo.modifier with Private -> true | _ -> false
+let is_private m_name method_info =
+  match (MethodInfo.M.find m_name method_info).MethodInfo.modifier with
+  | Private -> true
+  | _ -> false
 
-let is_public e_method method_info =
-  let e_method_info = MethodInfo.M.find e_method method_info in
-  match e_method_info.MethodInfo.modifier with Public -> true | _ -> false
+let is_public m_name method_info =
+  match (MethodInfo.M.find m_name method_info).MethodInfo.modifier with
+  | Public -> true
+  | _ -> false
 
 let is_init_method method_name =
   Str.string_match (".*\\.<init>" |> Str.regexp) method_name 0
@@ -1113,7 +1122,7 @@ let mk_params_format params =
   let params = Regexp.global_rm_exp Regexp.start_bm2 params in
   "(" ^ params ^ ")"
 
-let check_correct_constructor method_summary id candidate_constructor summary =
+let satisfied_c method_summary id candidate_constructor summary =
   let c_summarys = SummaryMap.M.find candidate_constructor summary in
   let method_symbols, method_memory = method_summary.Language.precond in
   let id = if id = "gen1" then "this" else id in
@@ -1138,16 +1147,16 @@ let check_correct_constructor method_summary id candidate_constructor summary =
               (c_summary.Language.postcond |> fst)
               ""
           in
-          ( check_intersect_value_list ~is_init:true method_summary c_summary
+          ( check_intersect ~is_init:true method_summary c_summary
               [ (target_symbol, c_target_symbol) ],
             c_summary ))
         c_summarys
     in
     List.fold_left
       (fun check_value (check_summary, c_summary) ->
-        let check = List.filter (fun (_, c) -> c = F) check_summary in
+        let check = List.filter (fun (_, c) -> c = false) check_summary in
         let t_count =
-          List.filter (fun (_, c) -> c = T) check_summary |> List.length
+          List.filter (fun (_, c) -> c = true) check_summary |> List.length
         in
         let new_values = combine_value c_summary.Language.value check_summary in
         let new_c_summary = new_value_summary c_summary new_values in
@@ -1181,13 +1190,12 @@ let get_static_constructor t_method class_info =
         if class_name = name then full_name else find_name)
       class_info ""
   in
-  (class_name |> replace_nested_symbol, full_class_name)
+  (Some (class_name |> replace_nested_symbol), full_class_name)
 
 let get_init_constructor t_method method_info =
-  let class_name = get_class_name ~infer:true t_method in
   let c_info = MethodInfo.M.find t_method method_info in
   let c_import = get_package c_info.MethodInfo.formal_params in
-  (class_name, c_import)
+  (None, c_import)
 
 (* e.g., java.util.Date --> contain class name *)
 let get_package_from_method t_method (class_info, _) =
@@ -1223,30 +1231,21 @@ let match_return_object class_name method_name method_info =
   let return = info.MethodInfo.return in
   Str.string_match (Str.regexp class_name) return 0
 
-let check_real_getter getter_var =
-  match getter_var |> fst |> snd with Language.This None -> false | _ -> true
-
 let mk_getter_var getter_method getter_summary method_info class_info =
   let class_name = get_class_name ~infer:true getter_method in
   let import = get_package_from_method getter_method class_info in
   let var_name = "gen_get" ^ (!getter |> string_of_int) in
   getter := !getter + 1;
-  let var = Language.Var (Language.Object class_name, var_name) in
+  let var = Language.Var (Object class_name, var_name) in
   let info = MethodInfo.M.find getter_method method_info in
-  let params_statement = mk_params_format info.MethodInfo.formal_params in
   let getter_statement =
-    if is_static_method getter_method method_info then
-      let s = getter_method |> Regexp.global_rm_exp (Str.regexp "(.*)$") in
-      s ^ params_statement
-    else
-      let s =
-        Str.split Regexp.dot getter_method
-        |> List.tl |> List.hd
-        |> Regexp.global_rm_exp (Str.regexp "(.*)$")
-      in
-      var_name ^ "." ^ s ^ params_statement
+    Str.split Regexp.dot getter_method
+    |> List.tl |> List.hd
+    |> Regexp.global_rm_exp (Str.regexp "(.*)$")
   in
-  (getter_statement, ((import, var), getter_summary))
+  ( Some ((import, var), getter_summary),
+    getter_statement,
+    info.MethodInfo.formal_params )
 
 let is_java_io_class class_name =
   if class_name = "PrintStream" || class_name = "InputStream" then true
@@ -1261,37 +1260,65 @@ let is_graphics_class class_name =
     true
   else false
 
-let file_code = "File gen_file = new File(\"unitgen_file\");\n"
+let file_code =
+  AST.Stmt
+    ( Language.Var (Object "File", "con_file"),
+      NewCreate
+        ( {
+            id = None;
+            method_name = "File";
+            args = Constant [ "\"unitcon_file\"" ];
+          },
+          SETNT ) )
 
-let create_file_code file_name = file_name ^ ".createNewFile();\n"
+let create_file_code file_name =
+  AST.Setter
+    ( file_name,
+      { id = None; method_name = "createNewFile"; args = Constant [] },
+      SETEmpty )
 
 let image_code =
-  "BufferedImage gen_image = new BufferedImage(100, 100, \
-   BufferedImage.TYPE_INT_RGB);\n"
+  AST.Stmt
+    ( Language.Var (Object "BufferedImage", "con_image"),
+      NewCreate
+        ( {
+            id = None;
+            method_name = "BufferedImage";
+            args = Constant [ "100"; "100"; "BufferedImage.TYPE_INT_RGB" ];
+          },
+          SETNT ) )
 
-let create_graphics_code graphics_name = graphics_name ^ ".createGraphics();\n"
+let create_graphics_code g_name =
+  AST.Setter
+    ( g_name,
+      { id = None; method_name = "createGraphics"; args = Constant [] },
+      SETEmpty )
 
-let class_code = "Object gen_obj = new Object();\n"
+let class_code =
+  AST.Stmt
+    ( Language.Var (Object "Object", "con_obj"),
+      NewCreate
+        ({ id = None; method_name = "Object"; args = Constant [] }, SETNT) )
 
-let get_class_code obj_name = obj_name ^ ".getClass();\n"
+let get_class_code obj_name =
+  AST.Setter
+    ( obj_name,
+      { id = None; method_name = "getClass"; args = Constant [] },
+      SETEmpty )
 
-let get_java_package_normal_class class_name =
-  let import_array_list = "java.util.ArrayList" in
-  let import_hash_map = "java.util.HashMap" in
-  let import_file = "java.io.File" in
-  let import_input = "java.io.InputStream" in
-  let import_fileinput = "java.io.FileInputStream" in
+let get_java_package_class class_name =
   if class_name = "Collection" || class_name = "List" then
-    ("ArrayList", [ import_array_list ])
+    ("ArrayList", [ "java.util.ArrayList" ])
   else if class_name = "Map" || class_name = "HashMap" then
-    ("HashMap", [ import_hash_map ])
+    ("HashMap", [ "java.util.HashMap" ])
   else if class_name = "Object" then ("Object", [])
-  else if class_name = "File" then ("File(\"unitgen_file\")", [ import_file ])
-  else if class_name = "PrintStream" then
-    ("PrintStream(gen_file)", [ import_file ])
+  else if class_name = "File" then ("File", [ "java.io.File" ])
+  else if class_name = "PrintStream" then ("PrintStream", [ "java.io.File" ])
   else if class_name = "InputStream" then
-    ( "FileInputStream(gen_file)",
-      [ import_file; import_input; import_fileinput ] )
+    ( "FileInputStream",
+      [ "java.io.File"; "java.io.InputStream"; "java.io.FileInputStream" ] )
+  else if is_graphics_class class_name then
+    ("BufferedImage", [ "java.awt.image.BufferedImage" ])
   else ("null", [])
 
 let get_constructor_list (class_package, class_name) method_info
@@ -1316,55 +1343,71 @@ let get_constructor_list (class_package, class_name) method_info
         method_list class_to_find)
     method_info []
 
-let find_cinitializer c_name t_variable mem method_info =
-  let compare_variable t_variable s_trace find_init =
+let find_global_var_list c_name t_var mem summary =
+  let all_var s_trace =
     Condition.M.fold
-      (fun trace_head _ trace_find_init ->
-        match trace_head with
-        | Condition.RH_Var var when var = t_variable -> c_name ^ "." ^ var
-        | _ -> trace_find_init)
-      s_trace find_init
+      (fun head _ gvar_list ->
+        match head with
+        | Condition.RH_Var var -> (c_name ^ "." ^ var) :: gvar_list
+        | _ -> gvar_list)
+      s_trace []
   in
-  MethodInfo.M.fold
-    (fun init_name _ find_init ->
+  let compare_var t_var s_trace =
+    Condition.M.fold
+      (fun head _ gvar ->
+        match head with
+        | Condition.RH_Var var when var = t_var -> Some (c_name ^ "." ^ var)
+        | _ -> gvar)
+      s_trace None
+  in
+  SummaryMap.M.fold
+    (fun init_name init_mem list ->
       if Str.string_match (c_name ^ "\\.<clinit>" |> Str.regexp) init_name 0
       then
-        Condition.M.fold
-          (fun _ symbol_trace find_init ->
-            compare_variable t_variable symbol_trace find_init)
-          mem ""
-      else find_init)
-    method_info ""
+        match t_var with
+        | Some v ->
+            (Condition.M.fold (fun _ s_trace list ->
+                 match compare_var v s_trace with
+                 | Some gv -> gv :: list
+                 | None -> list))
+              mem list
+        | None ->
+            (Condition.M.fold (fun _ s_trace list ->
+                 List.rev_append (all_var s_trace) list))
+              init_mem list
+      else list)
+    summary []
 
-let get_class_initializer_list class_name t_summary method_info =
-  let variables, mem = t_summary.Language.precond in
-  let target_variable =
+let get_global_var_list class_name t_summary summary =
+  let vars, mem = t_summary.Language.precond in
+  let t_var =
     Condition.M.fold
-      (fun symbol variable find_variable ->
-        let symbol = get_rh_name ~is_var:false symbol in
-        match variable with
+      (fun symbol var find_var ->
+        match var with
         | Condition.RH_Var var ->
             if Str.string_match (".*\\." ^ class_name |> Str.regexp) var 0 then
-              symbol
-            else find_variable
-        | _ -> find_variable)
-      variables ""
+              Some (get_rh_name ~is_var:false symbol)
+            else find_var
+        | _ -> find_var)
+      vars None
   in
-  let target_variable =
-    Condition.M.fold
-      (fun symbol symbol_trace find_variable ->
-        let symbol = get_rh_name ~is_var:false symbol in
-        if symbol = target_variable then
-          Condition.M.fold
-            (fun trace_head _ trace_find_var ->
-              match trace_head with
-              | Condition.RH_Var var -> var
-              | _ -> trace_find_var)
-            symbol_trace find_variable
-        else find_variable)
-      mem ""
-  in
-  find_cinitializer class_name target_variable mem method_info
+  match t_var with
+  | None -> find_global_var_list class_name None mem summary
+  | Some x ->
+      let target_variable =
+        Condition.M.fold
+          (fun symbol symbol_trace find_variable ->
+            if get_rh_name ~is_var:false symbol = x then
+              Condition.M.fold
+                (fun trace_head _ trace_find_var ->
+                  match trace_head with
+                  | Condition.RH_Var var -> Some var
+                  | _ -> trace_find_var)
+                symbol_trace find_variable
+            else find_variable)
+          mem None
+      in
+      find_global_var_list class_name target_variable mem summary
 
 let rec get_array_type typ =
   match typ with
@@ -1436,14 +1479,12 @@ let this_is_null summary =
 
 let mk_setter_format setter method_info =
   let m_info = MethodInfo.M.find setter method_info in
-  let formal_params = m_info.MethodInfo.formal_params in
-  let params_statement = mk_params_format formal_params in
   let setter_statement =
     Str.split Regexp.dot setter
     |> List.tl |> List.hd
     |> Regexp.global_rm_exp (Str.regexp "(.*)$")
   in
-  (setter_statement ^ params_statement, formal_params)
+  (setter_statement, m_info.MethodInfo.formal_params)
 
 let is_receiver id =
   let new_id1 = Str.replace_first (Str.regexp "gen") "" id in
@@ -1457,9 +1498,43 @@ let is_receiver id =
   | None, None, None -> false
   | _, _, _ -> true
 
+let primitive class_name import id partial =
+  let code =
+    AST.modify_stnt
+      (Stmt (Language.Var (Object class_name, id), Primitive Null))
+      partial.code
+  in
+  [
+    {
+      code = AST.TestCase (AST.MStmt (STNT, code), AST.get_ee partial.code);
+      import;
+      variable = partial.variable;
+      score = partial.score;
+      recv_package = partial.recv_package;
+    };
+  ]
+
+let global_var class_name import id t_summary method_info partial =
+  let g = get_global_var_list class_name t_summary method_info in
+  (List.fold_left (fun list gv ->
+       let code =
+         AST.modify_stnt
+           (Stmt (Language.Var (Object class_name, id), GV gv))
+           partial.code
+       in
+       {
+         code = AST.TestCase (AST.MStmt (STNT, code), AST.get_ee partial.code);
+         import = partial.import |> List.cons import;
+         variable = partial.variable;
+         score = partial.score;
+         recv_package = partial.recv_package;
+       }
+       :: list))
+    [] g
+
 let get_setter_code constructor id method_summary c_summary method_info
     setter_map =
-  if is_receiver id then []
+  if is_receiver id then [ (AST.SETEmpty, []) ]
   else
     let met_field_map, setter_list =
       get_setter constructor id method_summary c_summary method_info setter_map
@@ -1480,133 +1555,146 @@ let get_setter_code constructor id method_summary c_summary method_info
     in
     List.fold_left
       (fun list setter ->
-        let statement, params = mk_setter_format setter method_info in
-        let statement = id ^ "." ^ statement ^ ";\n" in
-        let new_mk_var_list = iter_params params in
-        (statement, new_mk_var_list) :: list)
-      [] setter_list
+        let m, params = mk_setter_format setter method_info in
+        let s =
+          AST.Setter
+            (id, { id = None; method_name = m; args = Param params }, SETNT)
+        in
+        (s, iter_params params) :: list)
+      [ (AST.SETEmpty, []) ]
+      setter_list
 
 (* statement data structure: code * import * mk_var_list *)
 let get_defined_statement class_package class_name id t_summary method_info
     setter_map partial =
-  let class_initializer =
-    get_class_initializer_list class_name t_summary method_info
-  in
   let class_name = class_name |> replace_nested_symbol in
-  if class_initializer = "" then
-    let nc_name, import = get_java_package_normal_class class_name in
-    if is_java_io_class class_name then
-      [
-        {
-          code =
-            file_code
-            ^ create_file_code "gen_file"
-            ^ class_name ^ " " ^ id ^ " = new " ^ nc_name ^ ";\n" ^ partial.code;
-          import = import |> List.rev_append partial.import;
-          variable = partial.variable;
-          score = partial.score;
-          recv_package = partial.recv_package;
-        };
-      ]
-    else if is_file_class class_name then
-      [
-        {
-          code =
-            class_name ^ " " ^ id ^ " = new " ^ nc_name ^ ";\n"
-            ^ create_file_code id ^ partial.code;
-          import = import |> List.rev_append partial.import;
-          variable = partial.variable;
-          score = partial.score;
-          recv_package = partial.recv_package;
-        };
-      ]
-    else if is_class_class class_name then
-      [
-        {
-          code =
-            class_code ^ class_name ^ " " ^ id ^ " = "
-            ^ get_class_code "gen_obj" ^ partial.code;
-          import = import |> List.rev_append partial.import;
-          variable = partial.variable;
-          score = partial.score;
-          recv_package = partial.recv_package;
-        };
-      ]
-    else if is_graphics_class class_name then
-      [
-        {
-          code =
-            image_code ^ class_name ^ " " ^ id ^ " = "
-            ^ create_graphics_code "gen_image"
-            ^ partial.code;
-          import =
-            [ "java.awt.image.BufferedImage"; class_package ]
-            |> List.rev_append partial.import;
-          variable = partial.variable;
-          score = partial.score;
-          recv_package = partial.recv_package;
-        };
-      ]
-    else if nc_name = "null" then
-      [
-        {
-          code = replace_null id partial.code;
-          import = partial.import;
-          variable = partial.variable;
-          score = partial.score;
-          recv_package = partial.recv_package;
-        };
-      ]
-    else
-      let setter_code_list =
-        try
-          get_setter_code nc_name id t_summary Language.empty_summary
-            method_info setter_map
-        with _ -> []
-      in
-      List.fold_left
-        (fun list (setter, var_list) ->
-          {
-            code =
-              class_name ^ " " ^ id ^ " = new " ^ nc_name ^ "();\n" ^ setter
-              ^ partial.code;
-            import = import |> List.rev_append partial.import;
-            variable = List.rev_append var_list partial.variable;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          }
-          :: list)
-        [
-          {
-            code = class_name ^ " " ^ id ^ " = null;\n" ^ partial.code;
-            import = partial.import;
-            variable = partial.variable;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          };
-          {
-            code =
-              class_name ^ " " ^ id ^ " = new " ^ nc_name ^ "();\n"
-              ^ partial.code;
-            import = import |> List.rev_append partial.import;
-            variable = partial.variable;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          };
-        ]
-        setter_code_list
-  else
+  let nc_name, import = get_java_package_class class_name in
+  if is_java_io_class class_name then
+    let code =
+      AST.modify_stnt
+        (Stmt
+           ( Language.Var (Object class_name, id),
+             NewCreate
+               ( {
+                   id = None;
+                   method_name = nc_name;
+                   args = Constant [ "con_file" ];
+                 },
+                 SETNT ) ))
+        partial.code
+    in
+    let ee = AST.get_ee partial.code in
+    let code =
+      AST.TestCase
+        ( AST.modify_stnt file_code (AST.TestCase (AST.MStmt (STNT, code), ee)),
+          ee )
+      |> AST.modify_setnt
+           (Language.Var (Object "File", "con_file"))
+           (create_file_code "con_file")
+    in
     [
       {
-        code =
-          class_name ^ " " ^ id ^ " = " ^ class_initializer ^ ";\n"
-          ^ partial.code;
-        import = partial.import |> List.cons class_package;
+        code = AST.TestCase (AST.MStmt (STNT, code), ee);
+        import = import |> List.rev_append partial.import;
         variable = partial.variable;
         score = partial.score;
         recv_package = partial.recv_package;
       };
     ]
+  else if is_file_class class_name then
+    let ee = AST.get_ee partial.code in
+    let code =
+      AST.TestCase (AST.modify_stnt file_code partial.code, ee)
+      |> AST.modify_setnt
+           (Language.Var (Object "File", "con_file"))
+           (create_file_code "con_file")
+    in
+    [
+      {
+        code = AST.TestCase (AST.MStmt (STNT, code), ee);
+        import = import |> List.rev_append partial.import;
+        variable = partial.variable;
+        score = partial.score;
+        recv_package = partial.recv_package;
+      };
+    ]
+  else if is_class_class class_name then
+    let ee = AST.get_ee partial.code in
+    let code =
+      AST.TestCase (AST.modify_stnt class_code partial.code, ee)
+      |> AST.modify_setnt
+           (Language.Var (Object "Object", "con_obj"))
+           (get_class_code "con_obj")
+    in
+    [
+      {
+        code = AST.TestCase (AST.MStmt (STNT, code), ee);
+        import = import |> List.rev_append partial.import;
+        variable = partial.variable;
+        score = partial.score;
+        recv_package = partial.recv_package;
+      };
+    ]
+  else if is_graphics_class class_name then
+    let ee = AST.get_ee partial.code in
+    let code =
+      AST.TestCase (AST.modify_stnt image_code partial.code, ee)
+      |> AST.modify_setnt
+           (Language.Var (Object "BufferedImage", "con_image"))
+           (create_graphics_code "con_image")
+    in
+    [
+      {
+        code = AST.TestCase (AST.MStmt (STNT, code), ee);
+        import =
+          import |> List.cons class_package |> List.rev_append partial.import;
+        variable = partial.variable;
+        score = partial.score;
+        recv_package = partial.recv_package;
+      };
+    ]
+  else if nc_name = "null" then primitive class_name partial.import id partial
+  else
+    let setter_code_list =
+      try
+        get_setter_code nc_name id t_summary Language.empty_summary method_info
+          setter_map
+      with _ -> []
+    in
+    let ee = AST.get_ee partial.code in
+    let new_code =
+      AST.Stmt
+        ( Language.Var (Object class_name, id),
+          NewCreate
+            ({ id = None; method_name = nc_name; args = Constant [] }, SETNT) )
+    in
+    let new_tc =
+      AST.TestCase (AST.MStmt (STNT, AST.modify_stnt new_code partial.code), ee)
+    in
+    (* TODO: current setter, var_list is not wanted format *)
+    List.fold_left
+      (fun list (setter, var_list) ->
+        let code =
+          AST.modify_setnt (Language.Var (Object class_name, id)) setter new_tc
+        in
+        {
+          code = AST.TestCase (code, ee);
+          import = import |> List.rev_append partial.import;
+          variable = List.rev_append var_list partial.variable;
+          score = partial.score;
+          recv_package = partial.recv_package;
+        }
+        :: list)
+      (primitive class_name partial.import id partial
+      |> List.cons
+           {
+             code = new_tc;
+             import = import |> List.rev_append partial.import;
+             variable = partial.variable;
+             score = partial.score;
+             recv_package = partial.recv_package;
+           })
+      setter_code_list
 
 let get_return_object (class_package, class_name) method_info
     (class_info, hierarchy_graph) =
@@ -1630,26 +1718,20 @@ let get_return_object (class_package, class_name) method_info
         method_list class_to_find)
     method_info []
 
+let get_new_code id_var get_var m m_params code =
+  let c_method = AST.{ id = None; method_name = m; args = Param m_params } in
+  match get_var with
+  | Some x ->
+      AST.modify_stnt
+        (Stmt (id_var, GetCreate (x |> fst |> snd, c_method, SETEmpty)))
+        code
+  | None -> AST.modify_stnt (Stmt (id_var, NewCreate (c_method, SETNT))) code
+
 let get_one_constructor ~is_getter ~origin_private constructor class_package
     class_name id t_summary method_info class_info setter_map partial =
   let c, s, i = constructor in
   if c = "null" then
-    [
-      {
-        code = replace_null id partial.code;
-        import = partial.import;
-        variable = partial.variable;
-        score = partial.score;
-        recv_package = partial.recv_package;
-      };
-      {
-        code = class_name ^ " " ^ id ^ " = null;\n" ^ partial.code;
-        import = List.cons i partial.import;
-        variable = partial.variable;
-        score = partial.score;
-        recv_package = partial.recv_package;
-      };
-    ]
+    primitive class_name (List.cons i partial.import) id partial
   else
     let c_statement = c in
     let class_name =
@@ -1666,12 +1748,9 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
     let setter_code_list =
       get_setter_code class_name id t_summary c_summary method_info setter_map
     in
-    let params_statement = mk_params_format c_params in
     let c_statement =
-      params_statement
-      |> String.cat
-           (Str.replace_first (Str.regexp ".<init>") "" c_statement
-           |> Regexp.global_rm_exp (Str.regexp "(.*)$"))
+      Str.replace_first (Str.regexp ".<init>") "" c_statement
+      |> Regexp.global_rm_exp (Str.regexp "(.*)$")
     in
     let c_import = get_constructor_import c_info in
     let import =
@@ -1679,7 +1758,6 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
       if origin_private then c_import |> List.rev_append partial.import
       else c_import |> List.cons class_package |> List.rev_append partial.import
     in
-    let assign = if is_getter then " = " else " = new " in
     let c_statement =
       if
         is_nested_class c_class_name
@@ -1687,88 +1765,60 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
       then replace_nested_symbol c_statement
       else c_statement
     in
-    if this_is_null c_summary then
-      [
-        {
-          code = class_name ^ " " ^ id ^ " = null;\n" ^ partial.code;
-          import;
-          variable = partial.variable;
-          score = partial.score;
-          recv_package = partial.recv_package;
-        };
-      ]
+    if this_is_null c_summary then primitive class_name import id partial
     else if is_static_method c method_info then
       (* don't remove the first parameter because first parameter is not this. *)
-      let c_statement =
-        if is_getter then
-          let stat, _ = mk_getter_var c s method_info class_info in
-          stat |> replace_nested_symbol
-        else c_statement |> replace_nested_symbol
+      let get_var, m, m_params =
+        if is_getter then mk_getter_var c s method_info class_info
+        else (None, c_statement, c_params)
       in
-      let code =
-        (class_name |> replace_nested_symbol)
-        ^ " " ^ id ^ assign ^ c_statement ^ ";\n"
+      let id_var = Language.Var (Object class_name, id) in
+      let new_code = get_new_code id_var get_var m m_params partial.code in
+      let new_tc =
+        AST.TestCase (AST.MStmt (STNT, new_code), AST.get_ee partial.code)
       in
       let new_var = c_params |> List.map (fun p -> (p, c_summary)) in
       let variable = List.rev_append new_var partial.variable in
       List.fold_left
         (fun list (setter, var_list) ->
+          let code = AST.modify_setnt id_var setter new_tc in
           {
-            code = code ^ setter ^ partial.code;
+            code = AST.TestCase (code, AST.get_ee partial.code);
             import;
             variable = List.rev_append var_list variable;
             score = partial.score;
             recv_package = partial.recv_package;
           }
           :: list)
-        [
-          {
-            code = code ^ partial.code;
-            import;
-            variable;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          };
-        ]
-        setter_code_list
+        [] setter_code_list
     else if List.length c_params = 1 then
       (* method only have this (receiver variable) *)
-      let c_statement, getter_var =
-        if is_getter then
-          let stat, getter_var = mk_getter_var c s method_info class_info in
-          (stat |> replace_nested_symbol, getter_var)
-        else
-          ( c_statement |> replace_nested_symbol,
-            (("", Language.This None), Language.empty_summary) )
+      let get_var, m, m_params =
+        if is_getter then mk_getter_var c s method_info class_info
+        else (None, c_statement, c_params)
       in
-      let code =
-        (class_name |> replace_nested_symbol)
-        ^ " " ^ id ^ assign ^ c_statement ^ ";\n"
+      let id_var = Language.Var (Object class_name, id) in
+      let new_code = get_new_code id_var get_var m m_params partial.code in
+      let new_tc =
+        AST.TestCase (AST.MStmt (STNT, new_code), AST.get_ee partial.code)
       in
       let variable =
-        if check_real_getter getter_var then getter_var :: partial.variable
-        else partial.variable
+        match get_var with
+        | Some x -> x :: partial.variable
+        | _ -> partial.variable
       in
       List.fold_left
         (fun list (setter, var_list) ->
+          let code = AST.modify_setnt id_var setter new_tc in
           {
-            code = code ^ setter ^ partial.code;
+            code = AST.TestCase (code, AST.get_ee partial.code);
             import;
             variable = List.rev_append var_list variable;
             score = partial.score;
             recv_package = partial.recv_package;
           }
           :: list)
-        [
-          {
-            code = code ^ partial.code;
-            import;
-            variable;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          };
-        ]
-        setter_code_list
+        [] setter_code_list
     else if
       is_nested_class c_class_name
       && is_static_class ~is_class:true c_class_name class_info |> not
@@ -1778,34 +1828,32 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
         let outer_import, outer_var = List.tl c_params |> List.hd in
         let c_statement, outer =
           match outer_var with
-          | Language.Var (typ, id) ->
-              let c_statement =
-                Str.replace_first (Str.regexp_string id) "" c_statement
-                |> Str.replace_first (Str.regexp "(, ") "("
-                |> Str.replace_first (Str.regexp "^.*\\$") ""
-              in
+          | Language.Var (typ, _) ->
               outer := !outer + 1;
-              ( c_statement,
+              ( c_statement |> Str.replace_first (Str.regexp "^.*\\$") "",
                 ( outer_import,
                   Language.Var (typ, "outer" ^ (!outer |> string_of_int)) ) )
           | _ -> ("", (outer_import, outer_var))
         in
-        ( c_statement,
-          List.tl c_params |> List.tl |> List.cons outer
-          |> List.cons (List.hd c_params) )
+        (c_statement, List.tl c_params |> List.tl |> List.cons outer)
       in
-      let code =
-        (class_name |> replace_nested_symbol)
-        ^ " " ^ id ^ " = outer" ^ (!outer |> string_of_int) ^ ".new "
-        ^ c_statement ^ ";\n"
+      let id_var = Language.Var (Object class_name, id) in
+      let new_code =
+        get_new_code id_var
+          (Some
+             ( ("", Language.Var (None, "outer" ^ (!outer |> string_of_int))),
+               Language.empty_summary ))
+          ("new " ^ c_statement) (List.tl c_params) partial.code
       in
-      let c_params =
-        c_params |> List.tl |> List.map (fun p -> (p, c_summary))
+      let new_tc =
+        AST.TestCase (AST.MStmt (STNT, new_code), AST.get_ee partial.code)
       in
+      let c_params = c_params |> List.map (fun p -> (p, c_summary)) in
       List.fold_left
         (fun list (setter, var_list) ->
+          let code = AST.modify_setnt id_var setter new_tc in
           {
-            code = code ^ setter ^ partial.code;
+            code = AST.TestCase (code, AST.get_ee partial.code);
             import;
             variable =
               List.rev_append c_params partial.variable
@@ -1814,32 +1862,27 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
             recv_package = partial.recv_package;
           }
           :: list)
-        [
-          {
-            code = code ^ partial.code;
-            import;
-            variable = c_params |> List.rev_append partial.variable;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          };
-        ]
-        setter_code_list
+        [] setter_code_list
     else if
       is_nested_class c_class_name
       && is_static_class ~is_class:true c_class_name class_info
     then
       (* generation format: new Outer.Inner(); *)
-      let code =
-        (class_name |> replace_nested_symbol)
-        ^ " " ^ id ^ assign ^ c_statement ^ ";\n"
+      let id_var = Language.Var (Object class_name, id) in
+      let new_code =
+        get_new_code id_var None c_statement c_params partial.code
+      in
+      let new_tc =
+        AST.TestCase (AST.MStmt (STNT, new_code), AST.get_ee partial.code)
       in
       let c_params =
         c_params |> List.tl |> List.map (fun p -> (p, c_summary))
       in
       List.fold_left
         (fun list (setter, var_list) ->
+          let code = AST.modify_setnt id_var setter new_tc in
           {
-            code = code ^ setter ^ partial.code;
+            code = AST.TestCase (code, AST.get_ee partial.code);
             import;
             variable =
               List.rev_append c_params partial.variable
@@ -1848,62 +1891,43 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
             recv_package = partial.recv_package;
           }
           :: list)
-        [
-          {
-            code = code ^ partial.code;
-            import;
-            variable = c_params |> List.rev_append partial.variable;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          };
-        ]
-        setter_code_list
+        [] setter_code_list
     else
-      (* generation format: new Normal(); *)
-      let c_statement, getter_var =
-        if is_getter then
-          let stat, getter_var = mk_getter_var c s method_info class_info in
-          (stat, getter_var)
-        else (c_statement, (("", Language.This None), Language.empty_summary))
+      (* generation format: new Normal(...); *)
+      let get_var, m, m_params =
+        if is_getter then mk_getter_var c s method_info class_info
+        else (None, c_statement, c_params)
       in
-      let code = class_name ^ " " ^ id ^ assign ^ c_statement ^ ";\n" in
-      let c_params =
-        if is_getter then c_params |> List.map (fun p -> (p, c_summary))
-        else c_params |> List.tl |> List.map (fun p -> (p, c_summary))
+      let id_var = Language.Var (Object class_name, id) in
+      let new_code = get_new_code id_var get_var m m_params partial.code in
+      let new_tc =
+        AST.TestCase (AST.MStmt (STNT, new_code), AST.get_ee partial.code)
       in
-      let c_params =
-        if check_real_getter getter_var then getter_var :: c_params
-        else c_params
+      let variable =
+        if is_getter then m_params |> List.map (fun p -> (p, c_summary))
+        else m_params |> List.tl |> List.map (fun p -> (p, c_summary))
+      in
+      let variable =
+        match get_var with Some x -> x :: variable | _ -> variable
       in
       List.fold_left
         (fun list (setter, var_list) ->
+          let code = AST.modify_setnt id_var setter new_tc in
           {
-            code = code ^ setter ^ partial.code;
+            code = AST.TestCase (code, AST.get_ee partial.code);
             import;
             variable =
-              List.rev_append c_params partial.variable
+              List.rev_append variable partial.variable
               |> List.rev_append var_list;
             score = partial.score;
             recv_package = partial.recv_package;
           }
           :: list)
-        [
-          {
-            code = code ^ partial.code;
-            import;
-            variable = c_params |> List.rev_append partial.variable;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          };
-        ]
-        setter_code_list
+        [] setter_code_list
 
 let get_many_constructor ~is_getter c_summary_list class_package class_name id
     t_summary method_info class_info setter_map partial =
-  let c_list =
-    if !Cmdline.basic_mode then c_summary_list
-    else sort_constructor_list c_summary_list method_info
-  in
+  let c_list = sort_constructor_list c_summary_list method_info in
   let c_list =
     if Str.string_match (Str.regexp "gen") id 0 then c_list
     else ("null", Language.empty_summary, 0, class_package) :: c_list
@@ -1922,20 +1946,14 @@ let get_many_constructor ~is_getter c_summary_list class_package class_name id
     [] c_list
   |> List.rev
 
-let check_correct_constructor_list id t_summary summary summary_list =
-  if !Cmdline.basic_mode then
-    List.fold_left
-      (fun list (constructor, import) ->
-        (constructor, Language.empty_summary, 0, import) :: list)
-      [] summary_list
-  else
-    List.fold_left
-      (fun list (constructor, import) ->
-        let check, summary, count =
-          check_correct_constructor t_summary id constructor summary
-        in
-        if check then (constructor, summary, count, import) :: list else list)
-      [] summary_list
+let satisfied_c_list id t_summary summary summary_list =
+  List.fold_left
+    (fun list (constructor, import) ->
+      let check, summary, count =
+        satisfied_c t_summary id constructor summary
+      in
+      if check then (constructor, summary, count, import) :: list else list)
+    [] summary_list
 
 let get_constructor (class_package, class_name) id t_summary summary method_info
     class_info setter_map partial =
@@ -1950,12 +1968,12 @@ let get_constructor (class_package, class_name) id t_summary summary method_info
   in
   let c_summary_list =
     get_constructor_list (class_package, class_name) method_info class_info
-    |> check_correct_constructor_list id t_summary summary
+    |> satisfied_c_list id t_summary summary
     |> summary_filtering false
   in
   let g_summary_list =
     get_return_object (class_package, class_name) method_info class_info
-    |> check_correct_constructor_list id t_summary summary
+    |> satisfied_c_list id t_summary summary
     |> summary_filtering true
   in
   if c_summary_list = [] && g_summary_list = [] then
@@ -2005,12 +2023,18 @@ let get_statement param t_summary summary method_info class_info setter_map
   | Language.Var (typ, id) -> (
       let values = get_value typ id t_summary in
       match typ with
-      | Int ->
+      | Int | Long ->
           List.fold_left
             (fun list value ->
-              let stm = "int " ^ id ^ " = " ^ value ^ ";\n" in
+              let code =
+                AST.modify_stnt
+                  (Stmt (param |> snd, Primitive (Z (value |> int_of_string))))
+                  old_partial.code
+              in
               {
-                code = stm ^ old_partial.code;
+                code =
+                  AST.TestCase
+                    (AST.MStmt (STNT, code), AST.get_ee old_partial.code);
                 import = old_partial.import;
                 variable = old_partial.variable;
                 score = old_partial.score;
@@ -2018,38 +2042,18 @@ let get_statement param t_summary summary method_info class_info setter_map
               }
               :: list)
             [] values
-      | Long ->
+      | Float | Double ->
           List.fold_left
             (fun list value ->
-              let stm = "long " ^ id ^ " = " ^ value ^ ";\n" in
+              let code =
+                AST.modify_stnt
+                  (Stmt (param |> snd, Primitive (R (value |> float_of_string))))
+                  old_partial.code
+              in
               {
-                code = stm ^ old_partial.code;
-                import = old_partial.import;
-                variable = old_partial.variable;
-                score = old_partial.score;
-                recv_package = old_partial.recv_package;
-              }
-              :: list)
-            [] values
-      | Float ->
-          List.fold_left
-            (fun list value ->
-              let stm = "float " ^ id ^ " = " ^ value ^ ";\n" in
-              {
-                code = stm ^ old_partial.code;
-                import = old_partial.import;
-                variable = old_partial.variable;
-                score = old_partial.score;
-                recv_package = old_partial.recv_package;
-              }
-              :: list)
-            [] values
-      | Double ->
-          List.fold_left
-            (fun list value ->
-              let stm = "double " ^ id ^ " = " ^ value ^ ";\n" in
-              {
-                code = stm ^ old_partial.code;
+                code =
+                  AST.TestCase
+                    (AST.MStmt (STNT, code), AST.get_ee old_partial.code);
                 import = old_partial.import;
                 variable = old_partial.variable;
                 score = old_partial.score;
@@ -2062,12 +2066,18 @@ let get_statement param t_summary summary method_info class_info setter_map
             (fun list value ->
               let value =
                 match int_of_string_opt value with
-                | Some i -> if i = 0 then "false" else "true"
-                | _ -> value
+                | Some i -> if i = 0 then false else true
+                | _ -> value |> bool_of_string
               in
-              let stm = "boolean " ^ id ^ " = " ^ value ^ ";\n" in
+              let code =
+                AST.modify_stnt
+                  (Stmt (param |> snd, Primitive (B value)))
+                  old_partial.code
+              in
               {
-                code = stm ^ old_partial.code;
+                code =
+                  AST.TestCase
+                    (AST.MStmt (STNT, code), AST.get_ee old_partial.code);
                 import = old_partial.import;
                 variable = old_partial.variable;
                 score = old_partial.score;
@@ -2078,9 +2088,15 @@ let get_statement param t_summary summary method_info class_info setter_map
       | Char ->
           List.fold_left
             (fun list value ->
-              let stm = "char " ^ id ^ " = \'" ^ value ^ "\';\n" in
+              let code =
+                AST.modify_stnt
+                  (Stmt (param |> snd, Primitive (C value.[0])))
+                  old_partial.code
+              in
               {
-                code = stm ^ old_partial.code;
+                code =
+                  AST.TestCase
+                    (AST.MStmt (STNT, code), AST.get_ee old_partial.code);
                 import = old_partial.import;
                 variable = old_partial.variable;
                 score = old_partial.score;
@@ -2091,16 +2107,20 @@ let get_statement param t_summary summary method_info class_info setter_map
       | String ->
           List.fold_left
             (fun list value ->
-              let value =
-                if value = "null" then value
-                else if Str.string_match (Str.regexp "^not ") value 0 then
-                  let value = Regexp.global_rm_exp Regexp.space value in
-                  "\"" ^ value ^ "\""
-                else "\"" ^ value ^ "\""
+              let code =
+                if value = "null" then
+                  AST.modify_stnt
+                    (Stmt (param |> snd, Primitive Null))
+                    old_partial.code
+                else
+                  AST.modify_stnt
+                    (Stmt (param |> snd, Primitive (S value)))
+                    old_partial.code
               in
-              let stm = "String " ^ id ^ " = " ^ value ^ ";\n" in
               {
-                code = stm ^ old_partial.code;
+                code =
+                  AST.TestCase
+                    (AST.MStmt (STNT, code), AST.get_ee old_partial.code);
                 import = [ param |> fst ] |> List.rev_append old_partial.import;
                 variable = old_partial.variable;
                 score = old_partial.score;
@@ -2114,13 +2134,13 @@ let get_statement param t_summary summary method_info class_info setter_map
             id t_summary summary method_info class_info setter_map old_partial
       | Array _ ->
           (* TODO: implement array constructor *)
-          let array_type = get_array_type typ in
-          let array_constructor = get_array_constructor typ 5 in
+          (* let array_type = get_array_type typ in
+             let array_constructor = get_array_constructor typ 5 in
+             array_type ^ " " ^ id ^ " = new " ^ array_constructor ^ ";\n"
+                   ^ old_partial.code; *)
           [
             {
-              code =
-                array_type ^ " " ^ id ^ " = new " ^ array_constructor ^ ";\n"
-                ^ old_partial.code;
+              code = old_partial.code;
               import = [ param |> fst ] |> List.rev_append old_partial.import;
               variable = old_partial.variable;
               score = old_partial.score;
@@ -2132,7 +2152,7 @@ let get_statement param t_summary summary method_info class_info setter_map
 let pretty_tc_format all_param =
   let imports =
     let import_set =
-      all_param |> snd
+      all_param |> fst
       |> List.fold_left
            (fun set import ->
              ImportSet.add (import |> replace_nested_symbol) set)
@@ -2144,19 +2164,7 @@ let pretty_tc_format all_param =
       import_set ""
   in
   let start = "\n@Test\npublic void unitcon_test() throws Exception {\n" in
-  let param_code =
-    all_param |> fst
-    |> Str.split (Str.regexp "\n")
-    |> List.fold_left
-         (fun code_list code ->
-           if List.mem code code_list then code_list else code :: code_list)
-         []
-    |> List.rev
-  in
-  let codes =
-    List.fold_left (fun code param -> code ^ param ^ "\n") start param_code
-  in
-  let codes = codes ^ "}\n\n" in
+  let codes = start ^ (all_param |> snd |> AST.testcase_code) ^ "}\n\n" in
   (imports, codes)
 
 let rec all_statement candidate summary method_info class_info setter_map =
@@ -2178,14 +2186,18 @@ let rec all_statement candidate summary method_info class_info setter_map =
           all_statement
             (List.rev_append state_list tl)
             summary method_info class_info setter_map
-      | [] -> [ (pretty_tc_format (partial.code, partial.import), tl) ])
+      | [] ->
+          [
+            ( pretty_tc_format (partial.import, partial.code |> AST.remove_nt),
+              tl );
+          ])
   | [] -> []
 
 (* find error entry *)
 let rec find_ee e_method e_summary callgraph summary call_prop_map method_info =
   let propagation caller_method caller_preconds call_prop =
     let new_value, check_match =
-      match_precond e_method e_summary call_prop method_info
+      satisfy e_method e_summary call_prop method_info
     in
     if check_match then
       let new_call_prop = new_value_summary call_prop new_value in
@@ -2197,86 +2209,48 @@ let rec find_ee e_method e_summary callgraph summary call_prop_map method_info =
   if is_public e_method method_info then [ (e_method, e_summary) ]
   else
     let caller_list = CG.succ callgraph e_method in
-    if !Cmdline.basic_mode then
-      List.fold_left
-        (fun list caller_method ->
-          find_ee caller_method Language.empty_summary callgraph summary
-            call_prop_map method_info
-          |> List.rev_append list)
-        [] caller_list
-    else
-      List.fold_left
-        (fun list caller_method ->
-          let caller_prop_list =
-            match
-              CallPropMap.M.find_opt (caller_method, e_method) call_prop_map
-            with
-            | None ->
-                (* It is possible without any specific conditions *)
-                find_ee caller_method Language.empty_summary callgraph summary
-                  call_prop_map method_info
-            | Some prop_list ->
-                List.fold_left
-                  (fun caller_preconds call_prop ->
-                    propagation caller_method caller_preconds call_prop)
-                  [] prop_list
-          in
-          List.rev_append list caller_prop_list)
-        [] caller_list
+    List.fold_left
+      (fun list caller_method ->
+        let caller_prop_list =
+          match
+            CallPropMap.M.find_opt (caller_method, e_method) call_prop_map
+          with
+          | None ->
+              (* It is possible without any specific conditions *)
+              find_ee caller_method Language.empty_summary callgraph summary
+                call_prop_map method_info
+          | Some prop_list ->
+              List.fold_left
+                (fun caller_preconds call_prop ->
+                  propagation caller_method caller_preconds call_prop)
+                [] prop_list
+        in
+        List.rev_append list caller_prop_list)
+      [] caller_list
 
 let init_stm ee_method ee_method_summary method_info class_info =
-  let params =
-    List.map
-      (fun p -> (p, ee_method_summary))
-      (MethodInfo.M.find ee_method method_info).MethodInfo.formal_params
-  in
-  let execute_ee id ee_method =
-    let str_params =
-      List.fold_left
-        (fun str_params variable ->
-          match variable |> snd with
-          | Language.Var (_, id) -> str_params ^ ", " ^ id
-          | _ -> str_params)
-        "" (MethodInfo.M.find ee_method method_info).MethodInfo.formal_params
-      |> Regexp.global_rm_exp Regexp.start_bm2
-    in
-    let ee_method =
-      Str.split Regexp.dot ee_method
-      |> List.tl |> List.hd
-      |> Str.split (Str.regexp "(")
-      |> List.hd
-      |> Regexp.global_rm_exp (Str.regexp "<init>")
-    in
-    id ^ ee_method ^ "(" ^ str_params ^ ")"
-  in
-  let execute_init_ee id class_name ee_method =
-    let str_params =
-      List.fold_left
-        (fun str_params variable ->
-          match variable |> snd with
-          | Language.Var (_, id) -> str_params ^ ", " ^ id
-          | _ -> str_params)
-        "" (MethodInfo.M.find ee_method method_info).MethodInfo.formal_params
-      |> Regexp.global_rm_exp Regexp.start_bm2
-    in
-    class_name ^ " " ^ id ^ " = new " ^ class_name ^ "(" ^ str_params ^ ")"
+  let f_params =
+    (MethodInfo.M.find ee_method method_info).MethodInfo.formal_params
   in
   let id, import =
     if is_static_method ee_method method_info then
       get_static_constructor ee_method (class_info |> fst)
     else if is_init_method ee_method then
       get_init_constructor ee_method method_info
-    else ("gen1", "")
+    else (Some "gen1", "")
   in
-  let ee_statement, params =
-    if is_init_method ee_method then
-      (execute_init_ee "gen1" id ee_method, params |> List.tl)
-    else (execute_ee (id ^ ".") ee_method, params)
+  let e =
+    if is_init_method ee_method then Str.split Regexp.dot ee_method |> List.hd
+    else
+      Str.split Regexp.dot ee_method
+      |> List.tl |> List.hd
+      |> Str.split (Str.regexp "(")
+      |> List.hd
   in
   {
-    code = ee_statement ^ ";";
+    code = AST.TestCase (STNT, { id; method_name = e; args = Param f_params });
     import = [ import ];
-    variable = params;
+    variable = List.map (fun p -> (p, ee_method_summary)) f_params;
     score = 0;
     recv_package = get_import ee_method class_info;
   }

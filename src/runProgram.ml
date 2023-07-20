@@ -4,6 +4,8 @@ module JsonUtil = Yojson.Safe.Util
 
 let blacklist : string list ref = ref [] (* unusing method list *)
 
+let trial = ref 0
+
 type t = {
   program_dir : string;
   summary_file : string;
@@ -215,6 +217,7 @@ let my_really_read_string in_chan =
   loop ()
 
 let checking_bug_presence ic expected_bug =
+  print_endline "checking ...";
   let data = my_really_read_string ic in
   close_in ic;
   match string_of_expected_bug expected_bug with
@@ -265,10 +268,12 @@ let build_program info tc =
 
 (* queue: (testcase * list(testcases containing hole)) *)
 let rec run_test ~is_start info queue e_method_info program_info =
+  incr trial;
   let tc, tc_list = make_testcase ~is_start queue e_method_info program_info in
   if tc = ("", "") then failwith "can't proceed anymore";
   let result_ic = build_program info tc in
   if checking_bug_presence result_ic info.expected_bug then (
+    "# of trial: " ^ (!trial |> string_of_int) |> print_endline;
     close_in result_ic |> ignore;
     tc)
   else (

@@ -206,3 +206,182 @@ module FieldMap = struct
 
   type t = Value.op M.t
 end
+
+module AST = struct
+  type var = variable
+
+  type args = Param of params | Constant of string list
+
+  type func = { id : id option; method_name : method_name; args : args }
+
+  type primitive =
+    | Null
+    | Z of int
+    | R of float
+    | B of bool
+    | C of char
+    | S of string
+
+  type setter =
+    | SETEmpty
+    | Setter of (string * func * setter)
+    | SETNT (* setter non-terminal *)
+
+  type create =
+    | Primitive of primitive
+    | GV of string
+    | NewCreate of (func * setter)
+    | GetCreate of (var * func * setter)
+
+  type stmt =
+    | STEmpty
+    | Stmt of (var * create)
+    | MStmt of (stmt * stmt)
+    | STNT (* stmt non-terminal *)
+
+  type t = TestCase of (stmt * func)
+
+  let var_code v =
+    let v =
+      match v with
+      | Var (typ, id) -> (typ, id)
+      | This _ -> failwith "Error: This is not var"
+    in
+    match v |> fst with
+    | Int -> "int " ^ (v |> snd)
+    | Long -> "long " ^ (v |> snd)
+    | Float -> "float " ^ (v |> snd)
+    | Double -> "double " ^ (v |> snd)
+    | Bool -> "boolean " ^ (v |> snd)
+    | Char -> "char " ^ (v |> snd)
+    | String -> "String " ^ (v |> snd)
+    | Object name ->
+        (name |> Str.global_replace Regexp.dollar ".") ^ " " ^ (v |> snd)
+    | _ -> failwith "not supported variable"
+
+  let get_id v =
+    match v with
+    | Var (_, id) -> id
+    | This _ -> failwith "Error: This is not contain id"
+
+  let params_code params =
+    match params with
+    | Param p ->
+        let code =
+          List.fold_left
+            (fun p_code (_, p) ->
+              match p with Var (_, id) -> p_code ^ ", " ^ id | _ -> p_code)
+            "" p
+          |> Regexp.global_rm_exp Regexp.start_bm2
+        in
+        "(" ^ code ^ ")"
+    | Constant c ->
+        let code =
+          List.fold_left (fun p_code c -> p_code ^ ", " ^ c) "" c
+          |> Regexp.global_rm_exp Regexp.start_bm2
+        in
+        "(" ^ code ^ ")"
+
+  let primitive_code p =
+    match p with
+    | Null -> "null;\n"
+    | Z z -> (z |> string_of_int) ^ ";\n"
+    | R r -> (r |> string_of_float) ^ ";\n"
+    | B b -> (b |> string_of_bool) ^ ";\n"
+    | C c -> "\'" ^ String.make 1 c ^ "\';\n"
+    | S s -> "\"" ^ s ^ "\";\n"
+
+  let rec setter_code (s : setter) =
+    match s with
+    | SETEmpty -> ""
+    | Setter (id, func, setter) ->
+        (id ^ "."
+        ^ (func.method_name |> Str.global_replace Regexp.dollar ".")
+        ^ params_code func.args ^ ";\n")
+        ^ setter_code setter
+    | _ -> failwith "Error: still need unrolling"
+
+  let create_code c =
+    match c with
+    | Primitive p -> primitive_code p
+    | GV g -> g ^ ";"
+    | NewCreate (func, s) ->
+        "new "
+        ^ (func.method_name |> Str.global_replace Regexp.dollar ".")
+        ^ params_code func.args ^ ";\n" ^ setter_code s
+    | GetCreate (var, func, s) ->
+        (var |> get_id) ^ "."
+        ^ (func.method_name |> Str.global_replace Regexp.dollar ".")
+        ^ params_code func.args ^ ";\n" ^ setter_code s
+
+  let x = ref 0
+
+  let rec stmt_code (s : stmt) =
+    match s with
+    | STEmpty -> ""
+    | Stmt (var, c) -> var_code var ^ " = " ^ create_code c
+    | MStmt (s1, s2) -> stmt_code s1 ^ stmt_code s2
+    | _ -> failwith "Error: still need unrolling"
+
+  let error_func_code e =
+    match e.id with
+    | Some id -> id ^ "." ^ e.method_name ^ params_code e.args ^ ";\n"
+    | None -> "new " ^ e.method_name ^ params_code e.args ^ ";\n"
+
+  let testcase_code = function
+    | TestCase (stmt, e) -> stmt_code stmt ^ error_func_code e
+
+  let get_ee = function TestCase (_, e) -> e
+
+  let get_stmt = function TestCase (stmt, _) -> stmt
+
+  let modify_setnt (t_var : var) stmt = function
+    | TestCase (old_stmt, _) ->
+        let modify c =
+          let rec modify_s s =
+            match s with
+            | SETNT -> stmt
+            | Setter (id, f, s) -> Setter (id, f, modify_s s)
+            | _ -> s
+          in
+          match c with NewCreate (f, s) -> NewCreate (f, modify_s s) | _ -> c
+        in
+        let rec find_create stmt =
+          match stmt with
+          | Stmt (var, c) when var = t_var -> Stmt (var, modify c)
+          | MStmt (s1, s2) -> MStmt (find_create s1, find_create s2)
+          | _ -> stmt
+        in
+        find_create old_stmt
+
+  let modify_stnt stmt = function
+    | TestCase (old_stmt, _) ->
+        let rec check_stnt stmt =
+          match stmt with
+          | STNT -> true
+          | MStmt (s1, s2) -> check_stnt s1 || check_stnt s2
+          | _ -> false
+        in
+        let rec modify old =
+          match old with
+          | STNT -> stmt
+          | MStmt (s1, s2) ->
+              if check_stnt s2 then MStmt (s1, modify s2)
+              else MStmt (modify s1, s2)
+          | _ -> old
+        in
+        modify old_stmt
+
+  let remove_nt = function
+    | TestCase (old_stmt, e) ->
+        let rec modify old =
+          match old with
+          | STNT -> STEmpty
+          | MStmt (s1, s2) -> MStmt (modify s1, modify s2)
+          | _ -> old
+        in
+        TestCase (modify old_stmt, e)
+end
+
+let empty_tc =
+  AST.TestCase (STEmpty, { id = None; method_name = ""; args = Constant [] })
