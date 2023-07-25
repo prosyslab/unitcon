@@ -14,4 +14,13 @@ let main () =
       initialize ();
       RunProgram.run p
 
-let _ = main ()
+let _ =
+  let stopit =
+    Sys.Signal_handle
+      (fun _ ->
+        print_endline "time-out";
+        Unix._exit 0)
+  in
+  Sys.set_signal Sys.sigalrm stopit;
+  ignore (Unix.alarm !Cmdline.time_out);
+  main ()

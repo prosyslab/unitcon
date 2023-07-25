@@ -217,7 +217,7 @@ let my_really_read_string in_chan =
   loop ()
 
 let checking_bug_presence ic expected_bug =
-  print_endline "checking ...";
+  (* print_endline "checking ..."; *)
   let data = my_really_read_string ic in
   close_in ic;
   match string_of_expected_bug expected_bug with

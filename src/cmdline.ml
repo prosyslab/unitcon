@@ -6,6 +6,8 @@ let target_program : string option ref = ref None
 
 let basic_mode = ref false
 
+let time_out = ref (30 * 60)
+
 let mock = ref []
 
 let class_file = ref ""
@@ -21,6 +23,7 @@ let options =
       "Output directory (default: unitcon-out)" );
     ("-print-callgraph", Arg.Set print_callgraph, "Print callgraph");
     ("-basic-mode", Arg.Set basic_mode, "Run basic mode (default: false)");
+    ("-time-out", Arg.Set_int time_out, "Time out (default: 30m)");
     ( "-mock",
       Arg.String (fun x -> mock := x :: !mock),
       "Using mock for test case generation" );
