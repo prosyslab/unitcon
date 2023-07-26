@@ -34,9 +34,9 @@ let parse_boitv boitv =
         List.fold_left
           (fun mmap tail ->
             let tail =
-              Regexp.first_rm_exp Regexp.max tail
-              |> Regexp.first_rm_exp Regexp.min
-              |> Regexp.global_rm_exp Regexp.bk2
+              Regexp.first_rm Regexp.max tail
+              |> Regexp.first_rm Regexp.min
+              |> Regexp.global_rm Regexp.bk2
               |> Regexp.rm_space
             in
             if check_relation head tail then Relation.M.add head tail mmap
@@ -54,44 +54,44 @@ let parse_citv citv =
         let head = List.hd mapping_value |> Regexp.rm_space in
         let tail = List.tl mapping_value |> List.hd |> Regexp.rm_space in
         if Value.is_eq tail then
-          let value = Regexp.first_rm_exp Regexp.eq tail in
+          let value = Regexp.first_rm Regexp.eq tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Eq (Int v)) mmap
           | None ->
               if value = "null" then Value.M.add head (Value.Eq Null) mmap
               else Value.M.add head (Value.Eq (String value)) mmap
         else if Value.is_neq tail then
-          let value = Regexp.first_rm_exp Regexp.neq tail in
+          let value = Regexp.first_rm Regexp.neq tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Neq (Int v)) mmap
           | None ->
               if value = "null" then Value.M.add head (Value.Neq Null) mmap
               else Value.M.add head (Value.Neq (String value)) mmap
         else if Value.is_ge tail then
-          let value = Regexp.first_rm_exp Regexp.ge tail in
+          let value = Regexp.first_rm Regexp.ge tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Ge (Int v)) mmap
           | None -> Value.M.add head (Value.Ge MinusInf) mmap
         else if Value.is_gt tail then
-          let value = Regexp.first_rm_exp Regexp.gt tail in
+          let value = Regexp.first_rm Regexp.gt tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Gt (Int v)) mmap
           | None -> Value.M.add head (Value.Gt MinusInf) mmap
         else if Value.is_le tail then
-          let value = Regexp.first_rm_exp Regexp.le tail in
+          let value = Regexp.first_rm Regexp.le tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Le (Int v)) mmap
           | None -> Value.M.add head (Value.Le PlusInf) mmap
         else if Value.is_lt tail then
-          let value = Regexp.first_rm_exp Regexp.lt tail in
+          let value = Regexp.first_rm Regexp.lt tail in
           match int_of_string_opt value with
           | Some v -> Value.M.add head (Value.Lt (Int v)) mmap
           | None -> Value.M.add head (Value.Lt PlusInf) mmap
         else if Value.is_between tail then
           let values =
-            Regexp.first_rm_exp Regexp.in_n tail
-            |> Regexp.first_rm_exp Regexp.in_bk
-            |> Regexp.first_rm_exp Regexp.end_bk
+            Regexp.first_rm Regexp.in_n tail
+            |> Regexp.first_rm Regexp.in_bk
+            |> Regexp.first_rm Regexp.end_bk
             |> String.split_on_char ' '
           in
           if List.length values = 1 then
@@ -125,8 +125,8 @@ let parse_citv citv =
                       Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap)
         else if Value.is_outside tail then
           let values =
-            Regexp.first_rm_exp Regexp.ots tail
-            |> Regexp.first_rm_exp Regexp.end_bk
+            Regexp.first_rm Regexp.ots tail
+            |> Regexp.first_rm Regexp.end_bk
             |> String.split_on_char ' '
           in
           let min_value = List.hd values in
@@ -162,15 +162,15 @@ let parse_condition condition =
   else
     let var_list =
       List.hd v_and_m
-      |> Regexp.first_rm_exp Regexp.stack
-      |> Regexp.global_rm_exp Regexp.remain_symbol
+      |> Regexp.first_rm Regexp.stack
+      |> Regexp.global_rm Regexp.remain_symbol
       |> String.split_on_char ','
     in
     let mem =
       List.tl v_and_m |> List.hd
-      |> Regexp.first_rm_exp Regexp.heap
-      |> Regexp.global_rm_exp Regexp.remain_symbol2
-      |> Regexp.global_rm_exp Regexp.o_bk
+      |> Regexp.first_rm Regexp.heap
+      |> Regexp.global_rm Regexp.remain_symbol2
+      |> Regexp.global_rm Regexp.o_bk
       |> Regexp.rm_space |> Str.split Regexp.c_bk
     in
     let variables =
@@ -204,7 +204,7 @@ let parse_condition condition =
       List.fold_left
         (fun mmap ref ->
           let ref_trace =
-            Regexp.global_rm_exp Regexp.start_bm ref
+            Regexp.global_rm Regexp.start_bm ref
             |> Regexp.rm_space |> Str.split Regexp.bm
           in
           if ref_trace = [] || Str.string_match Regexp.ref (List.hd ref_trace) 0
@@ -216,7 +216,7 @@ let parse_condition condition =
             in
             let partial_tl =
               List.hd ref_trace
-              |> Regexp.global_rm_exp ("^" ^ head ^ "[ \t\r\n]+->" |> Str.regexp)
+              |> Regexp.global_rm ("^" ^ head ^ "[ \t\r\n]+->" |> Str.regexp)
               |> Regexp.rm_space
             in
             let trace = List.tl ref_trace |> List.cons partial_tl in

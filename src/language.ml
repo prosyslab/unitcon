@@ -208,38 +208,123 @@ module FieldMap = struct
 end
 
 module AST = struct
-  type var = variable
+  type arg = Param of params | Defined of string list | Arg
 
-  type args = Param of params | Constant of string list
+  type func = F of { method_name : method_name; args : arg } | Func
 
-  type func = { id : id option; method_name : method_name; args : args }
+  type id = Variable of variable | ClassName of string | Id
 
-  type primitive =
-    | Null
-    | Z of int
-    | R of float
-    | B of bool
-    | C of char
-    | S of string
+  type primitive = Z of int | R of float | B of bool | C of char
 
-  type setter =
-    | SETEmpty
-    | Setter of (string * func * setter)
-    | SETNT (* setter non-terminal *)
+  type exp = Primitive of primitive | GlobalConstant of string | Null | Exp
 
-  type create =
-    | Primitive of primitive
-    | GV of string
-    | NewCreate of (func * setter)
-    | GetCreate of (var * func * setter)
+  type t =
+    | Const of (id * exp)
+    | Assign of (id * id * func * arg)
+    | Void of (id * func * arg)
+    | Seq of (t * t)
+    | Skip
+    | Stmt
 
-  type stmt =
-    | STEmpty
-    | Stmt of (var * create)
-    | MStmt of (stmt * stmt)
-    | STNT (* stmt non-terminal *)
+  let is_stmt = function Stmt -> true | _ -> false
 
-  type t = TestCase of (stmt * func)
+  and is_arg = function Arg -> true | _ -> false
+
+  and is_func = function Func -> true | _ -> false
+
+  and is_id = function Id -> true | _ -> false
+
+  and is_exp = function Exp -> true | _ -> false
+
+  (* ************************************** *
+     Checking for Synthesis Rules
+   * ************************************** *)
+
+  (* 1. x := Exp *)
+  let const = function
+    | Const (x, exp) -> is_id x |> not && is_exp exp
+    | _ -> false
+
+  (* 2. x := ID.F(ID) *)
+  let fcall_in_assign = function
+    | Assign (x0, x1, func, arg) ->
+        is_id x0 |> not && is_id x1 && is_func func && is_arg arg
+    | _ -> false
+
+  (* 3. x := ID.f(ID) *)
+  let recv_in_assign = function
+    | Assign (x0, x1, func, arg) ->
+        is_id x0 |> not && is_id x1 && is_func func |> not && is_arg arg
+    | _ -> false
+
+  (* 4. x0 := x1.f(ID) *)
+  let arg_in_assign = function
+    | Assign (x0, x1, func, arg) ->
+        is_id x0 |> not && is_id x1 |> not && is_func func |> not && is_arg arg
+    | _ -> false
+
+  (* 5. x0 := x1.f(arg); Stmt *)
+  let void = function
+    | Seq (s1, s2) -> (
+        match s1 with
+        | Assign (x0, x1, func, arg) ->
+            is_id x0 |> not
+            && is_id x1 |> not
+            && is_func func |> not
+            && is_arg arg |> not
+            && is_stmt s2
+        | _ -> false)
+    | _ -> false
+
+  (* 6. ID.F(ID) *)
+  let fcall1_in_void = function
+    | Void (x, func, arg) -> is_id x && is_func func && is_arg arg
+    | _ -> false
+
+  (* 7. ID.F(ID) *)
+  let fcall2_in_void = function
+    | Void (x, func, arg) -> is_id x |> not && is_func func && is_arg arg
+    | _ -> false
+
+  (* 8. ID.f(ID) *)
+  let recv_in_void = function
+    | Void (x, func, arg) -> is_id x && is_func func |> not && is_arg arg
+    | _ -> false
+
+  (* 9. x.f(ID) *)
+  let arg_in_void = function
+    | Void (x, func, arg) -> is_id x |> not && is_func func |> not && is_arg arg
+    | _ -> false
+
+  (* ************************************** *
+     Return Code
+   * ************************************** *)
+
+  let arg_code =
+    let cc code x = code ^ ", " ^ x in
+    function
+    | Param p ->
+        "("
+        ^ (List.fold_left
+             (fun pc (_, p) -> match p with Var (_, id) -> cc pc id | _ -> pc)
+             "" p
+          |> Regexp.rm_first_rest)
+        ^ ")"
+    | Defined c ->
+        "("
+        ^ (List.fold_left (fun pc c -> cc pc c) "" c |> Regexp.rm_first_rest)
+        ^ ")"
+    | Arg -> failwith "Error: still need unrolling arg"
+
+  let func_code = function
+    | F f -> f.method_name |> Str.global_replace Regexp.dollar "."
+    | _ -> failwith "Error: still need unrolling func"
+
+  let is_var = function Variable _ -> true | _ -> false
+
+  and is_string = function ClassName c when c = "String" -> true | _ -> false
+
+  and is_cn = function ClassName c when c <> "String" -> true | _ -> false
 
   let var_code v =
     let v =
@@ -259,129 +344,49 @@ module AST = struct
         (name |> Str.global_replace Regexp.dollar ".") ^ " " ^ (v |> snd)
     | _ -> failwith "not supported variable"
 
-  let get_id v =
-    match v with
-    | Var (_, id) -> id
-    | This _ -> failwith "Error: This is not contain id"
+  let recv_name_code = function
+    | Variable v -> (
+        match v with
+        | Var (_, id) -> id
+        | This _ -> failwith "Error: This is not var")
+    | ClassName c -> c
+    | _ -> failwith "Error: still need unrolling id"
 
-  let params_code params =
-    match params with
-    | Param p ->
-        let code =
-          List.fold_left
-            (fun p_code (_, p) ->
-              match p with Var (_, id) -> p_code ^ ", " ^ id | _ -> p_code)
-            "" p
-          |> Regexp.global_rm_exp Regexp.start_bm2
-        in
-        "(" ^ code ^ ")"
-    | Constant c ->
-        let code =
-          List.fold_left (fun p_code c -> p_code ^ ", " ^ c) "" c
-          |> Regexp.global_rm_exp Regexp.start_bm2
-        in
-        "(" ^ code ^ ")"
+  let id_code = function
+    | Variable v -> var_code v
+    | ClassName c -> c
+    | Id -> failwith "Error: still need unrolling id"
 
-  let primitive_code p =
-    match p with
-    | Null -> "null;\n"
+  let primitive_code = function
     | Z z -> (z |> string_of_int) ^ ";\n"
     | R r -> (r |> string_of_float) ^ ";\n"
     | B b -> (b |> string_of_bool) ^ ";\n"
     | C c -> "\'" ^ String.make 1 c ^ "\';\n"
-    | S s -> "\"" ^ s ^ "\";\n"
 
-  let rec setter_code (s : setter) =
-    match s with
-    | SETEmpty -> ""
-    | Setter (id, func, setter) ->
-        (id ^ "."
-        ^ (func.method_name |> Str.global_replace Regexp.dollar ".")
-        ^ params_code func.args ^ ";\n")
-        ^ setter_code setter
-    | _ -> failwith "Error: still need unrolling"
-
-  let create_code c =
-    match c with
+  let exp_code = function
     | Primitive p -> primitive_code p
-    | GV g -> g ^ ";"
-    | NewCreate (func, s) ->
-        "new "
-        ^ (func.method_name |> Str.global_replace Regexp.dollar ".")
-        ^ params_code func.args ^ ";\n" ^ setter_code s
-    | GetCreate (var, func, s) ->
-        (var |> get_id) ^ "."
-        ^ (func.method_name |> Str.global_replace Regexp.dollar ".")
-        ^ params_code func.args ^ ";\n" ^ setter_code s
+    | GlobalConstant g -> g
+    | Null -> "null;\n"
+    | Exp -> failwith "Error: still need unrolling exp"
 
-  let x = ref 0
+  let rec s_code = function
+    | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp
+    | Assign (x0, x1, func, arg) ->
+        if is_cn x1 then
+          id_code x0 ^ " = " ^ "new " ^ func_code func ^ arg_code arg ^ ";\n"
+        else if is_var x1 then
+          id_code x0 ^ " = " ^ recv_name_code x1 ^ "." ^ func_code func
+          ^ arg_code arg ^ ";\n"
+        else if is_string x1 then
+          id_code x0 ^ " = " ^ "\"" ^ func_code func ^ "\";\n"
+        else failwith "Error: not supported id type"
+    | Void (x, func, arg) ->
+        recv_name_code x ^ "." ^ func_code func ^ arg_code arg ^ ";\n"
+    | Seq (s1, s2) -> s_code s1 ^ s_code s2
+    | Skip -> ""
+    | Stmt -> failwith "Error: still need unrolling stmt"
 
-  let rec stmt_code (s : stmt) =
-    match s with
-    | STEmpty -> ""
-    | Stmt (var, c) -> var_code var ^ " = " ^ create_code c
-    | MStmt (s1, s2) -> stmt_code s1 ^ stmt_code s2
-    | _ -> failwith "Error: still need unrolling"
-
-  let error_func_code e =
-    match e.id with
-    | Some id -> id ^ "." ^ e.method_name ^ params_code e.args ^ ";\n"
-    | None -> "new " ^ e.method_name ^ params_code e.args ^ ";\n"
-
-  let testcase_code = function
-    | TestCase (stmt, e) -> stmt_code stmt ^ error_func_code e
-
-  let get_ee = function TestCase (_, e) -> e
-
-  let get_stmt = function TestCase (stmt, _) -> stmt
-
-  let modify_setnt (t_var : var) stmt = function
-    | TestCase (old_stmt, _) ->
-        let modify c =
-          let rec modify_s s =
-            match s with
-            | SETNT -> stmt
-            | Setter (id, f, s) -> Setter (id, f, modify_s s)
-            | _ -> s
-          in
-          match c with NewCreate (f, s) -> NewCreate (f, modify_s s) | _ -> c
-        in
-        let rec find_create stmt =
-          match stmt with
-          | Stmt (var, c) when var = t_var -> Stmt (var, modify c)
-          | MStmt (s1, s2) -> MStmt (find_create s1, find_create s2)
-          | _ -> stmt
-        in
-        find_create old_stmt
-
-  let modify_stnt stmt = function
-    | TestCase (old_stmt, _) ->
-        let rec check_stnt stmt =
-          match stmt with
-          | STNT -> true
-          | MStmt (s1, s2) -> check_stnt s1 || check_stnt s2
-          | _ -> false
-        in
-        let rec modify old =
-          match old with
-          | STNT -> stmt
-          | MStmt (s1, s2) ->
-              if check_stnt s2 then MStmt (s1, modify s2)
-              else MStmt (modify s1, s2)
-          | _ -> old
-        in
-        modify old_stmt
-
-  let remove_nt = function
-    | TestCase (old_stmt, e) ->
-        let rec modify old =
-          match old with
-          | STNT -> STEmpty
-          | MStmt (s1, s2) -> MStmt (modify s1, modify s2)
-          | _ -> old
-        in
-        TestCase (modify old_stmt, e)
+  let code = function
+    | Seq (s1, s2) -> s_code s1 ^ s_code s2
+    | _ -> "Error: this s can not be start"
 end
-
-let empty_tc =
-  AST.TestCase (STEmpty, { id = None; method_name = ""; args = Constant [] })

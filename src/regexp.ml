@@ -54,8 +54,6 @@ let any = Str.regexp "\\*"
 
 let start_bm = Str.regexp "^,[ \t\r\n]*"
 
-let start_bm2 = Str.regexp "^, "
-
 let ref = Str.regexp "^[ \t\r\n]*->[ \t\r\n]*$"
 
 let array = Str.regexp ".+\\[_\\*_\\].*"
@@ -86,14 +84,16 @@ let postcond = Str.regexp "^.*Postcond:"
 
 let fparam = Str.regexp "^.*actual:"
 
-let global_rm_exp exp str = Str.global_replace exp "" str
+let global_rm exp str = Str.global_replace exp "" str
 
-let first_rm_exp exp str = Str.replace_first exp "" str
+let first_rm exp str = Str.replace_first exp "" str
 
 let rm_space str =
-  let str = first_rm_exp pre_space str in
-  first_rm_exp post_space str
+  let str = first_rm pre_space str in
+  first_rm post_space str
 
-let remove_bk str = global_rm_exp bk str |> rm_space
+let remove_bk str = global_rm bk str |> rm_space
+
+let rm_first_rest str = global_rm (Str.regexp "^, ") str
 
 let package = Str.regexp "package"

@@ -58,6 +58,64 @@ let score t_summary p_summary partial =
   let length = partial.variable |> List.length in
   failwith "not implemented"
 
+(* 1 *)
+let const_rule1 s n = if AST.const s then failwith "not implemented"
+
+let const_rule2 s g = if AST.const s then failwith "not implemented"
+
+let const_rule3 s null = if AST.const s then failwith "not implemented"
+
+(* 2 *)
+let fcall_in_assign_rule s f =
+  if AST.fcall_in_assign s then failwith "not implemented"
+
+(* 3 *)
+let recv_in_assign_rule1 s c =
+  if AST.recv_in_assign s then failwith "not implemented"
+
+let recv_in_assign_rule2 s exp =
+  if AST.recv_in_assign s then failwith "not implemented"
+
+let recv_in_assign_rule3 s assign =
+  if AST.recv_in_assign s then failwith "not implemented"
+
+(* 4 *)
+let arg_in_assign_rule1 s exp =
+  if AST.arg_in_assign s then failwith "not implemented"
+
+let arg_in_assign_rule2 s assign =
+  if AST.arg_in_assign s then failwith "not implemented"
+
+(* 5 *)
+let void_rule1 s = if AST.void s then failwith "not implemented"
+
+let void_rule2 s void = if AST.void s then failwith "not implemented"
+
+(* 6 *)
+let fcall1_in_void_rule s f =
+  if AST.fcall1_in_void s then failwith "not implemented"
+
+(* 7 *)
+let fcall2_in_void_rule s f =
+  if AST.fcall2_in_void s then failwith "not implemented"
+
+(* 8 *)
+let recv_in_void_rule1 s c =
+  if AST.recv_in_void s then failwith "not implemented"
+
+let recv_in_void_rule2 s exp =
+  if AST.recv_in_void s then failwith "not implemented"
+
+let recv_in_void_rule3 s assign =
+  if AST.recv_in_void s then failwith "not implemented"
+
+(* 9 *)
+let arg_in_void_rule1 s exp =
+  if AST.arg_in_void s then failwith "not implemented"
+
+let arg_in_void_rule2 s assign =
+  if AST.arg_in_void s then failwith "not implemented"
+
 let rec find_relation given_symbol relation =
   match Relation.M.find_opt given_symbol relation with
   | Some find_symbol -> find_relation find_symbol relation
@@ -689,8 +747,8 @@ let is_static_class ~is_class name (class_info, _) =
   let class_name =
     if is_class then name
     else
-      Regexp.global_rm_exp (Str.regexp "\\.<.*>(.*)$") name
-      |> Regexp.global_rm_exp (Str.regexp "(.*)$")
+      Regexp.global_rm (Str.regexp "\\.<.*>(.*)$") name
+      |> Regexp.global_rm (Str.regexp "(.*)$")
   in
   match ClassInfo.M.find_opt class_name class_info with
   | Some typ -> (
@@ -723,8 +781,8 @@ let is_init_method method_name =
   Str.string_match (".*\\.<init>" |> Str.regexp) method_name 0
 
 let get_class_name ~infer method_name =
-  if infer then Regexp.global_rm_exp ("\\..+(.*)" |> Str.regexp) method_name
-  else Regexp.global_rm_exp ("(.*)" |> Str.regexp) method_name
+  if infer then Regexp.global_rm ("\\..+(.*)" |> Str.regexp) method_name
+  else Regexp.global_rm ("(.*)" |> Str.regexp) method_name
 
 let get_package formal_params =
   List.fold_left
@@ -742,7 +800,7 @@ let get_import t_method (class_info, _) =
         if class_name = name then
           let name = Str.global_replace Regexp.dollar "\\$" name in
           let s = name ^ "$" in
-          Regexp.global_rm_exp (Str.regexp s) full_name
+          Regexp.global_rm (Str.regexp s) full_name
         else find_name)
       class_info ""
   in
@@ -769,7 +827,7 @@ let is_public_or_default ~is_getter recv_package method_name method_info =
       |> Str.global_replace Regexp.dollar "\\$"
     in
     let s = name ^ "$" in
-    let m_package = Regexp.global_rm_exp (Str.regexp s) m_package in
+    let m_package = Regexp.global_rm (Str.regexp s) m_package in
     if Str.string_match (Str.regexp m_package) recv_package 0 then
       match info.MethodInfo.modifier with
       | Default | Protected | Public -> true
@@ -1110,18 +1168,6 @@ let get_setter constructor id method_summary c_summary method_info setter_map =
     in
     (need_setter_field, get_setter_list constructor method_info setter_map)
 
-let mk_params_format params =
-  let params =
-    List.fold_left
-      (fun param_code (_, param) ->
-        match param with
-        | Language.This _ -> param_code
-        | Language.Var (_, id) -> param_code ^ ", " ^ id)
-      "" params
-  in
-  let params = Regexp.global_rm_exp Regexp.start_bm2 params in
-  "(" ^ params ^ ")"
-
 let satisfied_c method_summary id candidate_constructor summary =
   let c_summarys = SummaryMap.M.find candidate_constructor summary in
   let method_symbols, method_memory = method_summary.Language.precond in
@@ -1241,7 +1287,7 @@ let mk_getter_var getter_method getter_summary method_info class_info =
   let getter_statement =
     Str.split Regexp.dot getter_method
     |> List.tl |> List.hd
-    |> Regexp.global_rm_exp (Str.regexp "(.*)$")
+    |> Regexp.global_rm (Str.regexp "(.*)$")
   in
   ( Some ((import, var), getter_summary),
     getter_statement,
@@ -1482,7 +1528,7 @@ let mk_setter_format setter method_info =
   let setter_statement =
     Str.split Regexp.dot setter
     |> List.tl |> List.hd
-    |> Regexp.global_rm_exp (Str.regexp "(.*)$")
+    |> Regexp.global_rm (Str.regexp "(.*)$")
   in
   (setter_statement, m_info.MethodInfo.formal_params)
 
@@ -1738,7 +1784,7 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
       if origin_private then
         c_statement |> replace_nested_symbol
         |> Str.replace_first (Str.regexp ".<init>") ""
-        |> Regexp.global_rm_exp (Str.regexp "(.*)$")
+        |> Regexp.global_rm (Str.regexp "(.*)$")
       else class_name
     in
     let c_info = MethodInfo.M.find c_statement method_info in
@@ -1750,7 +1796,7 @@ let get_one_constructor ~is_getter ~origin_private constructor class_package
     in
     let c_statement =
       Str.replace_first (Str.regexp ".<init>") "" c_statement
-      |> Regexp.global_rm_exp (Str.regexp "(.*)$")
+      |> Regexp.global_rm (Str.regexp "(.*)$")
     in
     let c_import = get_constructor_import c_info in
     let import =
