@@ -58,64 +58,6 @@ let score t_summary p_summary partial =
   let length = partial.variable |> List.length in
   failwith "not implemented"
 
-(* 1 *)
-let const_rule1 s n = if AST.const s then failwith "not implemented"
-
-let const_rule2 s g = if AST.const s then failwith "not implemented"
-
-let const_rule3 s null = if AST.const s then failwith "not implemented"
-
-(* 2 *)
-let fcall_in_assign_rule s f =
-  if AST.fcall_in_assign s then failwith "not implemented"
-
-(* 3 *)
-let recv_in_assign_rule1 s c =
-  if AST.recv_in_assign s then failwith "not implemented"
-
-let recv_in_assign_rule2 s exp =
-  if AST.recv_in_assign s then failwith "not implemented"
-
-let recv_in_assign_rule3 s assign =
-  if AST.recv_in_assign s then failwith "not implemented"
-
-(* 4 *)
-let arg_in_assign_rule1 s exp =
-  if AST.arg_in_assign s then failwith "not implemented"
-
-let arg_in_assign_rule2 s assign =
-  if AST.arg_in_assign s then failwith "not implemented"
-
-(* 5 *)
-let void_rule1 s = if AST.void s then failwith "not implemented"
-
-let void_rule2 s void = if AST.void s then failwith "not implemented"
-
-(* 6 *)
-let fcall1_in_void_rule s f =
-  if AST.fcall1_in_void s then failwith "not implemented"
-
-(* 7 *)
-let fcall2_in_void_rule s f =
-  if AST.fcall2_in_void s then failwith "not implemented"
-
-(* 8 *)
-let recv_in_void_rule1 s c =
-  if AST.recv_in_void s then failwith "not implemented"
-
-let recv_in_void_rule2 s exp =
-  if AST.recv_in_void s then failwith "not implemented"
-
-let recv_in_void_rule3 s assign =
-  if AST.recv_in_void s then failwith "not implemented"
-
-(* 9 *)
-let arg_in_void_rule1 s exp =
-  if AST.arg_in_void s then failwith "not implemented"
-
-let arg_in_void_rule2 s assign =
-  if AST.arg_in_void s then failwith "not implemented"
-
 let rec find_relation given_symbol relation =
   match Relation.M.find_opt given_symbol relation with
   | Some find_symbol -> find_relation find_symbol relation

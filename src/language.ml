@@ -208,9 +208,11 @@ module FieldMap = struct
 end
 
 module AST = struct
-  type arg = Param of params | Defined of string list | Arg
+  type arg = Param of params | Arg of params
 
-  type func = F of { method_name : method_name; args : arg } | Func
+  type func =
+    | F of { typ : string; method_name : method_name; args : arg }
+    | Func
 
   type id = Variable of variable | ClassName of string | Id
 
@@ -226,9 +228,18 @@ module AST = struct
     | Skip
     | Stmt
 
-  let is_stmt = function Stmt -> true | _ -> false
+  let rec ground = function
+    | Const (x, exp) -> (is_id x || is_exp exp) |> not
+    | Assign (x0, x1, func, arg) ->
+        (is_id x0 || is_id x1 || is_func func || is_arg arg) |> not
+    | Void (x, func, arg) -> (is_id x || is_func func || is_arg arg) |> not
+    | Seq (s1, s2) -> (ground s1 || ground s2) |> not
+    | Skip -> true
+    | Stmt -> false
 
-  and is_arg = function Arg -> true | _ -> false
+  and is_stmt = function Stmt -> true | _ -> false
+
+  and is_arg = function Arg _ -> true | _ -> false
 
   and is_func = function Func -> true | _ -> false
 
@@ -297,6 +308,122 @@ module AST = struct
     | _ -> false
 
   (* ************************************** *
+     Synthesis Rules
+   * ************************************** *)
+
+  (* 1 *)
+  let const_rule1 s n =
+    if const s then match s with Const (x, _) -> Const (x, n) | _ -> s else s
+
+  let const_rule2 s g =
+    if const s then match s with Const (x, _) -> Const (x, g) | _ -> s else s
+
+  let const_rule3 s null =
+    if const s then match s with Const (x, _) -> Const (x, null) | _ -> s
+    else s
+
+  (* 2 *)
+  let fcall_in_assign_rule s f arg =
+    if fcall_in_assign s then
+      match s with Assign (x0, x1, _, _) -> Assign (x0, x1, f, arg) | _ -> s
+    else s
+
+  (* 3 *)
+  let recv_in_assign_rule1 s c =
+    if recv_in_assign s then
+      match s with
+      | Assign (x0, _, func, arg) -> Assign (x0, c, func, arg)
+      | _ -> s
+    else s
+
+  let recv_in_assign_rule2 s id =
+    if recv_in_assign s then
+      match s with
+      | Assign (x0, _, func, arg) ->
+          let typ = match func with Func -> "" | F f -> f.typ in
+          let x1 = Variable (Var (Object typ, id)) in
+          Seq (Const (x1, Exp), Assign (x0, x1, func, arg))
+      | _ -> s
+    else s
+
+  let recv_in_assign_rule3 s id =
+    if recv_in_assign s then
+      match s with
+      | Assign (x0, _, func, arg) ->
+          let typ = match func with Func -> "" | F f -> f.typ in
+          let x1 = Variable (Var (Object typ, id)) in
+          Seq
+            ( Seq (Assign (x1, Id, Func, Arg _), Stmt),
+              Assign (x0, x1, func, arg) )
+      | _ -> s
+    else s
+
+  (* 4, 9 *)
+  let mk_const_arg s arg = Seq (s, Const (arg, Exp))
+
+  let mk_assign_arg s arg = Seq (s, Seq (Assign (arg, Id, Func, Arg _), Stmt))
+
+  let arg_in_assign_rule s arg_seq arg =
+    if arg_in_assign s then
+      match s with
+      | Assign (x0, x1, func, _) -> Seq (arg_seq, Assign (x0, x1, func, arg))
+      | _ -> s
+    else s
+
+  let arg_in_void_rule s arg_seq arg =
+    if arg_in_void s then
+      match s with
+      | Void (x, func, _) -> Seq (arg_seq, Void (x, func, arg))
+      | _ -> s
+    else s
+
+  (* 5 *)
+  let void_rule1 s =
+    if void s then match s with Seq (s1, _) -> s1 | _ -> s else s
+
+  let void_rule2 s =
+    if void s then
+      match s with
+      | Seq (s1, _) -> (
+          match s1 with
+          | Assign (x0, _, _, _) -> Seq (s1, Seq (Stmt, Void (x0, Func, Arg _)))
+          | _ -> s)
+      | _ -> s
+    else s
+
+  (* 6, 7 *)
+  let fcall_in_void_rule s f arg =
+    if fcall1_in_void s then
+      match s with Void (x0, _, _) -> Void (x0, f, arg) | _ -> s
+    else s
+
+  (* 8 *)
+  let recv_in_void_rule1 s c =
+    if recv_in_void s then
+      match s with Void (_, func, arg) -> Void (c, func, arg) | _ -> s
+    else s
+
+  let recv_in_void_rule2 s id =
+    if recv_in_void s then
+      match s with
+      | Void (_, func, arg) ->
+          let typ = match func with Func -> "" | F f -> f.typ in
+          let x = Variable (Var (Object typ, id)) in
+          Seq (Const (x, Exp), Void (x, func, arg))
+      | _ -> s
+    else s
+
+  let recv_in_void_rule3 s id =
+    if recv_in_void s then
+      match s with
+      | Void (_, func, arg) ->
+          let typ = match func with Func -> "" | F f -> f.typ in
+          let x = Variable (Var (Object typ, id)) in
+          Seq (Seq (Assign (x, Id, Func, Arg _), Stmt), Void (x, func, arg))
+      | _ -> s
+    else s
+
+  (* ************************************** *
      Return Code
    * ************************************** *)
 
@@ -310,11 +437,7 @@ module AST = struct
              "" p
           |> Regexp.rm_first_rest)
         ^ ")"
-    | Defined c ->
-        "("
-        ^ (List.fold_left (fun pc c -> cc pc c) "" c |> Regexp.rm_first_rest)
-        ^ ")"
-    | Arg -> failwith "Error: still need unrolling arg"
+    | Arg _ -> failwith "Error: still need unrolling arg"
 
   let func_code = function
     | F f -> f.method_name |> Str.global_replace Regexp.dollar "."
