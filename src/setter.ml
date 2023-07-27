@@ -4,6 +4,7 @@ module Condition = Language.Condition
 module SummaryMap = Language.SummaryMap
 module SetterMap = Language.SetterMap
 module FieldMap = Language.FieldMap
+module MethodInfo = Language.MethodInfo
 
 let get_this_symbol variable =
   Condition.M.fold
@@ -65,15 +66,18 @@ let get_class_name method_name = String.split_on_char '.' method_name |> List.hd
 let is_constructor method_name =
   Str.string_match (".*\\.<init>" |> Str.regexp) method_name 0
 
-let find_setter method_name method_summarys mmap =
-  let class_name = get_class_name method_name in
+let find_setter m_name m_summarys m_infos mmap =
+  let class_name = get_class_name m_name in
   let change_fields =
     List.fold_left
       (fun field_map summary ->
         get_change_fields summary |> merge_field_map field_map)
-      FieldMap.M.empty method_summarys
+      FieldMap.M.empty m_summarys
   in
-  if FieldMap.M.is_empty change_fields || is_constructor method_name then mmap
+  if
+    (MethodInfo.M.find m_name m_infos).MethodInfo.return <> "void"
+    && FieldMap.M.is_empty change_fields
+  then mmap
   else
     let fields =
       FieldMap.M.fold
@@ -82,13 +86,13 @@ let find_setter method_name method_summarys mmap =
     in
     if SetterMap.M.mem class_name mmap then
       let setter_list =
-        SetterMap.M.find class_name mmap |> List.cons (method_name, fields)
+        SetterMap.M.find class_name mmap |> List.cons (m_name, fields)
       in
       SetterMap.M.add class_name setter_list mmap
-    else SetterMap.M.add class_name [ (method_name, fields) ] mmap
+    else SetterMap.M.add class_name [ (m_name, fields) ] mmap
 
-let from_summary_map summary =
+let from_summary_map summary m_infos =
   SummaryMap.M.fold
     (fun method_name method_summarys mmap ->
-      find_setter method_name method_summarys mmap)
+      find_setter method_name method_summarys m_infos mmap)
     summary SetterMap.M.empty

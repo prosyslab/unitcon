@@ -210,9 +210,7 @@ end
 module AST = struct
   type arg = Param of params | Arg of params
 
-  type func =
-    | F of { typ : string; method_name : method_name; args : arg }
-    | Func
+  type func = F of { typ : string; method_name : method_name } | Func
 
   type id = Variable of variable | ClassName of string | Id
 
@@ -353,7 +351,7 @@ module AST = struct
           let typ = match func with Func -> "" | F f -> f.typ in
           let x1 = Variable (Var (Object typ, id)) in
           Seq
-            ( Seq (Assign (x1, Id, Func, Arg _), Stmt),
+            ( Seq (Assign (x1, Id, Func, Arg []), Stmt),
               Assign (x0, x1, func, arg) )
       | _ -> s
     else s
@@ -361,7 +359,7 @@ module AST = struct
   (* 4, 9 *)
   let mk_const_arg s arg = Seq (s, Const (arg, Exp))
 
-  let mk_assign_arg s arg = Seq (s, Seq (Assign (arg, Id, Func, Arg _), Stmt))
+  let mk_assign_arg s arg = Seq (s, Seq (Assign (arg, Id, Func, Arg []), Stmt))
 
   let arg_in_assign_rule s arg_seq arg =
     if arg_in_assign s then
@@ -386,7 +384,7 @@ module AST = struct
       match s with
       | Seq (s1, _) -> (
           match s1 with
-          | Assign (x0, _, _, _) -> Seq (s1, Seq (Stmt, Void (x0, Func, Arg _)))
+          | Assign (x0, _, _, _) -> Seq (s1, Seq (Stmt, Void (x0, Func, Arg [])))
           | _ -> s)
       | _ -> s
     else s
@@ -419,7 +417,7 @@ module AST = struct
       | Void (_, func, arg) ->
           let typ = match func with Func -> "" | F f -> f.typ in
           let x = Variable (Var (Object typ, id)) in
-          Seq (Seq (Assign (x, Id, Func, Arg _), Stmt), Void (x, func, arg))
+          Seq (Seq (Assign (x, Id, Func, Arg []), Stmt), Void (x, func, arg))
       | _ -> s
     else s
 

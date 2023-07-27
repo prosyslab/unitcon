@@ -58,7 +58,7 @@ let parse_callgraph filename =
   let data = input filename in
   Callgraph.of_json data
 
-let get_setter summary = Setter.from_summary_map summary
+let get_setter summary m_info = Setter.from_summary_map summary m_info
 
 let parse_error_summary filename =
   Parser.parse_errprop filename;
@@ -75,7 +75,8 @@ let parse_callprop filename =
 let parse_class_info filename =
   let json = Json.from_file filename in
   let elem = JsonUtil.to_list json |> List.hd in
-  Inheritance.of_json elem
+  let info = Inheritance.of_json elem in
+  (info |> fst, info |> snd |> Modeling.add_java_package_inheritance)
 
 (* ************************************** *
    build program
@@ -286,7 +287,7 @@ let run program_dir =
   let summary = parse_summary info.summary_file in
   let method_info = parse_method_info info.summary_file in
   let callgraph = parse_callgraph info.summary_file in
-  let setter_map = get_setter summary in
+  let setter_map = get_setter summary method_info in
   let class_info = parse_class_info info.inheritance_file in
   let call_prop_map = parse_callprop info.call_prop_file in
   let error_method_info = parse_error_summary info.error_summary_file in

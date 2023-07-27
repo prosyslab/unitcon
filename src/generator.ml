@@ -1235,80 +1235,6 @@ let mk_getter_var getter_method getter_summary method_info class_info =
     getter_statement,
     info.MethodInfo.formal_params )
 
-let is_java_io_class class_name =
-  if class_name = "PrintStream" || class_name = "InputStream" then true
-  else false
-
-let is_file_class class_name = if class_name = "File" then true else false
-
-let is_class_class class_name = if class_name = "Class" then true else false
-
-let is_graphics_class class_name =
-  if Str.string_match ("Graphics" ^ "[0-9]*" |> Str.regexp) class_name 0 then
-    true
-  else false
-
-let file_code =
-  AST.Stmt
-    ( Language.Var (Object "File", "con_file"),
-      NewCreate
-        ( {
-            id = None;
-            method_name = "File";
-            args = Constant [ "\"unitcon_file\"" ];
-          },
-          SETNT ) )
-
-let create_file_code file_name =
-  AST.Setter
-    ( file_name,
-      { id = None; method_name = "createNewFile"; args = Constant [] },
-      SETEmpty )
-
-let image_code =
-  AST.Stmt
-    ( Language.Var (Object "BufferedImage", "con_image"),
-      NewCreate
-        ( {
-            id = None;
-            method_name = "BufferedImage";
-            args = Constant [ "100"; "100"; "BufferedImage.TYPE_INT_RGB" ];
-          },
-          SETNT ) )
-
-let create_graphics_code g_name =
-  AST.Setter
-    ( g_name,
-      { id = None; method_name = "createGraphics"; args = Constant [] },
-      SETEmpty )
-
-let class_code =
-  AST.Stmt
-    ( Language.Var (Object "Object", "con_obj"),
-      NewCreate
-        ({ id = None; method_name = "Object"; args = Constant [] }, SETNT) )
-
-let get_class_code obj_name =
-  AST.Setter
-    ( obj_name,
-      { id = None; method_name = "getClass"; args = Constant [] },
-      SETEmpty )
-
-let get_java_package_class class_name =
-  if class_name = "Collection" || class_name = "List" then
-    ("ArrayList", [ "java.util.ArrayList" ])
-  else if class_name = "Map" || class_name = "HashMap" then
-    ("HashMap", [ "java.util.HashMap" ])
-  else if class_name = "Object" then ("Object", [])
-  else if class_name = "File" then ("File", [ "java.io.File" ])
-  else if class_name = "PrintStream" then ("PrintStream", [ "java.io.File" ])
-  else if class_name = "InputStream" then
-    ( "FileInputStream",
-      [ "java.io.File"; "java.io.InputStream"; "java.io.FileInputStream" ] )
-  else if is_graphics_class class_name then
-    ("BufferedImage", [ "java.awt.image.BufferedImage" ])
-  else ("null", [])
-
 let get_constructor_list (class_package, class_name) method_info
     (class_info, inheritance_graph) =
   let full_class_name =
@@ -1551,138 +1477,6 @@ let get_setter_code constructor id method_summary c_summary method_info
         (s, iter_params params) :: list)
       [ (AST.SETEmpty, []) ]
       setter_list
-
-(* statement data structure: code * import * mk_var_list *)
-let get_defined_statement class_package class_name id t_summary method_info
-    setter_map partial =
-  let class_name = class_name |> replace_nested_symbol in
-  let nc_name, import = get_java_package_class class_name in
-  if is_java_io_class class_name then
-    let code =
-      AST.modify_stnt
-        (Stmt
-           ( Language.Var (Object class_name, id),
-             NewCreate
-               ( {
-                   id = None;
-                   method_name = nc_name;
-                   args = Constant [ "con_file" ];
-                 },
-                 SETNT ) ))
-        partial.code
-    in
-    let ee = AST.get_ee partial.code in
-    let code =
-      AST.TestCase
-        ( AST.modify_stnt file_code (AST.TestCase (AST.MStmt (STNT, code), ee)),
-          ee )
-      |> AST.modify_setnt
-           (Language.Var (Object "File", "con_file"))
-           (create_file_code "con_file")
-    in
-    [
-      {
-        code = AST.TestCase (AST.MStmt (STNT, code), ee);
-        import = import |> List.rev_append partial.import;
-        variable = partial.variable;
-        score = partial.score;
-        recv_package = partial.recv_package;
-      };
-    ]
-  else if is_file_class class_name then
-    let ee = AST.get_ee partial.code in
-    let code =
-      AST.TestCase (AST.modify_stnt file_code partial.code, ee)
-      |> AST.modify_setnt
-           (Language.Var (Object "File", "con_file"))
-           (create_file_code "con_file")
-    in
-    [
-      {
-        code = AST.TestCase (AST.MStmt (STNT, code), ee);
-        import = import |> List.rev_append partial.import;
-        variable = partial.variable;
-        score = partial.score;
-        recv_package = partial.recv_package;
-      };
-    ]
-  else if is_class_class class_name then
-    let ee = AST.get_ee partial.code in
-    let code =
-      AST.TestCase (AST.modify_stnt class_code partial.code, ee)
-      |> AST.modify_setnt
-           (Language.Var (Object "Object", "con_obj"))
-           (get_class_code "con_obj")
-    in
-    [
-      {
-        code = AST.TestCase (AST.MStmt (STNT, code), ee);
-        import = import |> List.rev_append partial.import;
-        variable = partial.variable;
-        score = partial.score;
-        recv_package = partial.recv_package;
-      };
-    ]
-  else if is_graphics_class class_name then
-    let ee = AST.get_ee partial.code in
-    let code =
-      AST.TestCase (AST.modify_stnt image_code partial.code, ee)
-      |> AST.modify_setnt
-           (Language.Var (Object "BufferedImage", "con_image"))
-           (create_graphics_code "con_image")
-    in
-    [
-      {
-        code = AST.TestCase (AST.MStmt (STNT, code), ee);
-        import =
-          import |> List.cons class_package |> List.rev_append partial.import;
-        variable = partial.variable;
-        score = partial.score;
-        recv_package = partial.recv_package;
-      };
-    ]
-  else if nc_name = "null" then primitive class_name partial.import id partial
-  else
-    let setter_code_list =
-      try
-        get_setter_code nc_name id t_summary Language.empty_summary method_info
-          setter_map
-      with _ -> []
-    in
-    let ee = AST.get_ee partial.code in
-    let new_code =
-      AST.Stmt
-        ( Language.Var (Object class_name, id),
-          NewCreate
-            ({ id = None; method_name = nc_name; args = Constant [] }, SETNT) )
-    in
-    let new_tc =
-      AST.TestCase (AST.MStmt (STNT, AST.modify_stnt new_code partial.code), ee)
-    in
-    (* TODO: current setter, var_list is not wanted format *)
-    List.fold_left
-      (fun list (setter, var_list) ->
-        let code =
-          AST.modify_setnt (Language.Var (Object class_name, id)) setter new_tc
-        in
-        {
-          code = AST.TestCase (code, ee);
-          import = import |> List.rev_append partial.import;
-          variable = List.rev_append var_list partial.variable;
-          score = partial.score;
-          recv_package = partial.recv_package;
-        }
-        :: list)
-      (primitive class_name partial.import id partial
-      |> List.cons
-           {
-             code = new_tc;
-             import = import |> List.rev_append partial.import;
-             variable = partial.variable;
-             score = partial.score;
-             recv_package = partial.recv_package;
-           })
-      setter_code_list
 
 let get_return_object (class_package, class_name) method_info
     (class_info, inheritance_graph) =
@@ -1964,10 +1758,7 @@ let get_constructor (class_package, class_name) id t_summary summary method_info
     |> satisfied_c_list id t_summary summary
     |> summary_filtering true
   in
-  if c_summary_list = [] && g_summary_list = [] then
-    get_defined_statement class_package class_name id t_summary method_info
-      setter_map partial
-  else if c_summary_list = [] then
+  if c_summary_list = [] then
     get_many_constructor ~is_getter:true g_summary_list class_package class_name
       id t_summary method_info class_info setter_map partial
   else
@@ -2122,10 +1913,6 @@ let get_statement param t_summary summary method_info class_info setter_map
             id t_summary summary method_info class_info setter_map old_partial
       | Array _ ->
           (* TODO: implement array constructor *)
-          (* let array_type = get_array_type typ in
-             let array_constructor = get_array_constructor typ 5 in
-             array_type ^ " " ^ id ^ " = new " ^ array_constructor ^ ";\n"
-                   ^ old_partial.code; *)
           [
             {
               code = old_partial.code;

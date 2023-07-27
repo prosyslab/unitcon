@@ -58,7 +58,7 @@ let missing_inheritance vertex graph =
       graph missing
   with Invalid_argument _ -> graph
 
-let from_hierarchy_json json =
+let from_inheritance_json json =
   let member =
     [ "extends_class"; "implements_interface"; "extends_interface" ]
   in
@@ -130,5 +130,5 @@ let of_json json =
       (fun mmap assoc -> mapping_class_info assoc mmap)
       ClassInfo.M.empty class_and_interface_info
   in
-  let hierarchy_info = from_hierarchy_json json in
-  (class_type_info, hierarchy_info)
+  let inheritance_info = from_inheritance_json json in
+  (class_type_info, inheritance_info)
