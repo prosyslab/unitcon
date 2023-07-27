@@ -245,6 +245,23 @@ module AST = struct
 
   and is_exp = function Exp -> true | _ -> false
 
+  let rec count_nt = function
+    | Const (x, exp) -> count_id x + count_exp exp
+    | Assign (x0, x1, func, arg) ->
+        count_id x0 + count_id x1 + count_func func + count_arg arg
+    | Void (x, func, arg) -> count_id x + count_func func + count_arg arg
+    | Seq (s1, s2) -> count_nt s1 + count_nt s2
+    | Skip -> 0
+    | Stmt -> 1
+
+  and count_arg = function Arg a -> List.length a | _ -> 0
+
+  and count_func = function Func -> 1 | _ -> 0
+
+  and count_id = function Id -> 1 | _ -> 0
+
+  and count_exp = function Exp -> 1 | _ -> 0
+
   (* ************************************** *
      Checking for Synthesis Rules
    * ************************************** *)
