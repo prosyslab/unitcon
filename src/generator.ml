@@ -31,7 +31,7 @@ end)
 
 let outer = ref 0
 
-let getter = ref 0
+let recv = ref 0
 
 let tc_num = ref 0
 
@@ -53,9 +53,9 @@ let point value =
   (* if value = top then 100, value range > 10 then 10, otherwise value range*)
   failwith "not implemented"
 
-let score t_summary p_summary partial =
-  (* partial.variable size + sum(card) *)
-  let length = partial.variable |> List.length in
+let score t_summary p_summary p =
+  (* # of non-terminal for p + sum(point) *)
+  let length = AST.count_nt p in
   failwith "not implemented"
 
 let rec find_relation given_symbol relation =
@@ -675,6 +675,17 @@ let new_value_summary old_summary new_value =
 
 let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 
+let is_primitive x =
+  let x =
+    match x with
+    | AST.Variable v -> (
+        match v.variable with Language.Var (typ, _) -> typ | _ -> None)
+    | _ -> None
+  in
+  match x with
+  | Int | Long | Float | Double | Bool | Char | String -> true
+  | _ -> false
+
 let is_nested_class name = String.contains name '$'
 
 let is_normal_class class_name class_info =
@@ -751,7 +762,7 @@ let get_import t_method (class_info, _) =
 let is_test_file file_name =
   Str.string_match (Str.regexp ".*/test/.*") file_name 0
 
-let is_public_or_default ~is_getter recv_package method_name method_info =
+let is_public_or_default ?(is_getter = false) package method_name method_info =
   let info = MethodInfo.M.find method_name method_info in
   let is_test_file =
     (* If this method is a method in the test file,
@@ -770,7 +781,7 @@ let is_public_or_default ~is_getter recv_package method_name method_info =
     in
     let s = name ^ "$" in
     let m_package = Regexp.global_rm (Str.regexp s) m_package in
-    if Str.string_match (Str.regexp m_package) recv_package 0 then
+    if Str.string_match (Str.regexp m_package) package 0 then
       match info.MethodInfo.modifier with
       | Default | Protected | Public -> true
       | _ -> false
@@ -804,14 +815,26 @@ let calc_z3 id z3exp =
 let default_value_list typ =
   let default_value =
     match typ with
-    | Language.Int -> [ "0"; "1"; "-1"; "100"; "-100" ]
-    | Language.Long -> [ "0"; "1"; "-1"; "100"; "-100" ]
-    | Language.Float -> [ "0.0"; "1.0"; "-1.0"; "100.0"; "-100.0" ]
-    | Language.Double -> [ "0.0"; "1.0"; "-1.0"; "100.0"; "-100.0" ]
-    | Language.Bool -> [ "false"; "true" ]
-    | Language.Char -> [ "x" ]
-    | Language.String -> [ "" ]
-    | _ -> [ "null" ]
+    | Language.Int | Long ->
+        [
+          AST.Primitive (Z 0);
+          AST.Primitive (Z 1);
+          AST.Primitive (Z (-1));
+          AST.Primitive (Z 100);
+          AST.Primitive (Z (-100));
+        ]
+    | Float | Double ->
+        [
+          AST.Primitive (R 0.0);
+          AST.Primitive (R 1.0);
+          AST.Primitive (R (-1.0));
+          AST.Primitive (R 100.0);
+          AST.Primitive (R (-100.0));
+        ]
+    | Bool -> [ AST.Primitive (B false); AST.Primitive (B true) ]
+    | Char -> [ AST.Primitive (C 'x') ]
+    | String -> [ AST.Primitive (S "") ]
+    | _ -> [ AST.Null ]
   in
   default_value
 
@@ -824,18 +847,18 @@ let calc_value id = function
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
           let z3exp = Z3.Boolean.mk_eq z3ctx var value in
-          calc_z3 var [ z3exp ]
+          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let value =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
           in
           let z3exp = Z3.Boolean.mk_eq z3ctx var value in
-          calc_z3 var [ z3exp ]
-      | Bool b -> b |> string_of_bool
-      | Char c -> String.make 1 c
-      | String s -> s
-      | Null -> "null"
+          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
+      | Bool b -> AST.Primitive (B b)
+      | Char c -> AST.Primitive (C c)
+      | String s -> AST.Primitive (S s)
+      | Null -> AST.Null
       | _ -> failwith "not implemented eq")
   | Value.Neq v -> (
       match v with
@@ -845,7 +868,7 @@ let calc_value id = function
           let z3exp =
             Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
           in
-          calc_z3 var [ z3exp ]
+          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let value =
@@ -854,10 +877,10 @@ let calc_value id = function
           let z3exp =
             Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
           in
-          calc_z3 var [ z3exp ]
-      | Bool b -> b |> not |> string_of_bool
-      | String s -> "not " ^ s
-      | Null -> "not null"
+          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
+      | Bool b -> AST.Primitive (B (b |> not))
+      | String s -> AST.Primitive (S ("not_" ^ s))
+      | Null -> AST.Exp (* In this case, remove null case *)
       | _ -> failwith "not implemented neq")
   | Value.Le v -> (
       match v with
@@ -865,14 +888,14 @@ let calc_value id = function
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
           let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
-          calc_z3 var [ z3exp ]
+          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let value =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
           in
           let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
-          calc_z3 var [ z3exp ]
+          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
       | _ -> failwith "not implemented le")
   | Value.Lt v -> (
       match v with
@@ -880,14 +903,14 @@ let calc_value id = function
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
           let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
-          calc_z3 var [ z3exp ]
+          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let value =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
           in
           let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
-          calc_z3 var [ z3exp ]
+          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
       | _ -> failwith "not implemented lt")
   | Value.Ge v -> (
       match v with
@@ -895,14 +918,14 @@ let calc_value id = function
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
           let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
-          calc_z3 var [ z3exp ]
+          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let value =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
           in
           let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
-          calc_z3 var [ z3exp ]
+          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
       | _ -> failwith "not implemented ge")
   | Value.Gt v -> (
       match v with
@@ -910,14 +933,14 @@ let calc_value id = function
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
           let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
-          calc_z3 var [ z3exp ]
+          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let value =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
           in
           let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
-          calc_z3 var [ z3exp ]
+          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
       | _ -> failwith "not implemented gt")
   | Value.Between (v1, v2) -> (
       match (v1, v2) with
@@ -927,7 +950,7 @@ let calc_value id = function
           let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
           let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
           let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
-          calc_z3 var [ z3exp1; z3exp2 ]
+          AST.Primitive (Z (calc_z3 var [ z3exp1; z3exp2 ] |> int_of_string))
       | Float f1, Float f2
       | Double f1, Double f2
       | Float f1, Double f2
@@ -941,7 +964,7 @@ let calc_value id = function
           in
           let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
           let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
-          calc_z3 var [ z3exp1; z3exp2 ]
+          AST.Primitive (R (calc_z3 var [ z3exp1; z3exp2 ] |> float_of_string))
       | _ -> failwith "not implemented between")
   | Value.Outside (v1, v2) -> (
       match (v1, v2) with
@@ -951,7 +974,7 @@ let calc_value id = function
           let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
           let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
           let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
-          calc_z3 var [ z3exp1; z3exp2 ]
+          AST.Primitive (Z (calc_z3 var [ z3exp1; z3exp2 ] |> int_of_string))
       | Float f1, Float f2
       | Double f1, Double f2
       | Float f1, Double f2
@@ -965,7 +988,7 @@ let calc_value id = function
           in
           let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
           let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
-          calc_z3 var [ z3exp1; z3exp2 ]
+          AST.Primitive (R (calc_z3 var [ z3exp1; z3exp2 ] |> float_of_string))
       | _ -> failwith "not implemented outside")
 
 let get_value typ id summary =
@@ -1152,23 +1175,6 @@ let satisfied_c method_summary id candidate_constructor summary =
       (false, Language.empty_summary, 0)
       check_summarys
 
-let remove_same_name c_list =
-  let get_same_one target list =
-    List.filter
-      (fun (c_name, _, _, _) ->
-        let class_name = get_class_name ~infer:true c_name in
-        target = class_name)
-      list
-    |> List.hd
-  in
-  List.fold_left
-    (fun new_list (c, _, _, _) ->
-      let name = get_class_name ~infer:true c in
-      let one = get_same_one name c_list in
-      if List.mem one new_list then new_list else one :: new_list)
-    [] c_list
-  |> List.rev
-
 let get_static_constructor t_method class_info =
   let class_name = get_class_name ~infer:true t_method in
   let full_class_name =
@@ -1178,7 +1184,7 @@ let get_static_constructor t_method class_info =
         if class_name = name then full_name else find_name)
       class_info ""
   in
-  (Some (class_name |> replace_nested_symbol), full_class_name)
+  (class_name |> replace_nested_symbol, full_class_name)
 
 let get_init_constructor t_method method_info =
   let c_info = MethodInfo.M.find t_method method_info in
@@ -1219,22 +1225,6 @@ let match_return_object class_name method_name method_info =
   let return = info.MethodInfo.return in
   Str.string_match (Str.regexp class_name) return 0
 
-let mk_getter_var getter_method getter_summary method_info class_info =
-  let class_name = get_class_name ~infer:true getter_method in
-  let import = get_package_from_method getter_method class_info in
-  let var_name = "gen_get" ^ (!getter |> string_of_int) in
-  getter := !getter + 1;
-  let var = Language.Var (Object class_name, var_name) in
-  let info = MethodInfo.M.find getter_method method_info in
-  let getter_statement =
-    Str.split Regexp.dot getter_method
-    |> List.tl |> List.hd
-    |> Regexp.global_rm (Str.regexp "(.*)$")
-  in
-  ( Some ((import, var), getter_summary),
-    getter_statement,
-    info.MethodInfo.formal_params )
-
 let get_constructor_list (class_package, class_name) method_info
     (class_info, inheritance_graph) =
   let full_class_name =
@@ -1262,7 +1252,8 @@ let find_global_var_list c_name t_var mem summary =
     Condition.M.fold
       (fun head _ gvar_list ->
         match head with
-        | Condition.RH_Var var -> (c_name ^ "." ^ var) :: gvar_list
+        | Condition.RH_Var var ->
+            AST.GlobalConstant (c_name ^ "." ^ var) :: gvar_list
         | _ -> gvar_list)
       s_trace []
   in
@@ -1275,14 +1266,15 @@ let find_global_var_list c_name t_var mem summary =
       s_trace None
   in
   SummaryMap.M.fold
-    (fun init_name init_mem list ->
+    (fun init_name init_summary list ->
+      let _, init_mem = (init_summary |> List.hd).Language.precond in
       if Str.string_match (c_name ^ "\\.<clinit>" |> Str.regexp) init_name 0
       then
         match t_var with
         | Some v ->
             (Condition.M.fold (fun _ s_trace list ->
                  match compare_var v s_trace with
-                 | Some gv -> gv :: list
+                 | Some gv -> AST.GlobalConstant gv :: list
                  | None -> list))
               mem list
         | None ->
@@ -1292,7 +1284,7 @@ let find_global_var_list c_name t_var mem summary =
       else list)
     summary []
 
-let get_global_var_list class_name t_summary summary =
+let global_var_list class_name t_summary summary =
   let vars, mem = t_summary.Language.precond in
   let t_var =
     Condition.M.fold
@@ -1323,32 +1315,6 @@ let get_global_var_list class_name t_summary summary =
       in
       find_global_var_list class_name target_variable mem summary
 
-let rec get_array_type typ =
-  match typ with
-  | Language.Int -> "int"
-  | Long -> "long"
-  | Float -> "float"
-  | Double -> "double"
-  | Bool -> "boolean"
-  | Char -> "char"
-  | String -> "String"
-  | Object name -> name
-  | Array typ -> get_array_type typ ^ "[]"
-  | _ -> failwith "not allowed type"
-
-let get_array_constructor typ size =
-  match typ with
-  | Language.Int -> "int"
-  | Long -> "long"
-  | Float -> "float"
-  | Double -> "double"
-  | Bool -> "boolean"
-  | Char -> "char"
-  | String -> "String"
-  | Object name -> name
-  | Array typ -> get_array_type typ ^ "[" ^ (size |> string_of_int) ^ "]"
-  | _ -> failwith "not allowed type"
-
 let sort_constructor_list c_list method_info =
   List.sort
     (fun (c1, _, k1, _) (c2, _, k2, _) ->
@@ -1360,36 +1326,6 @@ let sort_constructor_list c_list method_info =
         let c2_formal = c2_info.MethodInfo.formal_params |> List.length in
         compare c1_formal c2_formal)
     c_list
-
-let replace_null id old_code =
-  let candidate =
-    [
-      ("(" ^ id ^ ")", "(null)");
-      ("(" ^ id ^ ", ", "(null, ");
-      (", " ^ id ^ ",", ", null,");
-      (", " ^ id ^ ")", ", null)");
-    ]
-  in
-  List.fold_left
-    (fun modified_code (c, rc) ->
-      let mc = Str.replace_first (c |> Str.regexp) rc old_code in
-      if mc <> old_code then mc else modified_code)
-    old_code candidate
-
-let this_is_null summary =
-  let s_var, s_mem = summary.Language.precond in
-  let this_symbol = get_id_symbol "this" s_var s_mem in
-  let find_this_value =
-    Value.M.find_opt
-      (this_symbol |> get_rh_name ~is_var:false)
-      summary.Language.value
-  in
-  match find_this_value with
-  | Some value -> (
-      match value with
-      | Eq e_val -> ( match e_val with Null -> true | _ -> false)
-      | _ -> false)
-  | None -> false
 
 let mk_setter_format setter method_info =
   let m_info = MethodInfo.M.find setter method_info in
@@ -1412,70 +1348,47 @@ let is_receiver id =
   | None, None, None -> false
   | _, _, _ -> true
 
-let primitive class_name import id partial =
-  let code =
-    AST.modify_stnt
-      (Stmt (Language.Var (Object class_name, id), Primitive Null))
-      partial.code
+let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info s_map =
+  let cname c =
+    if is_init_method c then Str.split Regexp.dot c |> List.hd
+    else
+      Str.split Regexp.dot c |> List.tl |> List.hd
+      |> Str.split (Str.regexp "(")
+      |> List.hd
   in
-  [
-    {
-      code = AST.TestCase (AST.MStmt (STNT, code), AST.get_ee partial.code);
-      import;
-      variable = partial.variable;
-      score = partial.score;
-      recv_package = partial.recv_package;
-    };
-  ]
-
-let global_var class_name import id t_summary method_info partial =
-  let g = get_global_var_list class_name t_summary method_info in
-  (List.fold_left (fun list gv ->
-       let code =
-         AST.modify_stnt
-           (Stmt (Language.Var (Object class_name, id), GV gv))
-           partial.code
-       in
-       {
-         code = AST.TestCase (AST.MStmt (STNT, code), AST.get_ee partial.code);
-         import = partial.import |> List.cons import;
-         variable = partial.variable;
-         score = partial.score;
-         recv_package = partial.recv_package;
-       }
-       :: list))
-    [] g
-
-let get_setter_code constructor id method_summary c_summary method_info
-    setter_map =
-  if is_receiver id then [ (AST.SETEmpty, []) ]
+  let mk_arg param s =
+    List.map (fun (i, v) -> AST.{ import = i; variable = v; summary = s }) param
+  in
+  if AST.is_id id then
+    let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
+    let f_arg = mk_arg param es in
+    let import = get_package param in
+    let typ =
+      Str.split Regexp.dot ee |> List.hd |> Str.split Regexp.space |> List.rev
+      |> List.hd
+    in
+    [ (AST.F { typ; method_name = cname ee; import; summary = es }, f_arg) ]
   else
-    let met_field_map, setter_list =
-      get_setter constructor id method_summary c_summary method_info setter_map
+    let var = AST.get_v id in
+    let name = get_class_name ~infer:false var.import in
+    let setter_list =
+      try SetterMap.M.find name s_map
+      with _ -> [] |> List.filter (fun (s, _) -> is_private s m_info |> not)
     in
-    let met_value_map =
-      FieldMap.M.fold
-        (fun s value map -> Value.M.add s value map)
-        met_field_map Value.M.empty
-    in
-    let new_summary = new_value_summary c_summary met_value_map in
-    let iter_params params =
-      List.fold_left
-        (fun list (import, var) ->
-          match var with
-          | Language.This _ -> list
-          | _ -> ((import, var), new_summary) :: list)
-        [] params
-    in
-    List.fold_left
-      (fun list setter ->
-        let m, params = mk_setter_format setter method_info in
-        let s =
-          AST.Setter
-            (id, { id = None; method_name = m; args = Param params }, SETNT)
+    List.map
+      (fun (s, _) ->
+        let f_arg =
+          mk_arg (MethodInfo.M.find s m_info).MethodInfo.formal_params
+            var.summary
         in
-        (s, iter_params params) :: list)
-      [ (AST.SETEmpty, []) ]
+        ( AST.F
+            {
+              typ = name;
+              method_name = cname s;
+              import = var.import;
+              summary = var.summary;
+            },
+          f_arg ))
       setter_list
 
 let get_return_object (class_package, class_name) method_info
@@ -1500,234 +1413,6 @@ let get_return_object (class_package, class_name) method_info
         method_list class_to_find)
     method_info []
 
-let get_new_code id_var get_var m m_params code =
-  let c_method = AST.{ id = None; method_name = m; args = Param m_params } in
-  match get_var with
-  | Some x ->
-      AST.modify_stnt
-        (Stmt (id_var, GetCreate (x |> fst |> snd, c_method, SETEmpty)))
-        code
-  | None -> AST.modify_stnt (Stmt (id_var, NewCreate (c_method, SETNT))) code
-
-let get_one_constructor ~is_getter ~origin_private constructor class_package
-    class_name id t_summary method_info class_info setter_map partial =
-  let c, s, i = constructor in
-  if c = "null" then
-    primitive class_name (List.cons i partial.import) id partial
-  else
-    let c_statement = c in
-    let class_name =
-      if origin_private then
-        c_statement |> replace_nested_symbol
-        |> Str.replace_first (Str.regexp ".<init>") ""
-        |> Regexp.global_rm (Str.regexp "(.*)$")
-      else class_name
-    in
-    let c_info = MethodInfo.M.find c_statement method_info in
-    let c_params = c_info.MethodInfo.formal_params in
-    let c_class_name = get_package c_params in
-    let c_summary = s in
-    let setter_code_list =
-      get_setter_code class_name id t_summary c_summary method_info setter_map
-    in
-    let c_statement =
-      Str.replace_first (Str.regexp ".<init>") "" c_statement
-      |> Regexp.global_rm (Str.regexp "(.*)$")
-    in
-    let c_import = get_constructor_import c_info in
-    let import =
-      let c_import = if is_getter then List.cons i c_import else c_import in
-      if origin_private then c_import |> List.rev_append partial.import
-      else c_import |> List.cons class_package |> List.rev_append partial.import
-    in
-    let c_statement =
-      if
-        is_nested_class c_class_name
-        && is_static_class ~is_class:true c_class_name class_info
-      then replace_nested_symbol c_statement
-      else c_statement
-    in
-    if this_is_null c_summary then primitive class_name import id partial
-    else if is_static_method c method_info then
-      (* don't remove the first parameter because first parameter is not this. *)
-      let get_var, m, m_params =
-        if is_getter then mk_getter_var c s method_info class_info
-        else (None, c_statement, c_params)
-      in
-      let id_var = Language.Var (Object class_name, id) in
-      let new_code = get_new_code id_var get_var m m_params partial.code in
-      let new_tc =
-        AST.TestCase (AST.MStmt (STNT, new_code), AST.get_ee partial.code)
-      in
-      let new_var = c_params |> List.map (fun p -> (p, c_summary)) in
-      let variable = List.rev_append new_var partial.variable in
-      List.fold_left
-        (fun list (setter, var_list) ->
-          let code = AST.modify_setnt id_var setter new_tc in
-          {
-            code = AST.TestCase (code, AST.get_ee partial.code);
-            import;
-            variable = List.rev_append var_list variable;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          }
-          :: list)
-        [] setter_code_list
-    else if List.length c_params = 1 then
-      (* method only have this (receiver variable) *)
-      let get_var, m, m_params =
-        if is_getter then mk_getter_var c s method_info class_info
-        else (None, c_statement, c_params)
-      in
-      let id_var = Language.Var (Object class_name, id) in
-      let new_code = get_new_code id_var get_var m m_params partial.code in
-      let new_tc =
-        AST.TestCase (AST.MStmt (STNT, new_code), AST.get_ee partial.code)
-      in
-      let variable =
-        match get_var with
-        | Some x -> x :: partial.variable
-        | _ -> partial.variable
-      in
-      List.fold_left
-        (fun list (setter, var_list) ->
-          let code = AST.modify_setnt id_var setter new_tc in
-          {
-            code = AST.TestCase (code, AST.get_ee partial.code);
-            import;
-            variable = List.rev_append var_list variable;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          }
-          :: list)
-        [] setter_code_list
-    else if
-      is_nested_class c_class_name
-      && is_static_class ~is_class:true c_class_name class_info |> not
-    then
-      (* generation format: new Outer().new Inner(); *)
-      let c_statement, c_params =
-        let outer_import, outer_var = List.tl c_params |> List.hd in
-        let c_statement, outer =
-          match outer_var with
-          | Language.Var (typ, _) ->
-              outer := !outer + 1;
-              ( c_statement |> Str.replace_first (Str.regexp "^.*\\$") "",
-                ( outer_import,
-                  Language.Var (typ, "outer" ^ (!outer |> string_of_int)) ) )
-          | _ -> ("", (outer_import, outer_var))
-        in
-        (c_statement, List.tl c_params |> List.tl |> List.cons outer)
-      in
-      let id_var = Language.Var (Object class_name, id) in
-      let new_code =
-        get_new_code id_var
-          (Some
-             ( ("", Language.Var (None, "outer" ^ (!outer |> string_of_int))),
-               Language.empty_summary ))
-          ("new " ^ c_statement) (List.tl c_params) partial.code
-      in
-      let new_tc =
-        AST.TestCase (AST.MStmt (STNT, new_code), AST.get_ee partial.code)
-      in
-      let c_params = c_params |> List.map (fun p -> (p, c_summary)) in
-      List.fold_left
-        (fun list (setter, var_list) ->
-          let code = AST.modify_setnt id_var setter new_tc in
-          {
-            code = AST.TestCase (code, AST.get_ee partial.code);
-            import;
-            variable =
-              List.rev_append c_params partial.variable
-              |> List.rev_append var_list;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          }
-          :: list)
-        [] setter_code_list
-    else if
-      is_nested_class c_class_name
-      && is_static_class ~is_class:true c_class_name class_info
-    then
-      (* generation format: new Outer.Inner(); *)
-      let id_var = Language.Var (Object class_name, id) in
-      let new_code =
-        get_new_code id_var None c_statement c_params partial.code
-      in
-      let new_tc =
-        AST.TestCase (AST.MStmt (STNT, new_code), AST.get_ee partial.code)
-      in
-      let c_params =
-        c_params |> List.tl |> List.map (fun p -> (p, c_summary))
-      in
-      List.fold_left
-        (fun list (setter, var_list) ->
-          let code = AST.modify_setnt id_var setter new_tc in
-          {
-            code = AST.TestCase (code, AST.get_ee partial.code);
-            import;
-            variable =
-              List.rev_append c_params partial.variable
-              |> List.rev_append var_list;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          }
-          :: list)
-        [] setter_code_list
-    else
-      (* generation format: new Normal(...); *)
-      let get_var, m, m_params =
-        if is_getter then mk_getter_var c s method_info class_info
-        else (None, c_statement, c_params)
-      in
-      let id_var = Language.Var (Object class_name, id) in
-      let new_code = get_new_code id_var get_var m m_params partial.code in
-      let new_tc =
-        AST.TestCase (AST.MStmt (STNT, new_code), AST.get_ee partial.code)
-      in
-      let variable =
-        if is_getter then m_params |> List.map (fun p -> (p, c_summary))
-        else m_params |> List.tl |> List.map (fun p -> (p, c_summary))
-      in
-      let variable =
-        match get_var with Some x -> x :: variable | _ -> variable
-      in
-      List.fold_left
-        (fun list (setter, var_list) ->
-          let code = AST.modify_setnt id_var setter new_tc in
-          {
-            code = AST.TestCase (code, AST.get_ee partial.code);
-            import;
-            variable =
-              List.rev_append variable partial.variable
-              |> List.rev_append var_list;
-            score = partial.score;
-            recv_package = partial.recv_package;
-          }
-          :: list)
-        [] setter_code_list
-
-let get_many_constructor ~is_getter c_summary_list class_package class_name id
-    t_summary method_info class_info setter_map partial =
-  let c_list = sort_constructor_list c_summary_list method_info in
-  let c_list =
-    if Str.string_match (Str.regexp "gen") id 0 then c_list
-    else ("null", Language.empty_summary, 0, class_package) :: c_list
-  in
-  List.fold_left
-    (fun list constructor ->
-      let c, s, _, i = constructor in
-      let constructor = (c, s, i) in
-      let new_list =
-        get_one_constructor ~is_getter
-          ~origin_private:(is_private_class class_package class_info)
-          constructor class_package class_name id t_summary method_info
-          class_info setter_map partial
-      in
-      List.rev_append new_list list)
-    [] c_list
-  |> List.rev
-
 let satisfied_c_list id t_summary summary summary_list =
   List.fold_left
     (fun list (constructor, import) ->
@@ -1737,236 +1422,140 @@ let satisfied_c_list id t_summary summary summary_list =
       if check then (constructor, summary, count, import) :: list else list)
     [] summary_list
 
-let get_constructor (class_package, class_name) id t_summary summary method_info
-    class_info setter_map partial =
-  let summary_filtering typ list =
-    List.filter
-      (fun (c, _, _, _) ->
-        is_public_or_default ~is_getter:typ partial.recv_package c method_info)
-      list
+let get_cfunc constructor m_info =
+  let c, s, i = constructor in
+  let class_name =
+    c |> replace_nested_symbol
+    |> Str.replace_first (Str.regexp ".<init>") ""
+    |> Regexp.global_rm (Str.regexp "(.*)$")
+  in
+  let c_params = (MethodInfo.M.find c m_info).MethodInfo.formal_params in
+  let c_statement =
+    Str.replace_first (Str.regexp ".<init>") "" c
+    |> Regexp.global_rm (Str.regexp "(.*)$")
+    |> replace_nested_symbol
+  in
+  let func =
+    AST.F
+      { typ = class_name; method_name = c_statement; import = i; summary = s }
+  in
+  let arg =
+    AST.Arg
+      (List.map
+         (fun (i, v) -> AST.{ import = i; variable = v; summary = s })
+         c_params)
+  in
+  (func, arg)
+
+let get_cfuncs list m_info =
+  List.fold_left
+    (fun lst (c, s, _, i) -> get_cfunc (c, s, i) m_info :: lst)
+    [] list
+
+let get_constructor ret summary m_info c_info =
+  let class_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
+  let id = AST.get_vinfo ret |> snd in
+  let package = (AST.get_v ret).import in
+  let summary_filtering list =
+    List.filter (fun (c, _, _, _) -> is_public_or_default package c m_info) list
     |> List.filter (fun (c, _, _, _) ->
-           is_recursive_param class_name c method_info |> not)
-    |> remove_same_name
+           is_recursive_param class_name c m_info |> not)
   in
-  let c_summary_list =
-    get_constructor_list (class_package, class_name) method_info class_info
-    |> satisfied_c_list id t_summary summary
-    |> summary_filtering false
+  let s_list =
+    get_return_object (package, class_name) m_info c_info
+    |> List.rev_append
+         (get_constructor_list (package, class_name) m_info c_info)
+    |> satisfied_c_list id (AST.get_v ret).summary summary
+    |> summary_filtering
   in
-  let g_summary_list =
-    get_return_object (class_package, class_name) method_info class_info
-    |> satisfied_c_list id t_summary summary
-    |> summary_filtering true
-  in
-  if c_summary_list = [] then
-    get_many_constructor ~is_getter:true g_summary_list class_package class_name
-      id t_summary method_info class_info setter_map partial
+  get_cfuncs s_list m_info
+
+let get_cname f =
+  let f = AST.get_func f in
+  let cname = f.AST.typ |> Str.split Regexp.dot |> List.rev |> List.hd in
+  AST.ClassName cname
+
+let get_arg_seq (args : AST.id list) =
+  List.fold_left
+    (fun s arg ->
+      let x =
+        List.fold_left (fun lst x -> AST.mk_const_arg x arg :: lst) [] s
+      in
+      if is_primitive arg then x
+      else
+        x
+        |> List.rev_append
+             (List.fold_left (fun lst x -> AST.mk_assign_arg x arg :: lst) [] s))
+    [ AST.Skip ] args
+
+let rec unroll p summary m_info c_info s_map =
+  if AST.ground p then [ p ]
   else
-    get_many_constructor ~is_getter:false c_summary_list class_package
-      class_name id t_summary method_info class_info setter_map partial
-
-let get_statement param t_summary summary method_info class_info setter_map
-    old_partial =
-  match param |> snd with
-  | Language.This typ -> (
-      match typ with
-      | Int ->
-          get_constructor ("", "int") "gen1" t_summary summary method_info
-            class_info setter_map old_partial
-      | Long ->
-          get_constructor ("", "long") "gen1" t_summary summary method_info
-            class_info setter_map old_partial
-      | Float ->
-          get_constructor ("", "float") "gen1" t_summary summary method_info
-            class_info setter_map old_partial
-      | Double ->
-          get_constructor ("", "double") "gen1" t_summary summary method_info
-            class_info setter_map old_partial
-      | Bool ->
-          get_constructor ("", "bool") "gen1" t_summary summary method_info
-            class_info setter_map old_partial
-      | Char ->
-          get_constructor ("", "char") "gen1" t_summary summary method_info
-            class_info setter_map old_partial
-      | String ->
-          get_constructor
-            (param |> fst, "String")
-            "gen1" t_summary summary method_info class_info setter_map
-            old_partial
-      | Object name ->
-          get_constructor
-            (param |> fst, name)
-            "gen1" t_summary summary method_info class_info setter_map
-            old_partial
-      | _ -> failwith "not allowed type this")
-  | Language.Var (typ, id) -> (
-      let values = get_value typ id t_summary in
-      match typ with
-      | Int | Long ->
-          List.fold_left
-            (fun list value ->
-              let code =
-                AST.modify_stnt
-                  (Stmt (param |> snd, Primitive (Z (value |> int_of_string))))
-                  old_partial.code
-              in
-              {
-                code =
-                  AST.TestCase
-                    (AST.MStmt (STNT, code), AST.get_ee old_partial.code);
-                import = old_partial.import;
-                variable = old_partial.variable;
-                score = old_partial.score;
-                recv_package = old_partial.recv_package;
-              }
-              :: list)
-            [] values
-      | Float | Double ->
-          List.fold_left
-            (fun list value ->
-              let code =
-                AST.modify_stnt
-                  (Stmt (param |> snd, Primitive (R (value |> float_of_string))))
-                  old_partial.code
-              in
-              {
-                code =
-                  AST.TestCase
-                    (AST.MStmt (STNT, code), AST.get_ee old_partial.code);
-                import = old_partial.import;
-                variable = old_partial.variable;
-                score = old_partial.score;
-                recv_package = old_partial.recv_package;
-              }
-              :: list)
-            [] values
-      | Bool ->
-          List.fold_left
-            (fun list value ->
-              let value =
-                match int_of_string_opt value with
-                | Some i -> if i = 0 then false else true
-                | _ -> value |> bool_of_string
-              in
-              let code =
-                AST.modify_stnt
-                  (Stmt (param |> snd, Primitive (B value)))
-                  old_partial.code
-              in
-              {
-                code =
-                  AST.TestCase
-                    (AST.MStmt (STNT, code), AST.get_ee old_partial.code);
-                import = old_partial.import;
-                variable = old_partial.variable;
-                score = old_partial.score;
-                recv_package = old_partial.recv_package;
-              }
-              :: list)
-            [] values
-      | Char ->
-          List.fold_left
-            (fun list value ->
-              let code =
-                AST.modify_stnt
-                  (Stmt (param |> snd, Primitive (C value.[0])))
-                  old_partial.code
-              in
-              {
-                code =
-                  AST.TestCase
-                    (AST.MStmt (STNT, code), AST.get_ee old_partial.code);
-                import = old_partial.import;
-                variable = old_partial.variable;
-                score = old_partial.score;
-                recv_package = old_partial.recv_package;
-              }
-              :: list)
-            [] values
-      | String ->
-          List.fold_left
-            (fun list value ->
-              let code =
-                if value = "null" then
-                  AST.modify_stnt
-                    (Stmt (param |> snd, Primitive Null))
-                    old_partial.code
-                else
-                  AST.modify_stnt
-                    (Stmt (param |> snd, Primitive (S value)))
-                    old_partial.code
-              in
-              {
-                code =
-                  AST.TestCase
-                    (AST.MStmt (STNT, code), AST.get_ee old_partial.code);
-                import = [ param |> fst ] |> List.rev_append old_partial.import;
-                variable = old_partial.variable;
-                score = old_partial.score;
-                recv_package = old_partial.recv_package;
-              }
-              :: list)
-            [] values
-      | Object name ->
-          get_constructor
-            (param |> fst, name)
-            id t_summary summary method_info class_info setter_map old_partial
-      | Array _ ->
-          (* TODO: implement array constructor *)
-          [
-            {
-              code = old_partial.code;
-              import = [ param |> fst ] |> List.rev_append old_partial.import;
-              variable = old_partial.variable;
-              score = old_partial.score;
-              recv_package = old_partial.recv_package;
-            };
-          ]
-      | None -> [ old_partial ])
-
-let pretty_tc_format all_param =
-  let imports =
-    let import_set =
-      all_param |> fst
-      |> List.fold_left
-           (fun set import ->
-             ImportSet.add (import |> replace_nested_symbol) set)
-           ImportSet.empty
-    in
-    ImportSet.fold
-      (fun import stm ->
-        if import = "" then stm else stm ^ "import " ^ import ^ ";\n")
-      import_set ""
-  in
-  let start = "\n@Test\npublic void unitcon_test() throws Exception {\n" in
-  let codes = start ^ (all_param |> snd |> AST.testcase_code) ^ "}\n\n" in
-  (imports, codes)
-
-let rec all_statement candidate summary method_info class_info setter_map =
-  match candidate with
-  | partial :: tl -> (
-      match partial.variable with
-      | (p, t_summary) :: var_tl ->
-          let state_list =
-            get_statement p t_summary summary method_info class_info setter_map
-              {
-                code = partial.code;
-                import = partial.import;
-                variable = var_tl;
-                score = partial.score;
-                recv_package = partial.recv_package;
-              }
-            |> List.rev
+    match p with
+    | Seq _ when AST.void p -> [ AST.void_rule1 p; AST.void_rule2 p ]
+    | Seq (s1, _) when AST.ground s1 |> not ->
+        unroll s1 summary m_info c_info s_map
+    | Seq (_, s2) -> unroll s2 summary m_info c_info s_map
+    | Const (x, _) when AST.const p ->
+        if is_primitive x then
+          let typ, id = AST.get_vinfo x in
+          List.map
+            (fun x -> AST.const_rule1 p x)
+            (get_value typ id (AST.get_v x).summary)
+        else
+          let r2 =
+            List.map
+              (fun x -> AST.const_rule2 p x)
+              (global_var_list
+                 (Language.get_class_name (AST.get_vinfo x |> fst))
+                 (AST.get_v x).summary summary)
           in
-          all_statement
-            (List.rev_append state_list tl)
-            summary method_info class_info setter_map
-      | [] ->
-          [
-            ( pretty_tc_format (partial.import, partial.code |> AST.remove_nt),
-              tl );
-          ])
-  | [] -> []
+          AST.const_rule3 p :: r2
+    | Assign (x0, _, _, _) when AST.fcall_in_assign p ->
+        List.map
+          (fun x -> AST.fcall_in_assign_rule p (x |> fst) (x |> snd))
+          (get_constructor x0 summary m_info c_info)
+    | Assign (_, _, f, _) when AST.recv_in_assign p ->
+        let r1 = get_cname f |> AST.recv_in_assign_rule1 p in
+        let r2 =
+          AST.recv_in_assign_rule2 p ("con_recv" ^ (!recv |> string_of_int))
+        in
+        let r3 =
+          AST.recv_in_assign_rule3 p ("con_recv" ^ (!recv |> string_of_int))
+        in
+        incr recv;
+        r1 :: r2 :: [ r3 ]
+    | Assign (_, _, _, arg) when AST.arg_in_assign p ->
+        let arg_seq =
+          get_arg_seq (List.map (fun x -> AST.Variable x) (arg |> AST.get_arg))
+        in
+        List.map
+          (fun x -> AST.arg_in_assign_rule p x (AST.Param (arg |> AST.get_arg)))
+          arg_seq
+    | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
+        get_void_func x m_info s_map
+        |> List.fold_left
+             (fun lst (f, arg) ->
+               AST.fcall_in_void_rule p f (AST.Arg arg) :: lst)
+             []
+    | Void (x, _, _) when AST.recv_in_void p ->
+        let r1 = x |> AST.recv_in_void_rule1 p in
+        let r2 =
+          AST.recv_in_void_rule2 p ("con_recv" ^ (!recv |> string_of_int))
+        in
+        let r3 =
+          AST.recv_in_assign_rule3 p ("con_recv" ^ (!recv |> string_of_int))
+        in
+        incr recv;
+        r1 :: r2 :: [ r3 ]
+    | Void (_, _, arg) when AST.arg_in_void p ->
+        let arg_seq =
+          get_arg_seq (List.map (fun x -> AST.Variable x) (arg |> AST.get_arg))
+        in
+        List.map
+          (fun x -> AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)))
+          arg_seq
+    | _ -> failwith ""
 
 (* find error entry *)
 let rec find_ee e_method e_summary callgraph summary call_prop_map method_info =
@@ -2003,42 +1592,57 @@ let rec find_ee e_method e_summary callgraph summary call_prop_map method_info =
         List.rev_append list caller_prop_list)
       [] caller_list
 
-let init_stm ee_method ee_method_summary method_info class_info =
-  let f_params =
-    (MethodInfo.M.find ee_method method_info).MethodInfo.formal_params
+let pretty_format p =
+  let rec imports s set =
+    match s with
+    | AST.Seq (s1, s2) -> imports s1 set |> imports s2
+    | Const (x, _) -> ImportSet.add (AST.get_v x).import set
+    | Assign (x0, _, f, arg) ->
+        List.fold_left
+          (fun s (a : AST.var) -> ImportSet.add a.import s)
+          set (arg |> AST.get_arg)
+        |> ImportSet.add (AST.get_v x0).import
+        |> ImportSet.add (AST.get_func f).import
+    | Void (_, f, arg) ->
+        List.fold_left
+          (fun s (a : AST.var) -> ImportSet.add a.import s)
+          set (arg |> AST.get_arg)
+        |> ImportSet.add (AST.get_func f).import
+    | _ -> set
   in
-  let id, import =
-    if is_static_method ee_method method_info then
-      get_static_constructor ee_method (class_info |> fst)
-    else if is_init_method ee_method then
-      get_init_constructor ee_method method_info
-    else (Some "gen1", "")
+  let import =
+    ImportSet.fold
+      (fun i s -> if i = "" then s else s ^ "import " ^ i ^ ";\n")
+      (imports p ImportSet.empty)
+      ""
   in
-  let e =
-    if is_init_method ee_method then Str.split Regexp.dot ee_method |> List.hd
-    else
-      Str.split Regexp.dot ee_method
-      |> List.tl |> List.hd
-      |> Str.split (Str.regexp "(")
-      |> List.hd
-  in
-  {
-    code = AST.TestCase (STNT, { id; method_name = e; args = Param f_params });
-    import = [ import ];
-    variable = List.map (fun p -> (p, ee_method_summary)) f_params;
-    score = 0;
-    recv_package = get_import ee_method class_info;
-  }
+  let start = "\n@Test\npublic void unitcon_test() throws Exception {\n" in
+  let code = start ^ AST.code p ^ "}\n\n" in
+  (import, code)
+
+let rec mk_testcase queue summary m_info c_info s_map =
+  match queue with
+  | p :: tl ->
+      if AST.ground p then [ (pretty_format p, tl) ]
+      else
+        mk_testcase
+          (List.rev_append (unroll p summary m_info c_info s_map) tl)
+          summary m_info c_info s_map
+  | [] -> []
 
 let mk_testcases ~is_start queue (e_method, error_summary)
-    (callgraph, summary, call_prop_map, method_info, class_info, setter_map) =
-  let init_stm_queue =
+    (callgraph, summary, call_prop_map, m_info, c_info, s_map) =
+  let init =
     if is_start then
-      find_ee e_method error_summary callgraph summary call_prop_map method_info
-      |> List.map (fun (ee, ee_s) -> init_stm ee ee_s method_info class_info)
+      find_ee e_method error_summary callgraph summary call_prop_map m_info
+      |> List.map (fun (ee, ee_s) ->
+             let func, arg =
+               get_void_func AST.Id ~ee ~es:ee_s m_info s_map |> List.hd
+             in
+             AST.fcall_in_void_rule
+               (AST.Void (Id, Func, Arg []))
+               func (AST.Arg arg))
     else queue
   in
-  let result =
-    all_statement init_stm_queue summary method_info class_info setter_map
-  in
+  let result = mk_testcase init summary m_info c_info s_map in
   if result = [] then (("", ""), []) else List.hd result

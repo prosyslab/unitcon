@@ -1,6 +1,7 @@
 module F = Format
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
+module SetterMap = Language.SetterMap
 
 let blacklist : string list ref = ref [] (* unusing method list *)
 
@@ -151,8 +152,8 @@ let insert_test test_type test org_file new_file =
   let modify_test_code test_type code =
     match test_type with
     | "JUnit" -> code
-    | "Not_JUnit" -> Regexp.first_rm_exp (Str.regexp "@.*\\\n") code
-    | "Javac" -> Regexp.first_rm_exp (Str.regexp "@.*\\\n.*{\\\n") code
+    | "Not_JUnit" -> Regexp.first_rm (Str.regexp "@.*\\\n") code
+    | "Javac" -> Regexp.first_rm (Str.regexp "@.*\\\n.*{\\\n") code
     | _ -> failwith "not supported"
   in
   let check_symbol = function

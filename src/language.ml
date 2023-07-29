@@ -45,6 +45,8 @@ type params = (import * variable) list [@@deriving compare]
 
 type symbol = string (*e.g. v1 *) [@@deriving compare]
 
+let get_class_name = function Object n -> n | _ -> failwith "not supported"
+
 let modifier_of_json json =
   JsonUtil.to_string json |> function
   | "Public" -> Public
@@ -208,13 +210,22 @@ module FieldMap = struct
 end
 
 module AST = struct
-  type arg = Param of params | Arg of params
+  type var = { import : import; variable : variable; summary : summary }
 
-  type func = F of { typ : string; method_name : method_name } | Func
+  type f = {
+    typ : string;
+    method_name : method_name;
+    import : import;
+    summary : summary;
+  }
 
-  type id = Variable of variable | ClassName of string | Id
+  type arg = Param of var list | Arg of var list
 
-  type primitive = Z of int | R of float | B of bool | C of char
+  type func = F of f | Func
+
+  type id = Variable of var | ClassName of string | Id
+
+  type primitive = Z of int | R of float | B of bool | C of char | S of string
 
   type exp = Primitive of primitive | GlobalConstant of string | Null | Exp
 
@@ -225,6 +236,20 @@ module AST = struct
     | Seq of (t * t)
     | Skip
     | Stmt
+
+  (* id -> var*)
+  let rec get_v id =
+    match id with Variable v -> v | _ -> failwith "not supported"
+
+  (* id -> typ * string *)
+  and get_vinfo v =
+    match (get_v v).variable with
+    | Var (typ, id) -> (typ, id)
+    | This _ -> failwith "not supported"
+
+  let get_func func = match func with F f -> f | _ -> failwith "not supported"
+
+  let get_arg arg = match arg with Arg a -> a | _ -> failwith "not supported"
 
   let rec ground = function
     | Const (x, exp) -> (is_id x || is_exp exp) |> not
@@ -254,7 +279,9 @@ module AST = struct
     | Skip -> 0
     | Stmt -> 1
 
-  and count_arg = function Arg a -> List.length a | _ -> 0
+  and count_arg = function
+    | Arg a -> if a = [] then 1 else List.length a
+    | _ -> 0
 
   and count_func = function Func -> 1 | _ -> 0
 
@@ -333,8 +360,8 @@ module AST = struct
   let const_rule2 s g =
     if const s then match s with Const (x, _) -> Const (x, g) | _ -> s else s
 
-  let const_rule3 s null =
-    if const s then match s with Const (x, _) -> Const (x, null) | _ -> s
+  let const_rule3 s =
+    if const s then match s with Const (x, _) -> Const (x, Null) | _ -> s
     else s
 
   (* 2 *)
@@ -356,7 +383,15 @@ module AST = struct
       match s with
       | Assign (x0, _, func, arg) ->
           let typ = match func with Func -> "" | F f -> f.typ in
-          let x1 = Variable (Var (Object typ, id)) in
+          let x1 =
+            Variable
+              {
+                import = (match func with Func -> "" | F f -> f.import);
+                variable = Var (Object typ, id);
+                summary =
+                  (match func with Func -> empty_summary | F f -> f.summary);
+              }
+          in
           Seq (Const (x1, Exp), Assign (x0, x1, func, arg))
       | _ -> s
     else s
@@ -366,7 +401,15 @@ module AST = struct
       match s with
       | Assign (x0, _, func, arg) ->
           let typ = match func with Func -> "" | F f -> f.typ in
-          let x1 = Variable (Var (Object typ, id)) in
+          let x1 =
+            Variable
+              {
+                import = (match func with Func -> "" | F f -> f.import);
+                variable = Var (Object typ, id);
+                summary =
+                  (match func with Func -> empty_summary | F f -> f.summary);
+              }
+          in
           Seq
             ( Seq (Assign (x1, Id, Func, Arg []), Stmt),
               Assign (x0, x1, func, arg) )
@@ -408,7 +451,7 @@ module AST = struct
 
   (* 6, 7 *)
   let fcall_in_void_rule s f arg =
-    if fcall1_in_void s then
+    if fcall1_in_void s || fcall2_in_void s then
       match s with Void (x0, _, _) -> Void (x0, f, arg) | _ -> s
     else s
 
@@ -423,7 +466,15 @@ module AST = struct
       match s with
       | Void (_, func, arg) ->
           let typ = match func with Func -> "" | F f -> f.typ in
-          let x = Variable (Var (Object typ, id)) in
+          let x =
+            Variable
+              {
+                import = (match func with Func -> "" | F f -> f.import);
+                variable = Var (Object typ, id);
+                summary =
+                  (match func with Func -> empty_summary | F f -> f.summary);
+              }
+          in
           Seq (Const (x, Exp), Void (x, func, arg))
       | _ -> s
     else s
@@ -433,7 +484,15 @@ module AST = struct
       match s with
       | Void (_, func, arg) ->
           let typ = match func with Func -> "" | F f -> f.typ in
-          let x = Variable (Var (Object typ, id)) in
+          let x =
+            Variable
+              {
+                import = (match func with Func -> "" | F f -> f.import);
+                variable = Var (Object typ, id);
+                summary =
+                  (match func with Func -> empty_summary | F f -> f.summary);
+              }
+          in
           Seq (Seq (Assign (x, Id, Func, Arg []), Stmt), Void (x, func, arg))
       | _ -> s
     else s
@@ -448,7 +507,8 @@ module AST = struct
     | Param p ->
         "("
         ^ (List.fold_left
-             (fun pc (_, p) -> match p with Var (_, id) -> cc pc id | _ -> pc)
+             (fun pc p ->
+               match p.variable with Var (_, id) -> cc pc id | _ -> pc)
              "" p
           |> Regexp.rm_first_rest)
         ^ ")"
@@ -466,7 +526,7 @@ module AST = struct
 
   let var_code v =
     let v =
-      match v with
+      match v.variable with
       | Var (typ, id) -> (typ, id)
       | This _ -> failwith "Error: This is not var"
     in
@@ -484,7 +544,7 @@ module AST = struct
 
   let recv_name_code = function
     | Variable v -> (
-        match v with
+        match v.variable with
         | Var (_, id) -> id
         | This _ -> failwith "Error: This is not var")
     | ClassName c -> c
@@ -500,6 +560,7 @@ module AST = struct
     | R r -> (r |> string_of_float) ^ ";\n"
     | B b -> (b |> string_of_bool) ^ ";\n"
     | C c -> "\'" ^ String.make 1 c ^ "\';\n"
+    | S s -> "\"" ^ s ^ "\";\n"
 
   let exp_code = function
     | Primitive p -> primitive_code p
