@@ -45,7 +45,9 @@ type params = (import * variable) list [@@deriving compare]
 
 type symbol = string (*e.g. v1 *) [@@deriving compare]
 
-let get_class_name = function Object n -> n | _ -> failwith "not supported"
+let get_class_name = function
+  | Object n -> n
+  | _ -> failwith "get_class_name: not supported"
 
 let modifier_of_json json =
   JsonUtil.to_string json |> function
@@ -239,24 +241,29 @@ module AST = struct
 
   (* id -> var*)
   let rec get_v id =
-    match id with Variable v -> v | _ -> failwith "not supported"
+    match id with Variable v -> v | _ -> failwith "get_v: not supported"
 
   (* id -> typ * string *)
   and get_vinfo v =
     match (get_v v).variable with
     | Var (typ, id) -> (typ, id)
-    | This _ -> failwith "not supported"
+    | This _ -> failwith "get_vinfo: not supported"
 
-  let get_func func = match func with F f -> f | _ -> failwith "not supported"
+  let get_func func =
+    match func with F f -> f | _ -> failwith "get_func: not supported"
 
-  let get_arg arg = match arg with Arg a -> a | _ -> failwith "not supported"
+  let get_arg arg =
+    match arg with Arg a -> a | _ -> failwith "get_arg: not supported"
+
+  let get_param arg =
+    match arg with Param p -> p | _ -> failwith "get_param: not supported"
 
   let rec ground = function
     | Const (x, exp) -> (is_id x || is_exp exp) |> not
     | Assign (x0, x1, func, arg) ->
         (is_id x0 || is_id x1 || is_func func || is_arg arg) |> not
     | Void (x, func, arg) -> (is_id x || is_func func || is_arg arg) |> not
-    | Seq (s1, s2) -> (ground s1 || ground s2) |> not
+    | Seq (s1, s2) -> ground s1 && ground s2
     | Skip -> true
     | Stmt -> false
 
@@ -568,7 +575,7 @@ module AST = struct
     | Null -> "null;\n"
     | Exp -> failwith "Error: still need unrolling exp"
 
-  let rec s_code = function
+  let rec code = function
     | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp
     | Assign (x0, x1, func, arg) ->
         if is_cn x1 then
@@ -581,11 +588,7 @@ module AST = struct
         else failwith "Error: not supported id type"
     | Void (x, func, arg) ->
         recv_name_code x ^ "." ^ func_code func ^ arg_code arg ^ ";\n"
-    | Seq (s1, s2) -> s_code s1 ^ s_code s2
+    | Seq (s1, s2) -> code s1 ^ code s2
     | Skip -> ""
     | Stmt -> failwith "Error: still need unrolling stmt"
-
-  let code = function
-    | Seq (s1, s2) -> s_code s1 ^ s_code s2
-    | _ -> "Error: this s can not be start"
 end

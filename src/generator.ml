@@ -1357,6 +1357,7 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info s_map =
       |> List.hd
   in
   let mk_arg param s =
+    let param = param |> List.tl in
     List.map (fun (i, v) -> AST.{ import = i; variable = v; summary = s }) param
   in
   if AST.is_id id then
@@ -1489,73 +1490,75 @@ let get_arg_seq (args : AST.id list) =
     [ AST.Skip ] args
 
 let rec unroll p summary m_info c_info s_map =
-  if AST.ground p then [ p ]
-  else
-    match p with
-    | Seq _ when AST.void p -> [ AST.void_rule1 p; AST.void_rule2 p ]
-    | Seq (s1, _) when AST.ground s1 |> not ->
-        unroll s1 summary m_info c_info s_map
-    | Seq (_, s2) -> unroll s2 summary m_info c_info s_map
-    | Const (x, _) when AST.const p ->
-        if is_primitive x then
-          let typ, id = AST.get_vinfo x in
+  match p with
+  | AST.Seq _ when AST.void p -> [ AST.void_rule1 p; AST.void_rule2 p ]
+  | Seq (s1, s2) when AST.ground s1 |> not ->
+      let lst = unroll s1 summary m_info c_info s_map in
+      List.map (fun x -> AST.Seq (x, s2)) lst
+  | Seq (s1, s2) ->
+      let lst = unroll s2 summary m_info c_info s_map in
+      List.map (fun x -> AST.Seq (s1, x)) lst
+  | Const (x, _) when AST.const p ->
+      if is_primitive x then
+        let typ, id = AST.get_vinfo x in
+        List.fold_left
+          (fun lst x ->
+            match x with AST.Exp -> lst | _ -> AST.const_rule1 p x :: lst)
+          []
+          (get_value typ id (AST.get_v x).summary)
+      else
+        let r2 =
           List.map
-            (fun x -> AST.const_rule1 p x)
-            (get_value typ id (AST.get_v x).summary)
-        else
-          let r2 =
-            List.map
-              (fun x -> AST.const_rule2 p x)
-              (global_var_list
-                 (Language.get_class_name (AST.get_vinfo x |> fst))
-                 (AST.get_v x).summary summary)
-          in
-          AST.const_rule3 p :: r2
-    | Assign (x0, _, _, _) when AST.fcall_in_assign p ->
-        List.map
-          (fun x -> AST.fcall_in_assign_rule p (x |> fst) (x |> snd))
-          (get_constructor x0 summary m_info c_info)
-    | Assign (_, _, f, _) when AST.recv_in_assign p ->
-        let r1 = get_cname f |> AST.recv_in_assign_rule1 p in
-        let r2 =
-          AST.recv_in_assign_rule2 p ("con_recv" ^ (!recv |> string_of_int))
+            (fun x -> AST.const_rule2 p x)
+            (global_var_list
+               (Language.get_class_name (AST.get_vinfo x |> fst))
+               (AST.get_v x).summary summary)
         in
-        let r3 =
-          AST.recv_in_assign_rule3 p ("con_recv" ^ (!recv |> string_of_int))
-        in
-        incr recv;
-        r1 :: r2 :: [ r3 ]
-    | Assign (_, _, _, arg) when AST.arg_in_assign p ->
-        let arg_seq =
-          get_arg_seq (List.map (fun x -> AST.Variable x) (arg |> AST.get_arg))
-        in
-        List.map
-          (fun x -> AST.arg_in_assign_rule p x (AST.Param (arg |> AST.get_arg)))
-          arg_seq
-    | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
-        get_void_func x m_info s_map
-        |> List.fold_left
-             (fun lst (f, arg) ->
-               AST.fcall_in_void_rule p f (AST.Arg arg) :: lst)
-             []
-    | Void (x, _, _) when AST.recv_in_void p ->
-        let r1 = x |> AST.recv_in_void_rule1 p in
-        let r2 =
-          AST.recv_in_void_rule2 p ("con_recv" ^ (!recv |> string_of_int))
-        in
-        let r3 =
-          AST.recv_in_assign_rule3 p ("con_recv" ^ (!recv |> string_of_int))
-        in
-        incr recv;
-        r1 :: r2 :: [ r3 ]
-    | Void (_, _, arg) when AST.arg_in_void p ->
-        let arg_seq =
-          get_arg_seq (List.map (fun x -> AST.Variable x) (arg |> AST.get_arg))
-        in
-        List.map
-          (fun x -> AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)))
-          arg_seq
-    | _ -> failwith ""
+        AST.const_rule3 p :: r2
+  | Assign (x0, _, _, _) when AST.fcall_in_assign p ->
+      List.map
+        (fun x -> AST.fcall_in_assign_rule p (x |> fst) (x |> snd))
+        (get_constructor x0 summary m_info c_info)
+  | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
+      get_void_func x m_info s_map
+      |> List.fold_left
+           (fun lst (f, arg) -> AST.fcall_in_void_rule p f (AST.Arg arg) :: lst)
+           []
+  | Assign (_, _, f, _) when AST.recv_in_assign p ->
+      let r1 = get_cname f |> AST.recv_in_assign_rule1 p in
+      let r2 =
+        AST.recv_in_assign_rule2 p ("con_recv" ^ (!recv |> string_of_int))
+      in
+      let r3 =
+        AST.recv_in_assign_rule3 p ("con_recv" ^ (!recv |> string_of_int))
+      in
+      incr recv;
+      r1 :: r2 :: [ r3 ]
+  | Void (x, f, _) when AST.recv_in_void p ->
+      let r1 = get_cname f |> AST.recv_in_void_rule1 p in
+      let r2 =
+        AST.recv_in_void_rule2 p ("con_recv" ^ (!recv |> string_of_int))
+      in
+      let r3 =
+        AST.recv_in_void_rule3 p ("con_recv" ^ (!recv |> string_of_int))
+      in
+      incr recv;
+      r1 :: r2 :: [ r3 ]
+  | Assign (_, _, _, arg) when AST.arg_in_assign p ->
+      let arg_seq =
+        get_arg_seq (List.map (fun x -> AST.Variable x) (arg |> AST.get_arg))
+      in
+      List.map
+        (fun x -> AST.arg_in_assign_rule p x (AST.Param (arg |> AST.get_arg)))
+        arg_seq
+  | Void (_, _, arg) when AST.arg_in_void p ->
+      let arg_seq =
+        get_arg_seq (List.map (fun x -> AST.Variable x) (arg |> AST.get_arg))
+      in
+      List.map
+        (fun x -> AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)))
+        arg_seq
+  | _ -> [ p ]
 
 (* find error entry *)
 let rec find_ee e_method e_summary callgraph summary call_prop_map method_info =
@@ -1600,13 +1603,13 @@ let pretty_format p =
     | Assign (x0, _, f, arg) ->
         List.fold_left
           (fun s (a : AST.var) -> ImportSet.add a.import s)
-          set (arg |> AST.get_arg)
+          set (arg |> AST.get_param)
         |> ImportSet.add (AST.get_v x0).import
         |> ImportSet.add (AST.get_func f).import
     | Void (_, f, arg) ->
         List.fold_left
           (fun s (a : AST.var) -> ImportSet.add a.import s)
-          set (arg |> AST.get_arg)
+          set (arg |> AST.get_param)
         |> ImportSet.add (AST.get_func f).import
     | _ -> set
   in
@@ -1620,7 +1623,11 @@ let pretty_format p =
   let code = start ^ AST.code p ^ "}\n\n" in
   (import, code)
 
+let priority_q queue =
+  List.sort (fun p1 p2 -> compare (AST.count_nt p1) (AST.count_nt p2)) queue
+
 let rec mk_testcase queue summary m_info c_info s_map =
+  let queue = priority_q queue in
   match queue with
   | p :: tl ->
       if AST.ground p then [ (pretty_format p, tl) ]
