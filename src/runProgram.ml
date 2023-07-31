@@ -268,7 +268,7 @@ let build_program info tc =
       Unix.wait () |> ignore;
       simple_compiler info.program_dir test_cmd
 
-(* queue: (testcase * list(testcases containing hole)) *)
+(* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start info queue e_method_info program_info =
   incr trial;
   let tc, tc_list = make_testcase ~is_start queue e_method_info program_info in
