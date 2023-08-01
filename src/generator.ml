@@ -766,7 +766,7 @@ let is_public_or_default ?(is_getter = false) package method_name method_info =
   let m_package = get_package_from_param info.MethodInfo.formal_params in
   if is_getter then
     match info.MethodInfo.modifier with Public -> true | _ -> false
-  else if m_package = "" then false
+  else if m_package = "" then true (* encoding method *)
   else
     let name =
       Str.split Regexp.dot m_package
@@ -811,16 +811,16 @@ let default_value_list typ =
     match typ with
     | Language.Int | Long ->
         [
-          AST.Primitive (Z 0);
           AST.Primitive (Z 1);
+          AST.Primitive (Z 0);
           AST.Primitive (Z (-1));
           AST.Primitive (Z 100);
           AST.Primitive (Z (-100));
         ]
     | Float | Double ->
         [
-          AST.Primitive (R 0.0);
           AST.Primitive (R 1.0);
+          AST.Primitive (R 0.0);
           AST.Primitive (R (-1.0));
           AST.Primitive (R 100.0);
           AST.Primitive (R (-100.0));
@@ -1595,7 +1595,9 @@ let pretty_format p =
   in
   let import =
     ImportSet.fold
-      (fun i s -> if i = "" then s else s ^ "import " ^ (i |> i_format) ^ ";\n")
+      (fun i s ->
+        if i = "" || Str.string_match (Str.regexp ".*Array$") i 0 then s
+        else s ^ "import " ^ (i |> i_format) ^ ";\n")
       (imports p ImportSet.empty)
       ""
   in

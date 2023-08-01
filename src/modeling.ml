@@ -647,7 +647,7 @@ let char_array_info =
     }
 
 let string_array_info =
-  let this = ("", Language.This (Array String)) in
+  let this = ("", Language.This (Array (Object "String"))) in
   let arg = ("", Language.Var (Int, "con_size")) in
   MethodInfo.
     {

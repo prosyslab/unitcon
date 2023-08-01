@@ -28,8 +28,8 @@ let parse_param param =
     | "java.lang.String*" -> ("java.lang.String", Language.String)
     | "" -> ("", Language.None)
     | _ when Str.string_match Regexp.array t 0 ->
-        let import, typ = t |> Regexp.first_rm Regexp.rm_array |> get_type in
-        (import, Language.Array typ)
+        let _, typ = t |> Regexp.first_rm Regexp.rm_array |> get_type in
+        ("", Language.Array typ)
     | _ ->
         let import = Regexp.global_rm (Str.regexp "\\*.*$") t in
         let class_name = String.split_on_char '.' t |> List.rev |> List.hd in

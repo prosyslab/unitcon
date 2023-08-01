@@ -47,15 +47,17 @@ type symbol = string (*e.g. v1 *) [@@deriving compare]
 
 let get_class_name = function
   | Object n -> n
-  | Int -> failwith "get_class_name: INT"
-  | Long -> failwith "get_class_name: long"
-  | Float -> failwith "get_class_name: float"
-  | Double -> failwith "get_class_name: double"
-  | Bool -> failwith "get_class_name: bool"
-  | Char -> failwith "get_class_name: char"
-  | String -> "String"
-  | Array typ -> failwith "get_class_name: array"
-  | None -> failwith "get_class_name: none"
+  | Array typ -> (
+      match typ with
+      | Int -> "IntArray"
+      | Long -> "LongArray"
+      | Float -> "FloatArray"
+      | Double -> "DoubleArray"
+      | Bool -> "BoolArray"
+      | Char -> "CharArray"
+      | String -> "StringArray"
+      | Object _ -> "ObjectArray"
+      | _ -> failwith "get_class_name: not supported type")
   | _ -> failwith "get_class_name: not supported"
 
 let modifier_of_json json =
@@ -489,22 +491,34 @@ module AST = struct
      Return Code
    * ************************************** *)
 
-  let arg_code =
+  let is_array f =
+    let fname = (get_func f).method_name in
+    if Str.string_match (".*Array\\.<init>" |> Str.regexp) fname 0 then true
+    else false
+
+  let arg_code f arg =
     let cc code x = code ^ ", " ^ x in
-    function
+    match arg with
     | Param p ->
-        "("
-        ^ (List.fold_left
-             (fun pc p ->
-               match p.variable with Var (_, id) -> cc pc id | _ -> pc)
-             "" p
-          |> Regexp.rm_first_rest)
-        ^ ")"
+        let param =
+          List.fold_left
+            (fun pc p ->
+              match p.variable with Var (_, id) -> cc pc id | _ -> pc)
+            "" p
+          |> Regexp.rm_first_rest
+        in
+        if is_array f then "[" ^ param ^ "]" else "(" ^ param ^ ")"
     | Arg _ -> failwith "Error: still need unrolling arg"
 
-  let func_code = function
+  let func_code func =
+    match func with
     | F f ->
-        if Str.string_match (".*\\.<init>" |> Str.regexp) f.method_name 0 then
+        if is_array func then
+          Str.split Regexp.dot f.method_name
+          |> List.hd
+          |> Regexp.first_rm (Str.regexp "Array")
+        else if Str.string_match (".*\\.<init>" |> Str.regexp) f.method_name 0
+        then
           Str.split Regexp.dot f.method_name
           |> List.hd
           |> Str.global_replace Regexp.dollar "."
@@ -535,6 +549,16 @@ module AST = struct
     | String -> "String " ^ (v |> snd)
     | Object name ->
         (name |> Str.global_replace Regexp.dollar ".") ^ " " ^ (v |> snd)
+    | Array typ -> (
+        match typ with
+        | Int -> "int[] " ^ (v |> snd)
+        | Long -> "long[] " ^ (v |> snd)
+        | Float -> "float[] " ^ (v |> snd)
+        | Double -> "double[] " ^ (v |> snd)
+        | Char -> "char[] " ^ (v |> snd)
+        | String -> "String[] " ^ (v |> snd)
+        | Object _ -> "Object[] " ^ (v |> snd)
+        | _ -> failwith "not supported variable")
     | _ -> failwith "not supported variable"
 
   let recv_name_code = function
@@ -574,13 +598,19 @@ module AST = struct
     | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x
     | Assign (x0, x1, func, arg) ->
         if is_cn x1 then
-          id_code x0 ^ " = " ^ "new " ^ func_code func ^ arg_code arg ^ ";\n"
+          id_code x0 ^ " = " ^ "new " ^ func_code func ^ arg_code func arg
+          ^ ";\n"
         else if is_var x1 then
           id_code x0 ^ " = " ^ recv_name_code x1 ^ "." ^ func_code func
-          ^ arg_code arg ^ ";\n"
+          ^ arg_code func arg ^ ";\n"
         else failwith "Error: not supported id type"
     | Void (x, func, arg) ->
-        recv_name_code x ^ "." ^ func_code func ^ arg_code arg ^ ";\n"
+        if
+          Str.string_match
+            (".*\\.<init>" |> Str.regexp)
+            (get_func func).method_name 0
+        then "new " ^ func_code func ^ arg_code func arg ^ ";\n"
+        else recv_name_code x ^ "." ^ func_code func ^ arg_code func arg ^ ";\n"
     | Seq (s1, s2) -> code s1 ^ code s2
     | Skip -> ""
     | Stmt -> failwith "Error: still need unrolling stmt"

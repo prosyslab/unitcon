@@ -19,7 +19,7 @@ type t = {
   expected_bug : string;
 }
 
-type build_type = Maven | Javac
+type build_type = Maven | Javac of string
 
 type expected_bug_type = TESTCASE | TRACE of string
 
@@ -124,7 +124,8 @@ let find word str =
 
 let build_type_of_string str =
   if Str.string_match ("^mvn" |> Str.regexp) str 0 then Maven
-  else if Str.string_match ("^java" |> Str.regexp) str 0 then Javac
+  else if Str.string_match ("^javac" |> Str.regexp) str 0 then Javac "compile"
+  else if Str.string_match ("^java" |> Str.regexp) str 0 then Javac "run"
   else failwith "not supported build type"
 
 let string_of_expected_bug file =
@@ -143,9 +144,13 @@ let simple_compiler program_dir build_command =
   | Maven ->
       close_in stderr;
       Event.always stdout |> Event.sync
-  | Javac ->
-      close_in stdout;
-      Event.always stderr |> Event.sync
+  | Javac typ ->
+      if typ = "compile" then (
+        close_in stderr;
+        Event.always stdout |> Event.sync)
+      else (
+        close_in stdout;
+        Event.always stderr |> Event.sync)
 
 (* test: (string * string) *)
 let insert_test test_type test org_file new_file =
@@ -204,7 +209,7 @@ let add_testcase new_tc cmd org_file file_in_program =
   | Maven when find "@Test" org_data ->
       insert_test "JUnit" new_tc org_file file_in_program
   | Maven -> insert_test "Not_JUnit" new_tc org_file file_in_program
-  | Javac -> insert_test "Javac" new_tc org_file file_in_program
+  | Javac _ -> insert_test "Javac" new_tc org_file file_in_program
 
 let my_really_read_string in_chan =
   let res = Buffer.create 1024 in
@@ -275,6 +280,7 @@ let rec run_test ~is_start info queue e_method_info program_info =
   let tc, tc_list = make_testcase ~is_start queue e_method_info program_info in
   if tc = ("", "") then failwith "can't proceed anymore";
   let result_ic = build_program info tc in
+  Unix.wait () |> ignore;
   if checking_bug_presence result_ic info.expected_bug then (
     "# of trial: " ^ (!trial |> string_of_int) |> print_endline;
     close_in result_ic |> ignore;
