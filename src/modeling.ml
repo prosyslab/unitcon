@@ -243,6 +243,51 @@ let file_input_postmem =
   |> Condition.M.add (Condition.RH_Symbol "v5")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
 
+let obj_var =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+
+let obj_premem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
+
+let obj_postmem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
+
+let string_var =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "s")
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+
+let string_premem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "s") (Condition.RH_Symbol "v5"))
+
+let string_postmem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "s") (Condition.RH_Symbol "v5"))
+  |> Condition.M.add (Condition.RH_Symbol "v5")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+
 let hashmap_put_summary =
   Language.
     {
@@ -330,6 +375,26 @@ let file_input_summary =
       value = Value.M.empty;
       precond = (file_input_var, file_input_premem);
       postcond = (file_input_var, file_input_postmem);
+      args = [];
+    }
+
+let obj_summary =
+  Language.
+    {
+      relation = Relation.M.empty;
+      value = Value.M.empty;
+      precond = (obj_var, obj_premem);
+      postcond = (obj_var, obj_postmem);
+      args = [];
+    }
+
+let string_summary =
+  Language.
+    {
+      relation = Relation.M.empty;
+      value = Value.M.empty;
+      precond = (string_var, string_premem);
+      postcond = (string_var, string_postmem);
       args = [];
     }
 
@@ -422,7 +487,7 @@ let class_get_info =
     }
 
 let print_info =
-  let this = ("java.io.File", Language.This (Object "PrintStream")) in
+  let this = ("java.io.PrintStream", Language.This (Object "PrintStream")) in
   let arg = ("java.io.File", Language.Var (Object "File", "con_file")) in
   MethodInfo.
     {
@@ -447,6 +512,29 @@ let file_input_info =
       filename = "";
     }
 
+let obj_info =
+  let this = ("java.lang.Object", Language.This (Object "Object")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this ];
+      return = "";
+      filename = "";
+    }
+
+let string_info =
+  let this = ("java.lang.String", Language.This (Object "String")) in
+  let arg = ("java.lang.String", Language.Var (Object "String", "s")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg ];
+      return = "";
+      filename = "";
+    }
+
 let add_java_package_summary mmap =
   SummaryMap.M.add "HashMap.put(Object,Object)" [ hashmap_put_summary ] mmap
   |> SummaryMap.M.add "ArrayList.<init>()" [ array_list_summary ]
@@ -457,6 +545,8 @@ let add_java_package_summary mmap =
   |> SummaryMap.M.add "Object.getClass()" [ class_get_summary ]
   |> SummaryMap.M.add "PrintStream.<init>(File)" [ print_summary ]
   |> SummaryMap.M.add "FileInputStream.<init>(File)" [ file_input_summary ]
+  |> SummaryMap.M.add "Object.<init>()" [ obj_summary ]
+  |> SummaryMap.M.add "String.<init>(String)" [ string_summary ]
 
 let add_java_package_method mmap =
   MethodInfo.M.add "HashMap.put(Object,Object)" hashmap_put_info mmap
@@ -468,6 +558,8 @@ let add_java_package_method mmap =
   |> MethodInfo.M.add "Object.getClass()" class_get_info
   |> MethodInfo.M.add "PrintStream.<init>(File)" print_info
   |> MethodInfo.M.add "FileInputStream.<init>(File)" file_input_info
+  |> MethodInfo.M.add "Object.<init>()" obj_info
+  |> MethodInfo.M.add "String.<init>(String)" string_info
 
 let add_java_package_inheritance ig =
   let add_inheritance super child ig = IG.add_edge ig super child in

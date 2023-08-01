@@ -228,6 +228,7 @@ let checking_bug_presence ic expected_bug =
   | TRACE s -> find s data
   | _ -> false
 
+(*unitcon_properties/summary.json ... *)
 let init program_dir =
   let program_dir =
     if Filename.is_relative program_dir then
@@ -248,7 +249,7 @@ let init program_dir =
     expected_bug = Filename.concat program_dir "expected_bug";
   }
 
-(* return: (testcase * list(testcases containing hole)) *)
+(* return: (testcase * list(partial testcase)) *)
 let make_testcase ~is_start queue e_method_info program_info =
   Generator.mk_testcases ~is_start queue e_method_info program_info
 

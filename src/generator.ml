@@ -676,40 +676,37 @@ let new_value_summary old_summary new_value =
 let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 
 let is_primitive x =
-  let x =
-    match x with
-    | AST.Variable v -> (
-        match v.variable with Language.Var (typ, _) -> typ | _ -> None)
-    | _ -> None
-  in
-  match x with
+  match AST.get_vinfo x |> fst with
   | Int | Long | Float | Double | Bool | Char | String -> true
   | _ -> false
 
+and is_string x =
+  match AST.get_vinfo x |> fst with String -> true | _ -> false
+
 let is_nested_class name = String.contains name '$'
 
-let is_normal_class class_name class_info =
-  match ClassInfo.M.find_opt class_name class_info with
+let is_normal_class class_name c_info =
+  match ClassInfo.M.find_opt class_name c_info with
   | Some typ -> (
       match typ.ClassInfo.class_type with
       | Language.Static | Language.Normal -> true
       | _ -> false)
-  | None -> false
+  | None -> true (* modeling class *)
 
-let is_static_class ~is_class name (class_info, _) =
+let is_static_class ~is_class name (c_info, _) =
   let class_name =
     if is_class then name
     else
       Regexp.global_rm (Str.regexp "\\.<.*>(.*)$") name
       |> Regexp.global_rm (Str.regexp "(.*)$")
   in
-  match ClassInfo.M.find_opt class_name class_info with
+  match ClassInfo.M.find_opt class_name c_info with
   | Some typ -> (
       match typ.ClassInfo.class_type with Language.Static -> true | _ -> false)
   | None -> false
 
-let is_private_class class_package class_info =
-  match ClassInfo.M.find_opt class_package (class_info |> fst) with
+let is_private_class class_package c_info =
+  match ClassInfo.M.find_opt class_package (c_info |> fst) with
   | Some info -> (
       let class_type = info.ClassInfo.class_type in
       match class_type with Language.Private -> true | _ -> false)
@@ -744,7 +741,7 @@ let get_package formal_params =
     "" formal_params
 
 (* e.g., java.util. --> not contain class name *)
-let get_import t_method (class_info, _) =
+let get_import t_method (c_info, _) =
   let class_name = get_class_name ~infer:true t_method in
   let full_class_name =
     ClassInfo.M.fold
@@ -755,7 +752,7 @@ let get_import t_method (class_info, _) =
           let s = name ^ "$" in
           Regexp.global_rm (Str.regexp s) full_name
         else find_name)
-      class_info ""
+      c_info ""
   in
   full_class_name
 
@@ -1102,16 +1099,7 @@ let rec collect_field m_symbol c_symbol m_value c_value m_mem c_mem field_map =
 
 let get_setter_list constructor method_info setter_map =
   let class_name = get_class_name ~infer:false constructor in
-  let setter_list = try SetterMap.M.find class_name setter_map with _ -> [] in
-  let rec filter_setter setter_list =
-    match setter_list with
-    | (method_name, change_field) :: tl ->
-        if List.length change_field < 3 then
-          filter_setter tl |> List.cons method_name
-        else filter_setter tl
-    | _ -> []
-  in
-  filter_setter setter_list
+  (try SetterMap.M.find class_name setter_map with _ -> [])
   |> List.filter (fun setter -> is_private setter method_info |> not)
 
 let get_setter constructor id method_summary c_summary method_info setter_map =
@@ -1175,39 +1163,28 @@ let satisfied_c method_summary id candidate_constructor summary =
       (false, Language.empty_summary, 0)
       check_summarys
 
-let get_static_constructor t_method class_info =
+let get_static_constructor t_method c_info =
   let class_name = get_class_name ~infer:true t_method in
   let full_class_name =
     ClassInfo.M.fold
       (fun full_name _ find_name ->
         let name = Str.split Regexp.dot full_name |> List.rev |> List.hd in
         if class_name = name then full_name else find_name)
-      class_info ""
+      c_info ""
   in
   (class_name |> replace_nested_symbol, full_class_name)
 
 (* e.g., java.util.Date --> contain class name *)
-let get_package_from_method t_method (class_info, _) =
+let get_package_from_method t_method (c_info, _) =
   let class_name = get_class_name ~infer:true t_method in
   let full_class_name =
     ClassInfo.M.fold
       (fun full_name _ find_name ->
         let name = Str.split Regexp.dot full_name |> List.rev |> List.hd in
         if class_name = name then full_name else find_name)
-      class_info ""
+      c_info ""
   in
   full_class_name
-
-let get_constructor_import c_info =
-  let rec nested_import c_import =
-    if String.contains c_import '$' then
-      let new_import = Str.replace_first ("\\$.*" |> Str.regexp) "" c_import in
-      let next_c_import = Str.replace_first Regexp.dollar "." c_import in
-      nested_import next_c_import |> List.cons new_import
-    else [ c_import ]
-  in
-  let c_import = get_package c_info.MethodInfo.formal_params in
-  nested_import c_import
 
 let match_constructor_name class_name method_name =
   let class_name = Str.split Regexp.dot class_name |> List.rev |> List.hd in
@@ -1220,13 +1197,12 @@ let match_return_object class_name method_name method_info =
   let return = info.MethodInfo.return in
   Str.string_match (Str.regexp class_name) return 0
 
-let get_clist (class_package, class_name) method_info
-    (class_info, inheritance_graph) =
+let get_clist (class_package, class_name) method_info (c_info, ig) =
   let full_class_name =
     if class_package = "" then class_name else class_package
   in
   let class_to_find =
-    try IG.succ inheritance_graph full_class_name |> List.cons full_class_name
+    try IG.succ ig full_class_name |> List.cons full_class_name
     with Invalid_argument _ -> [ full_class_name ]
   in
   MethodInfo.M.fold
@@ -1234,7 +1210,7 @@ let get_clist (class_package, class_name) method_info
       List.fold_left
         (fun init_list class_name_to_find ->
           if
-            is_normal_class class_name_to_find class_info
+            is_normal_class class_name_to_find c_info
             && is_private method_name method_info |> not
             && match_constructor_name class_name_to_find method_name
           then (method_name, class_name_to_find) :: init_list
@@ -1342,16 +1318,30 @@ let mk_arg ~is_s param s =
   List.map (fun (i, v) -> AST.{ import = i; variable = v; summary = s }) param
 
 (* id is receiver variable *)
-let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info s_map =
+let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
+    s_map =
   if AST.is_id id then
     let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
     let f_arg = mk_arg ~is_s:(is_s_method ee m_info) param es in
     let import = get_package param in
-    let typ =
-      Str.split Regexp.dot ee |> List.hd |> Str.split Regexp.space |> List.rev
-      |> List.hd
+    let typ_list =
+      if is_private_class import c_info then
+        try IG.succ (c_info |> snd) import |> List.cons import
+        with Invalid_argument _ -> [ import ]
+      else [ import ]
     in
-    [ (AST.F { typ; method_name = ee; import; summary = es }, f_arg) ]
+    List.fold_left
+      (fun lst x ->
+        ( AST.F
+            {
+              typ = x |> Str.split Regexp.dot |> List.rev |> List.hd;
+              method_name = ee;
+              import = x;
+              summary = es;
+            },
+          f_arg )
+        :: lst)
+      [] typ_list
   else
     let var = AST.get_v id in
     let name = get_class_name ~infer:false var.import in
@@ -1375,27 +1365,28 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info s_map =
           f_arg ))
       setter_list
 
-let get_ret_obj (class_package, class_name) method_info
-    (class_info, inheritance_graph) =
+let get_ret_obj (class_package, class_name) m_info (c_info, ig) =
   let full_class_name =
     if class_package = "" then class_name else class_package
   in
   let class_to_find =
-    try IG.succ inheritance_graph full_class_name |> List.cons full_class_name
+    try IG.succ ig full_class_name |> List.cons full_class_name
     with Invalid_argument _ -> [ full_class_name ]
   in
   MethodInfo.M.fold
     (fun method_name _ method_list ->
       List.fold_left
         (fun init_list class_name_to_find ->
-          if match_return_object class_name_to_find method_name method_info then
-            ( method_name,
-              get_package_from_method method_name (class_info, inheritance_graph)
-            )
+          if
+            match_return_object class_name_to_find method_name m_info
+            && is_s_method method_name m_info
+            && is_init_method method_name |> not
+          then
+            (method_name, get_package_from_method method_name (c_info, ig))
             :: init_list
           else init_list)
         method_list class_to_find)
-    method_info []
+    m_info []
 
 let satisfied_c_list id t_summary summary summary_list =
   List.fold_left
@@ -1460,10 +1451,7 @@ let get_ret_c ret summary m_info c_info =
 let cname_condition m_name m_info =
   is_s_method m_name m_info || is_init_method m_name
 
-let get_cname f =
-  let f = AST.get_func f in
-  let cname = f.AST.typ |> Str.split Regexp.dot |> List.rev |> List.hd in
-  AST.ClassName cname
+let get_cname f = AST.ClassName (AST.get_func f).AST.typ
 
 let get_arg_seq (args : AST.id list) =
   List.fold_left
@@ -1471,7 +1459,7 @@ let get_arg_seq (args : AST.id list) =
       let x =
         List.fold_left (fun lst x -> AST.mk_const_arg x arg :: lst) [] s
       in
-      if is_primitive arg then x
+      if is_primitive arg && is_string arg |> not then x
       else
         x
         |> List.rev_append
@@ -1489,7 +1477,7 @@ let rec unroll p summary m_info c_info s_map =
       let lst = unroll s2 summary m_info c_info s_map in
       List.map (fun x -> AST.Seq (s1, x)) lst
   | Const (x, _) when AST.const p ->
-      if is_primitive x then
+      if is_primitive x && is_string x |> not then
         let typ, id = AST.get_vinfo x in
         List.fold_left
           (fun lst x ->
@@ -1512,34 +1500,34 @@ let rec unroll p summary m_info c_info s_map =
         (get_ret_c x0 summary m_info c_info)
       |> List.map (fun x -> AST.fcall_in_assign_rule p (x |> fst) (x |> snd))
   | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
-      get_void_func x m_info s_map
+      get_void_func x m_info c_info s_map
       |> List.fold_left
            (fun lst (f, arg) -> AST.fcall_in_void_rule p f (AST.Arg arg) :: lst)
            []
   | Assign (_, _, f, _) when AST.recv_in_assign p ->
-      let r2 =
-        AST.recv_in_assign_rule2 p ("con_recv" ^ (!recv |> string_of_int))
-      in
-      let r3 =
-        AST.recv_in_assign_rule3 p ("con_recv" ^ (!recv |> string_of_int))
-      in
-      incr recv;
       if cname_condition (AST.get_func f).method_name m_info then
-        let r1 = get_cname f |> AST.recv_in_assign_rule1 p in
-        r1 :: r2 :: [ r3 ]
-      else r2 :: [ r3 ]
+        [ get_cname f |> AST.recv_in_assign_rule1 p ]
+      else
+        let r2 =
+          AST.recv_in_assign_rule2 p ("con_recv" ^ (!recv |> string_of_int))
+        in
+        let r3 =
+          AST.recv_in_assign_rule3 p ("con_recv" ^ (!recv |> string_of_int))
+        in
+        incr recv;
+        r2 :: [ r3 ]
   | Void (_, f, _) when AST.recv_in_void p ->
-      let r2 =
-        AST.recv_in_void_rule2 p ("con_recv" ^ (!recv |> string_of_int))
-      in
-      let r3 =
-        AST.recv_in_void_rule3 p ("con_recv" ^ (!recv |> string_of_int))
-      in
-      incr recv;
       if cname_condition (AST.get_func f).method_name m_info then
-        let r1 = get_cname f |> AST.recv_in_assign_rule1 p in
-        r1 :: r2 :: [ r3 ]
-      else r2 :: [ r3 ]
+        [ get_cname f |> AST.recv_in_void_rule1 p ]
+      else
+        let r2 =
+          AST.recv_in_void_rule2 p ("con_recv" ^ (!recv |> string_of_int))
+        in
+        let r3 =
+          AST.recv_in_void_rule3 p ("con_recv" ^ (!recv |> string_of_int))
+        in
+        incr recv;
+        r2 :: [ r3 ]
   | Assign (_, _, _, arg) when AST.arg_in_assign p ->
       let arg_seq =
         get_arg_seq (List.map (fun x -> AST.Variable x) (arg |> AST.get_arg))
@@ -1592,6 +1580,7 @@ let rec find_ee e_method e_summary callgraph summary call_prop_map method_info =
       [] caller_list
 
 let pretty_format p =
+  let i_format i = Str.replace_first Regexp.dollar "." i in
   let rec imports s set =
     match s with
     | AST.Seq (s1, s2) -> imports s1 set |> imports s2
@@ -1611,7 +1600,7 @@ let pretty_format p =
   in
   let import =
     ImportSet.fold
-      (fun i s -> if i = "" then s else s ^ "import " ^ i ^ ";\n")
+      (fun i s -> if i = "" then s else s ^ "import " ^ (i |> i_format) ^ ";\n")
       (imports p ImportSet.empty)
       ""
   in
@@ -1629,22 +1618,29 @@ let rec mk_testcase queue summary m_info c_info s_map =
       if AST.ground p then [ (pretty_format p, tl) ]
       else
         mk_testcase
-          (List.rev_append (unroll p summary m_info c_info s_map) tl)
+          (List.rev_append
+             (unroll p summary m_info c_info s_map |> List.rev)
+             tl)
           summary m_info c_info s_map
   | [] -> []
 
 let mk_testcases ~is_start queue (e_method, error_summary)
     (callgraph, summary, call_prop_map, m_info, c_info, s_map) =
+  let apply_rule list =
+    List.fold_left
+      (fun lst (func, arg) ->
+        AST.fcall_in_void_rule (AST.Void (Id, Func, Arg [])) func (AST.Arg arg)
+        :: lst)
+      [] list
+  in
   let init =
     if is_start then
       find_ee e_method error_summary callgraph summary call_prop_map m_info
-      |> List.map (fun (ee, ee_s) ->
-             let func, arg =
-               get_void_func AST.Id ~ee ~es:ee_s m_info s_map |> List.hd
-             in
-             AST.fcall_in_void_rule
-               (AST.Void (Id, Func, Arg []))
-               func (AST.Arg arg))
+      |> List.fold_left
+           (fun init_list (ee, ee_s) ->
+             apply_rule (get_void_func AST.Id ~ee ~es:ee_s m_info c_info s_map)
+             |> List.rev_append init_list)
+           []
     else queue
   in
   let result = mk_testcase init summary m_info c_info s_map in

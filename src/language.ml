@@ -47,6 +47,15 @@ type symbol = string (*e.g. v1 *) [@@deriving compare]
 
 let get_class_name = function
   | Object n -> n
+  | Int -> failwith "get_class_name: INT"
+  | Long -> failwith "get_class_name: long"
+  | Float -> failwith "get_class_name: float"
+  | Double -> failwith "get_class_name: double"
+  | Bool -> failwith "get_class_name: bool"
+  | Char -> failwith "get_class_name: char"
+  | String -> "String"
+  | Array typ -> failwith "get_class_name: array"
+  | None -> failwith "get_class_name: none"
   | _ -> failwith "get_class_name: not supported"
 
 let modifier_of_json json =
@@ -496,7 +505,9 @@ module AST = struct
   let func_code = function
     | F f ->
         if Str.string_match (".*\\.<init>" |> Str.regexp) f.method_name 0 then
-          Str.split Regexp.dot f.method_name |> List.hd
+          Str.split Regexp.dot f.method_name
+          |> List.hd
+          |> Str.global_replace Regexp.dollar "."
         else
           Str.split Regexp.dot f.method_name
           |> List.tl |> List.hd
@@ -512,8 +523,7 @@ module AST = struct
     let v =
       match v.variable with
       | Var (typ, id) -> (typ, id)
-      | This typ -> (typ, "var_this")
-      (* failwith "Error: This is not var" *)
+      | This typ -> failwith "Error: This is not var"
     in
     match v |> fst with
     | Int -> "int " ^ (v |> snd)
@@ -531,7 +541,7 @@ module AST = struct
     | Variable v -> (
         match v.variable with
         | Var (_, id) -> id
-        | This _ -> "recv_this" (* failwith "Error: This is not var") *))
+        | This _ -> failwith "Error: This is not var")
     | ClassName c -> c
     | _ -> failwith "Error: still need unrolling id"
 
