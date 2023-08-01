@@ -224,7 +224,7 @@ let my_really_read_string in_chan =
   loop ()
 
 let checking_bug_presence ic expected_bug =
-  (* print_endline "checking ..."; *)
+  print_endline "checking ...";
   let data = my_really_read_string ic in
   close_in ic;
   match string_of_expected_bug expected_bug with
@@ -272,7 +272,9 @@ let build_program info tc =
       (* javac *)
       simple_compiler info.program_dir build_cmd |> close_in;
       Unix.wait () |> ignore;
-      simple_compiler info.program_dir test_cmd
+      let x = simple_compiler info.program_dir test_cmd in
+      Unix.wait () |> ignore;
+      x
 
 (* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start info queue e_method_info program_info =
@@ -280,7 +282,6 @@ let rec run_test ~is_start info queue e_method_info program_info =
   let tc, tc_list = make_testcase ~is_start queue e_method_info program_info in
   if tc = ("", "") then failwith "can't proceed anymore";
   let result_ic = build_program info tc in
-  Unix.wait () |> ignore;
   if checking_bug_presence result_ic info.expected_bug then (
     "# of trial: " ^ (!trial |> string_of_int) |> print_endline;
     close_in result_ic |> ignore;
