@@ -680,9 +680,6 @@ let is_primitive x =
   | Int | Long | Float | Double | Bool | Char | String -> true
   | _ -> false
 
-and is_string x =
-  match AST.get_vinfo x |> fst with String -> true | _ -> false
-
 let is_nested_class name = String.contains name '$'
 
 let is_normal_class class_name c_info =
@@ -734,7 +731,7 @@ let get_class_name ~infer method_name =
   if infer then Regexp.global_rm ("\\..+(.*)" |> Str.regexp) method_name
   else Regexp.global_rm ("(.*)" |> Str.regexp) method_name
 
-let get_package formal_params =
+let get_package_from_param formal_params =
   List.fold_left
     (fun found (import, var) ->
       match var with Language.This _ -> import | _ -> found)
@@ -766,7 +763,7 @@ let is_public_or_default ?(is_getter = false) package method_name method_info =
        don't use it even if the modifier is public*)
     is_test_file info.MethodInfo.filename
   in
-  let m_package = get_package info.MethodInfo.formal_params in
+  let m_package = get_package_from_param info.MethodInfo.formal_params in
   if is_getter then
     match info.MethodInfo.modifier with Public -> true | _ -> false
   else if m_package = "" then false
@@ -831,7 +828,7 @@ let default_value_list typ =
     | Bool -> [ AST.Primitive (B false); AST.Primitive (B true) ]
     | Char -> [ AST.Primitive (C 'x') ]
     | String -> [ AST.Primitive (S "") ]
-    | _ -> [ AST.Null ]
+    | _ -> []
   in
   default_value
 
@@ -877,7 +874,7 @@ let calc_value id = function
           AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
       | Bool b -> AST.Primitive (B (b |> not))
       | String s -> AST.Primitive (S ("not_" ^ s))
-      | Null -> AST.Exp (* In this case, remove null case *)
+      | Null -> AST.Primitive (S "not")
       | _ -> failwith "not implemented neq")
   | Value.Le v -> (
       match v with
@@ -1163,17 +1160,6 @@ let satisfied_c method_summary id candidate_constructor summary =
       (false, Language.empty_summary, 0)
       check_summarys
 
-let get_static_constructor t_method c_info =
-  let class_name = get_class_name ~infer:true t_method in
-  let full_class_name =
-    ClassInfo.M.fold
-      (fun full_name _ find_name ->
-        let name = Str.split Regexp.dot full_name |> List.rev |> List.hd in
-        if class_name = name then full_name else find_name)
-      c_info ""
-  in
-  (class_name |> replace_nested_symbol, full_class_name)
-
 (* e.g., java.util.Date --> contain class name *)
 let get_package_from_method t_method (c_info, _) =
   let class_name = get_class_name ~infer:true t_method in
@@ -1323,7 +1309,7 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
   if AST.is_id id then
     let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
     let f_arg = mk_arg ~is_s:(is_s_method ee m_info) param es in
-    let import = get_package param in
+    let import = get_package_from_method ee c_info in
     let typ_list =
       if is_private_class import c_info then
         try IG.succ (c_info |> snd) import |> List.cons import
@@ -1459,7 +1445,7 @@ let get_arg_seq (args : AST.id list) =
       let x =
         List.fold_left (fun lst x -> AST.mk_const_arg x arg :: lst) [] s
       in
-      if is_primitive arg && is_string arg |> not then x
+      if is_primitive arg then x
       else
         x
         |> List.rev_append
@@ -1477,23 +1463,32 @@ let rec unroll p summary m_info c_info s_map =
       let lst = unroll s2 summary m_info c_info s_map in
       List.map (fun x -> AST.Seq (s1, x)) lst
   | Const (x, _) when AST.const p ->
-      if is_primitive x && is_string x |> not then
-        let typ, id = AST.get_vinfo x in
+      let typ, id = AST.get_vinfo x in
+      if is_primitive x then
         List.fold_left
-          (fun lst x ->
-            match x with AST.Exp -> lst | _ -> AST.const_rule1 p x :: lst)
+          (fun lst x1 -> AST.const_rule1 p x1 :: lst)
           []
           (get_value typ id (AST.get_v x).summary)
       else
+        let r3 =
+          List.fold_left
+            (fun lst x1 ->
+              match x1 with
+              | AST.Primitive _ -> lst
+              | _ -> AST.const_rule3 p :: lst)
+            []
+            (get_value typ id (AST.get_v x).summary)
+        in
         let r2 =
-          List.map
-            (fun x -> AST.const_rule2 p x)
+          List.fold_left
+            (fun lst x1 -> AST.const_rule2 p x1 :: lst)
+            []
             (global_var_list
                (Language.get_class_name (AST.get_vinfo x |> fst))
                (AST.get_v x).summary summary m_info)
         in
         if is_receiver (AST.get_vinfo x |> snd) then r2
-        else AST.const_rule3 p :: r2
+        else List.rev_append r3 r2
   | Assign (x0, _, _, _) when AST.fcall_in_assign p ->
       List.rev_append
         (get_c x0 summary m_info c_info)

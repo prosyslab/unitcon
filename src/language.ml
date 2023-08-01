@@ -550,21 +550,28 @@ module AST = struct
     | ClassName c -> c
     | Id -> failwith "Error: still need unrolling id"
 
-  let primitive_code = function
-    | Z z -> (z |> string_of_int) ^ ";\n"
+  let primitive_code p x =
+    match p with
+    | Z z -> (
+        match get_vinfo x |> fst with
+        | Bool ->
+            if z = 0 then (false |> string_of_bool) ^ ";\n"
+            else (true |> string_of_bool) ^ ";\n"
+        | _ -> (z |> string_of_int) ^ ";\n")
     | R r -> (r |> string_of_float) ^ ";\n"
     | B b -> (b |> string_of_bool) ^ ";\n"
     | C c -> "\'" ^ String.make 1 c ^ "\';\n"
     | S s -> "\"" ^ s ^ "\";\n"
 
-  let exp_code = function
-    | Primitive p -> primitive_code p
+  let exp_code exp x =
+    match exp with
+    | Primitive p -> primitive_code p x
     | GlobalConstant g -> g ^ ";\n"
     | Null -> "null;\n"
     | Exp -> failwith "Error: still need unrolling exp"
 
   let rec code = function
-    | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp
+    | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x
     | Assign (x0, x1, func, arg) ->
         if is_cn x1 then
           id_code x0 ^ " = " ^ "new " ^ func_code func ^ arg_code arg ^ ";\n"
