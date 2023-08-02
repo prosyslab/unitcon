@@ -5,6 +5,8 @@ module SetterMap = Language.SetterMap
 
 let blacklist : string list ref = ref [] (* unusing method list *)
 
+let con_path = "unitcon_properties"
+
 let trial = ref 0
 
 type t = {
@@ -106,8 +108,10 @@ let test_file_of_file file =
   s
 
 (* copy test file to unitcon folder *)
-let cp_test_file file =
-  let filename = Filename.basename file |> Filename.concat !Cmdline.out_dir in
+let cp_test_file p_dir file =
+  let filename =
+    Filename.basename file |> Filename.concat con_path |> Filename.concat p_dir
+  in
   if Sys.file_exists filename then ()
   else
     let ic = open_in file in
@@ -233,25 +237,24 @@ let checking_bug_presence ic expected_bug =
   | TRACE s -> find s data
   | _ -> false
 
-(*unitcon_properties/summary.json ... *)
 let init program_dir =
+  let cons = Filename.concat in
   let program_dir =
-    if Filename.is_relative program_dir then
-      Filename.concat (Unix.getcwd ()) program_dir
+    if Filename.is_relative program_dir then cons (Unix.getcwd ()) program_dir
     else program_dir
   in
   {
     program_dir;
-    summary_file = Filename.concat program_dir "summary.json";
-    error_summary_file = Filename.concat program_dir "error_summarys";
-    call_prop_file = Filename.concat program_dir "call_proposition";
-    inheritance_file = Filename.concat program_dir "inheritance_info.json";
-    build_command = Filename.concat program_dir "build_command";
-    test_command = Filename.concat program_dir "test_command";
+    summary_file = cons con_path "summary.json" |> cons program_dir;
+    error_summary_file = cons con_path "error_summarys" |> cons program_dir;
+    call_prop_file = cons con_path "call_proposition" |> cons program_dir;
+    inheritance_file = cons con_path "inheritance_info.json" |> cons program_dir;
+    build_command = cons con_path "build_command" |> cons program_dir;
+    test_command = cons con_path "test_command" |> cons program_dir;
     test_file =
-      test_file_of_file (Filename.concat program_dir "test_file")
-      |> Filename.concat program_dir;
-    expected_bug = Filename.concat program_dir "expected_bug";
+      test_file_of_file (cons con_path "test_file" |> cons program_dir)
+      |> cons program_dir;
+    expected_bug = cons con_path "expected_bug" |> cons program_dir;
   }
 
 (* return: (testcase * list(partial testcase)) *)
@@ -292,7 +295,7 @@ let rec run_test ~is_start info queue e_method_info program_info =
 
 let run program_dir =
   let info = init program_dir in
-  cp_test_file info.test_file;
+  cp_test_file info.program_dir info.test_file;
   let summary = parse_summary info.summary_file in
   let method_info = parse_method_info info.summary_file in
   let callgraph = parse_callgraph info.summary_file in
