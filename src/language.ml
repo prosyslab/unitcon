@@ -536,6 +536,7 @@ module AST = struct
           Str.split Regexp.dot f.method_name
           |> List.hd
           |> Regexp.first_rm (Str.regexp "Array")
+          |> String.cat "new "
         else if Str.string_match (".*\\.<init>" |> Str.regexp) f.method_name 0
         then
           Str.split Regexp.dot f.method_name
@@ -587,7 +588,7 @@ module AST = struct
         match v.variable with
         | Var (_, id), Some idx -> id ^ (idx |> string_of_int) ^ "."
         | _ -> "")
-    | ClassName c -> c ^ "."
+    | ClassName c -> (c |> Str.global_replace Regexp.dollar ".") ^ "."
     | _ -> failwith "Error: still need unrolling id"
 
   let id_code = function
