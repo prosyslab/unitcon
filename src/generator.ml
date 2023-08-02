@@ -698,14 +698,12 @@ let is_normal_class class_name c_info =
       | _ -> false)
   | None -> true (* modeling class *)
 
-let is_static_class ~is_class name (c_info, _) =
-  let class_name =
-    if is_class then name
-    else
-      Regexp.global_rm (Str.regexp "\\.<.*>(.*)$") name
-      |> Regexp.global_rm (Str.regexp "(.*)$")
+let is_s_class name (c_info, _) =
+  let name =
+    Regexp.global_rm (Str.regexp "\\.<.*>(.*)$") name
+    |> Regexp.global_rm (Str.regexp "(.*)$")
   in
-  match ClassInfo.M.find_opt class_name c_info with
+  match ClassInfo.M.find_opt name c_info with
   | Some typ -> (
       match typ.ClassInfo.class_type with Language.Static -> true | _ -> false)
   | None -> false
@@ -1307,8 +1305,9 @@ let mk_setter_format setter m_info =
   (setter_statement, m_info.MethodInfo.formal_params)
 
 let is_receiver id =
-  let new_id = Str.replace_first (Str.regexp "con_recv") "" id in
-  if new_id = "" then true else false
+  let new_id1 = Str.replace_first (Str.regexp "con_recv") "" id in
+  let new_id2 = Str.replace_first (Str.regexp "con_outer") "" id in
+  if new_id1 = "" || new_id2 = "" then true else false
 
 let mk_arg ~is_s param s =
   let param = if is_s then param else param |> List.tl in
@@ -1459,6 +1458,37 @@ let get_ret_c ret summary m_info c_info =
     in
     get_cfuncs s_list m_info
 
+let get_inner_func f arg =
+  let fname =
+    (AST.get_func f).method_name |> Str.split Regexp.dollar |> List.rev
+    |> List.hd
+  in
+  let n_f =
+    AST.F
+      {
+        typ = (AST.get_func f).typ;
+        method_name = fname;
+        import = (AST.get_func f).import;
+        summary = (AST.get_func f).summary;
+      }
+  in
+  let recv = AST.get_arg arg |> List.hd in
+  let n_recv =
+    AST.Variable
+      {
+        import = recv.import;
+        variable =
+          ( Var
+              ( Object
+                  ((AST.get_func f).method_name
+                  |> Regexp.first_rm (Str.regexp ("\\$" ^ fname))),
+                "con_outer" ),
+            Some !outer );
+        summary = recv.summary;
+      }
+  in
+  (n_recv, n_f, AST.Arg (AST.get_arg arg |> List.tl))
+
 let cname_condition m_name m_info =
   match MethodInfo.M.find_opt m_name m_info with
   | Some info ->
@@ -1528,8 +1558,17 @@ let rec unroll p summary m_info c_info s_map =
       |> List.fold_left
            (fun lst (f, arg) -> AST.fcall_in_void_rule p f (AST.Arg arg) :: lst)
            []
-  | Assign (_, _, f, _) when AST.recv_in_assign p ->
-      if cname_condition (AST.get_func f).method_name m_info then
+  | Assign (_, _, f, arg) when AST.recv_in_assign p ->
+      if
+        is_nested_class (AST.get_func f).import
+        && is_s_class (AST.get_func f).import c_info |> not
+      then (
+        let recv, f, arg = get_inner_func f arg in
+        let r2 = AST.recv_in_assign_rule2_1 p recv f arg in
+        let r3 = AST.recv_in_assign_rule3_1 p recv f arg in
+        incr outer;
+        r2 :: [ r3 ])
+      else if cname_condition (AST.get_func f).method_name m_info then
         [ get_cname f |> AST.recv_in_assign_rule1 p ]
       else
         let r2 = AST.recv_in_assign_rule2 p "con_recv" !recv in

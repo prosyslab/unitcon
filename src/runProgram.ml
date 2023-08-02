@@ -127,7 +127,7 @@ let find word str =
   | _ -> true
 
 let build_type_of_string str =
-  if Str.string_match ("^mvn" |> Str.regexp) str 0 then Maven
+  if Str.string_match (".*mvn" |> Str.regexp) str 0 then Maven
   else if Str.string_match ("^javac" |> Str.regexp) str 0 then Javac "compile"
   else if Str.string_match ("^java" |> Str.regexp) str 0 then Javac "run"
   else failwith "not supported build type"

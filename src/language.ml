@@ -425,6 +425,19 @@ module AST = struct
           (Seq (Assign (x1, Id, Func, Arg []), Stmt), Assign (x0, x1, func, arg))
     | _ -> s
 
+  let recv_in_assign_rule2_1 s recv f arg =
+    match s with
+    | Assign (x0, _, _, _) -> Seq (Const (recv, Exp), Assign (x0, recv, f, arg))
+    | _ -> s
+
+  let recv_in_assign_rule3_1 s recv f arg =
+    match s with
+    | Assign (x0, _, _, _) ->
+        Seq
+          ( Seq (Assign (recv, Id, Func, Arg []), Stmt),
+            Assign (x0, recv, f, arg) )
+    | _ -> s
+
   (* 4, 9 *)
   let mk_const_arg s arg = Seq (s, Const (arg, Exp))
 
@@ -528,6 +541,7 @@ module AST = struct
           Str.split Regexp.dot f.method_name
           |> List.hd
           |> Str.global_replace Regexp.dollar "."
+          |> String.cat "new "
         else
           Str.split Regexp.dot f.method_name
           |> List.tl |> List.hd
@@ -571,10 +585,9 @@ module AST = struct
   let recv_name_code = function
     | Variable v -> (
         match v.variable with
-        | Var (_, id), Some idx -> id ^ (idx |> string_of_int)
-        | _, None -> failwith "Error: idx cannot be none"
-        | This _, _ -> failwith "Error: This is not var")
-    | ClassName c -> c
+        | Var (_, id), Some idx -> id ^ (idx |> string_of_int) ^ "."
+        | _ -> "")
+    | ClassName c -> c ^ "."
     | _ -> failwith "Error: still need unrolling id"
 
   let id_code = function
@@ -605,24 +618,24 @@ module AST = struct
   let rec code = function
     | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x
     | Assign (x0, x1, func, arg) ->
-        if
+        if is_var x1 then
+          id_code x0 ^ " = " ^ recv_name_code x1 ^ func_code func
+          ^ arg_code func arg ^ ";\n"
+        else if
           Str.string_match
             (".*\\.<init>" |> Str.regexp)
             (get_func func).method_name 0
-        then
-          id_code x0 ^ " = " ^ "new " ^ func_code func ^ arg_code func arg
-          ^ ";\n"
-        else if is_var x1 then
-          id_code x0 ^ " = " ^ recv_name_code x1 ^ "." ^ func_code func
+        then id_code x0 ^ " = " ^ func_code func ^ arg_code func arg ^ ";\n"
+        else
+          id_code x0 ^ " = " ^ recv_name_code x1 ^ func_code func
           ^ arg_code func arg ^ ";\n"
-        else failwith "Error: not supported id type"
     | Void (x, func, arg) ->
         if
           Str.string_match
             (".*\\.<init>" |> Str.regexp)
             (get_func func).method_name 0
-        then "new " ^ func_code func ^ arg_code func arg ^ ";\n"
-        else recv_name_code x ^ "." ^ func_code func ^ arg_code func arg ^ ";\n"
+        then func_code func ^ arg_code func arg ^ ";\n"
+        else recv_name_code x ^ func_code func ^ arg_code func arg ^ ";\n"
     | Seq (s1, s2) -> code s1 ^ code s2
     | Skip -> ""
     | Stmt -> failwith "Error: still need unrolling stmt"
