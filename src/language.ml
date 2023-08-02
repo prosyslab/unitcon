@@ -265,16 +265,13 @@ module AST = struct
     | This typ, _ -> (typ, "this")
 
   let get_func func =
-    match func with
-    | F f -> f
-    | _ -> { typ = ""; method_name = ""; import = ""; summary = empty_summary }
-  (* failwith "get_func: not supported" *)
+    match func with F f -> f | _ -> failwith "get_func: not supported"
 
   let get_arg arg =
     match arg with Arg a -> a | _ -> failwith "get_arg: not supported"
 
-  let get_param arg = match arg with Param p -> p | Arg a -> a
-  (* failwith "get_param: not supported" *)
+  let get_param arg =
+    match arg with Param p -> p | _ -> failwith "get_param: not supported"
 
   let rec ground = function
     | Const (x, exp) -> (is_id x || is_exp exp) |> not

@@ -29,6 +29,12 @@ module ImportSet = Set.Make (struct
   let compare = compare
 end)
 
+module ErrorEntrySet = Set.Make (struct
+  type t = string * Language.summary
+
+  let compare = compare
+end)
+
 let outer = ref 0
 
 let recv = ref 0
@@ -1302,7 +1308,7 @@ let mk_setter_format setter m_info =
 
 let is_receiver id =
   let new_id = Str.replace_first (Str.regexp "con_recv") "" id in
-  match int_of_string_opt new_id with None -> false | _ -> true
+  if new_id = "" then true else false
 
 let mk_arg ~is_s param s =
   let param = if is_s then param else param |> List.tl in
@@ -1374,6 +1380,7 @@ let get_ret_obj (class_package, class_name) m_info (c_info, ig) =
         (fun init_list class_name_to_find ->
           if
             match_return_object class_name_to_find method_name m_info
+            && is_private method_name m_info |> not
             && is_init_method method_name |> not
           then
             (method_name, get_package_from_method method_name (c_info, ig))
@@ -1455,7 +1462,7 @@ let get_ret_c ret summary m_info c_info =
 let cname_condition m_name m_info =
   match MethodInfo.M.find_opt m_name m_info with
   | Some info ->
-      (info.MethodInfo.return = "" && is_s_method m_name m_info)
+      (info.MethodInfo.return <> "" && is_s_method m_name m_info)
       || is_init_method m_name
   | _ -> is_init_method m_name
 
@@ -1525,34 +1532,16 @@ let rec unroll p summary m_info c_info s_map =
       if cname_condition (AST.get_func f).method_name m_info then
         [ get_cname f |> AST.recv_in_assign_rule1 p ]
       else
-        let r2 =
-          AST.recv_in_assign_rule2 p
-            ("con_recv" ^ (!recv |> string_of_int))
-            !new_var
-        in
-        let r3 =
-          AST.recv_in_assign_rule3 p
-            ("con_recv" ^ (!recv |> string_of_int))
-            !new_var
-        in
-        incr new_var;
+        let r2 = AST.recv_in_assign_rule2 p "con_recv" !recv in
+        let r3 = AST.recv_in_assign_rule3 p "con_recv" !recv in
         incr recv;
         r2 :: [ r3 ]
   | Void (_, f, _) when AST.recv_in_void p ->
       if cname_condition (AST.get_func f).method_name m_info then
         [ get_cname f |> AST.recv_in_void_rule1 p ]
       else
-        let r2 =
-          AST.recv_in_void_rule2 p
-            ("con_recv" ^ (!recv |> string_of_int))
-            !new_var
-        in
-        let r3 =
-          AST.recv_in_void_rule3 p
-            ("con_recv" ^ (!recv |> string_of_int))
-            !new_var
-        in
-        incr new_var;
+        let r2 = AST.recv_in_void_rule2 p "con_recv" !recv in
+        let r3 = AST.recv_in_void_rule3 p "con_recv" !recv in
         incr recv;
         r2 :: [ r3 ]
   | Assign (_, _, _, arg) when AST.arg_in_assign p ->
@@ -1572,37 +1561,37 @@ let rec unroll p summary m_info c_info s_map =
   | _ -> [ p ]
 
 (* find error entry *)
-let rec find_ee e_method e_summary callgraph summary call_prop_map m_info =
+let rec find_ee e_method e_summary cg summary call_prop_map m_info =
   let propagation caller_method caller_preconds call_prop =
     let new_value, check_match = satisfy e_method e_summary call_prop m_info in
     if check_match then
       let new_call_prop = new_value_summary call_prop new_value in
-      List.rev_append caller_preconds
-        (find_ee caller_method new_call_prop callgraph summary call_prop_map
-           m_info)
+      ErrorEntrySet.union caller_preconds
+        (find_ee caller_method new_call_prop cg summary call_prop_map m_info)
     else caller_preconds
   in
-  if is_public e_method m_info then [ (e_method, e_summary) ]
+  if is_public e_method m_info then
+    ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty
   else
-    let caller_list = CG.succ callgraph e_method in
+    let caller_list = CG.succ cg e_method in
     List.fold_left
-      (fun list caller_method ->
+      (fun set caller_method ->
         let caller_prop_list =
           match
             CallPropMap.M.find_opt (caller_method, e_method) call_prop_map
           with
           | None ->
               (* It is possible without any specific conditions *)
-              find_ee caller_method Language.empty_summary callgraph summary
+              find_ee caller_method Language.empty_summary cg summary
                 call_prop_map m_info
           | Some prop_list ->
               List.fold_left
                 (fun caller_preconds call_prop ->
                   propagation caller_method caller_preconds call_prop)
-                [] prop_list
+                ErrorEntrySet.empty prop_list
         in
-        List.rev_append list caller_prop_list)
-      [] caller_list
+        ErrorEntrySet.union set caller_prop_list)
+      ErrorEntrySet.empty caller_list
 
 let pretty_format p =
   let i_format i = Str.replace_first Regexp.dollar "." i in
@@ -1631,7 +1620,6 @@ let pretty_format p =
       (imports p ImportSet.empty)
       ""
   in
-  (* let import = "" in *)
   let start = "\n@Test\npublic void unitcon_test() throws Exception {\n" in
   let code = start ^ AST.code p ^ "}\n\n" in
   (import, code)
@@ -1653,7 +1641,7 @@ let rec mk_testcase queue summary m_info c_info s_map =
   | [] -> []
 
 let mk_testcases ~is_start queue (e_method, error_summary)
-    (callgraph, summary, call_prop_map, m_info, c_info, s_map) =
+    (cg, summary, call_prop_map, m_info, c_info, s_map) =
   let apply_rule list =
     List.fold_left
       (fun lst (func, arg) ->
@@ -1663,12 +1651,12 @@ let mk_testcases ~is_start queue (e_method, error_summary)
   in
   let init =
     if is_start then
-      find_ee e_method error_summary callgraph summary call_prop_map m_info
-      |> List.fold_left
-           (fun init_list (ee, ee_s) ->
-             apply_rule (get_void_func AST.Id ~ee ~es:ee_s m_info c_info s_map)
-             |> List.rev_append init_list)
-           []
+      ErrorEntrySet.fold
+        (fun (ee, ee_s) init_list ->
+          apply_rule (get_void_func AST.Id ~ee ~es:ee_s m_info c_info s_map)
+          |> List.rev_append init_list)
+        (find_ee e_method error_summary cg summary call_prop_map m_info)
+        []
     else queue
   in
   let result = mk_testcase init summary m_info c_info s_map in
