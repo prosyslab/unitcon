@@ -265,7 +265,9 @@ let build_program info tc =
   let build_cmd = build_command_of_file info.build_command in
   let test_cmd = test_command_of_file info.test_command in
   add_testcase tc build_cmd
-    (Filename.basename info.test_file |> Filename.concat !Cmdline.out_dir)
+    (Filename.basename info.test_file
+    |> Filename.concat con_path
+    |> Filename.concat info.program_dir)
     info.test_file;
   match test_cmd with
   | "" ->
