@@ -223,7 +223,11 @@ module FieldMap = struct
 end
 
 module AST = struct
-  type var = { import : import; variable : variable; summary : summary }
+  type var = {
+    import : import;
+    variable : variable * int option;
+    summary : summary;
+  }
 
   type f = {
     typ : string;
@@ -257,17 +261,20 @@ module AST = struct
   (* id -> typ * string *)
   and get_vinfo v =
     match (get_v v).variable with
-    | Var (typ, id) -> (typ, id)
-    | This typ -> (typ, "this")
+    | Var (typ, id), _ -> (typ, id)
+    | This typ, _ -> (typ, "this")
 
   let get_func func =
-    match func with F f -> f | _ -> failwith "get_func: not supported"
+    match func with
+    | F f -> f
+    | _ -> { typ = ""; method_name = ""; import = ""; summary = empty_summary }
+  (* failwith "get_func: not supported" *)
 
   let get_arg arg =
     match arg with Arg a -> a | _ -> failwith "get_arg: not supported"
 
-  let get_param arg =
-    match arg with Param p -> p | _ -> failwith "get_param: not supported"
+  let get_param arg = match arg with Param p -> p | Arg a -> a
+  (* failwith "get_param: not supported" *)
 
   let rec ground = function
     | Const (x, exp) -> (is_id x || is_exp exp) |> not
@@ -388,7 +395,7 @@ module AST = struct
     | Assign (x0, _, func, arg) -> Assign (x0, c, func, arg)
     | _ -> s
 
-  let recv_in_assign_rule2 s id =
+  let recv_in_assign_rule2 s id idx =
     match s with
     | Assign (x0, _, func, arg) ->
         let typ = match func with Func -> "" | F f -> f.typ in
@@ -396,7 +403,7 @@ module AST = struct
           Variable
             {
               import = (match func with Func -> "" | F f -> f.import);
-              variable = Var (Object typ, id);
+              variable = (Var (Object typ, id), Some idx);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -404,7 +411,7 @@ module AST = struct
         Seq (Const (x1, Exp), Assign (x0, x1, func, arg))
     | _ -> s
 
-  let recv_in_assign_rule3 s id =
+  let recv_in_assign_rule3 s id idx =
     match s with
     | Assign (x0, _, func, arg) ->
         let typ = match func with Func -> "" | F f -> f.typ in
@@ -412,7 +419,7 @@ module AST = struct
           Variable
             {
               import = (match func with Func -> "" | F f -> f.import);
-              variable = Var (Object typ, id);
+              variable = (Var (Object typ, id), Some idx);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -455,7 +462,7 @@ module AST = struct
   let recv_in_void_rule1 s c =
     match s with Void (_, func, arg) -> Void (c, func, arg) | _ -> s
 
-  let recv_in_void_rule2 s id =
+  let recv_in_void_rule2 s id idx =
     match s with
     | Void (_, func, arg) ->
         let typ = match func with Func -> "" | F f -> f.typ in
@@ -463,7 +470,7 @@ module AST = struct
           Variable
             {
               import = (match func with Func -> "" | F f -> f.import);
-              variable = Var (Object typ, id);
+              variable = (Var (Object typ, id), Some idx);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -471,7 +478,7 @@ module AST = struct
         Seq (Const (x, Exp), Void (x, func, arg))
     | _ -> s
 
-  let recv_in_void_rule3 s id =
+  let recv_in_void_rule3 s id idx =
     match s with
     | Void (_, func, arg) ->
         let typ = match func with Func -> "" | F f -> f.typ in
@@ -479,7 +486,7 @@ module AST = struct
           Variable
             {
               import = (match func with Func -> "" | F f -> f.import);
-              variable = Var (Object typ, id);
+              variable = (Var (Object typ, id), Some idx);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -497,13 +504,15 @@ module AST = struct
     else false
 
   let arg_code f arg =
-    let cc code x = code ^ ", " ^ x in
+    let cc code x idx = code ^ ", " ^ x ^ (idx |> string_of_int) in
     match arg with
     | Param p ->
         let param =
           List.fold_left
             (fun pc p ->
-              match p.variable with Var (_, id) -> cc pc id | _ -> pc)
+              match p.variable with
+              | Var (_, id), Some idx -> cc pc id idx
+              | _ -> pc)
             "" p
           |> Regexp.rm_first_rest
         in
@@ -536,8 +545,9 @@ module AST = struct
   let var_code v =
     let v =
       match v.variable with
-      | Var (typ, id) -> (typ, id)
-      | This typ -> failwith "Error: This is not var"
+      | Var (typ, id), Some idx -> (typ, id ^ (idx |> string_of_int))
+      | _, None -> failwith "Error: idx cannot be none"
+      | This typ, _ -> failwith "Error: This is not var"
     in
     match v |> fst with
     | Int -> "int " ^ (v |> snd)
@@ -564,8 +574,9 @@ module AST = struct
   let recv_name_code = function
     | Variable v -> (
         match v.variable with
-        | Var (_, id) -> id
-        | This _ -> failwith "Error: This is not var")
+        | Var (_, id), Some idx -> id ^ (idx |> string_of_int)
+        | _, None -> failwith "Error: idx cannot be none"
+        | This _, _ -> failwith "Error: This is not var")
     | ClassName c -> c
     | _ -> failwith "Error: still need unrolling id"
 
@@ -597,7 +608,11 @@ module AST = struct
   let rec code = function
     | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x
     | Assign (x0, x1, func, arg) ->
-        if is_cn x1 then
+        if
+          Str.string_match
+            (".*\\.<init>" |> Str.regexp)
+            (get_func func).method_name 0
+        then
           id_code x0 ^ " = " ^ "new " ^ func_code func ^ arg_code func arg
           ^ ";\n"
         else if is_var x1 then

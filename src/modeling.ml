@@ -515,13 +515,13 @@ let image_create_info =
     }
 
 let class_get_info =
-  let this = ("", Language.This (Object "Object")) in
+  let this = ("java.lang.Object", Language.This (Object "Object")) in
   MethodInfo.
     {
       modifier = Language.Public;
       is_static = false;
       formal_params = [ this ];
-      return = "Object";
+      return = "Class";
       filename = "";
     }
 
