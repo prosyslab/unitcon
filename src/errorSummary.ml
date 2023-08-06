@@ -260,4 +260,5 @@ let get_method_name assoc =
 
 let from_error_summary_json json =
   let json = JsonUtil.to_list json |> List.hd in
-  (get_method_name json, parse_summary json)
+  if !Cmdline.basic_mode then (get_method_name json, Language.empty_summary)
+  else (get_method_name json, parse_summary json)

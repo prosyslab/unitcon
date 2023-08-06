@@ -1283,18 +1283,6 @@ let global_var_list class_name t_summary summary m_info =
       in
       find_global_var_list class_name target_variable mem summary m_info
 
-let sort_constructor_list c_list m_info =
-  List.sort
-    (fun (c1, _, k1, _) (c2, _, k2, _) ->
-      if compare k1 k2 <> 0 then compare k2 k1
-      else
-        let c1_info = MethodInfo.M.find c1 m_info in
-        let c1_formal = c1_info.MethodInfo.formal_params |> List.length in
-        let c2_info = MethodInfo.M.find c2 m_info in
-        let c2_formal = c2_info.MethodInfo.formal_params |> List.length in
-        compare c1_formal c2_formal)
-    c_list
-
 let mk_setter_format setter m_info =
   let m_info = MethodInfo.M.find setter m_info in
   let setter_statement =
@@ -1394,7 +1382,9 @@ let satisfied_c_list id t_summary summary summary_list =
       let check, summary, count =
         satisfied_c t_summary id constructor summary
       in
-      if check then (constructor, summary, count, import) :: list else list)
+      if !Cmdline.basic_mode then (constructor, summary, count, import) :: list
+      else if check then (constructor, summary, count, import) :: list
+      else list)
     [] summary_list
 
 let get_cfunc constructor m_info =
@@ -1603,7 +1593,11 @@ let rec unroll p summary m_info c_info s_map =
 let rec find_ee e_method e_summary cg summary call_prop_map m_info =
   let propagation caller_method caller_preconds call_prop =
     let new_value, check_match = satisfy e_method e_summary call_prop m_info in
-    if check_match then
+    if !Cmdline.basic_mode then
+      ErrorEntrySet.union caller_preconds
+        (find_ee caller_method Language.empty_summary cg summary call_prop_map
+           m_info)
+    else if check_match then
       let new_call_prop = new_value_summary call_prop new_value in
       ErrorEntrySet.union caller_preconds
         (find_ee caller_method new_call_prop cg summary call_prop_map m_info)
