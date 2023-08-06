@@ -145,6 +145,9 @@ let simple_compiler program_dir build_command =
   Sys.chdir current_dir;
   close_out stdin;
   match build_type_of_string build_command with
+  | Maven when Str.string_match (Str.regexp ".*Java-WebSocket") program_dir 0 ->
+      close_in stdout;
+      Event.always stderr |> Event.sync
   | Maven ->
       close_in stderr;
       Event.always stdout |> Event.sync
@@ -234,7 +237,7 @@ let checking_bug_presence ic expected_bug =
   match string_of_expected_bug expected_bug with
   | TESTCASE when find "There are test failures" data ->
       find "unitcon_test" data
-  | TRACE s -> find s data
+  | TRACE s -> find s data && find "NullPointerException" data
   | _ -> false
 
 let init program_dir =
