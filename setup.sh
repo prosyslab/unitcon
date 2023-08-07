@@ -36,4 +36,5 @@ fi
 eval $(SHELL=bash opam config env --switch=$UNITCON_OPAM_SWITCH)
 opam pin add git+https://github.com/prosyslab/logger.git
 opam install -j $NCPU dune ocamlgraph yojson ppx_compare z3 core logger
+opam upgrade dune
 make
