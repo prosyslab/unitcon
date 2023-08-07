@@ -9,6 +9,8 @@ let con_path = "unitcon_properties"
 
 let trial = ref 0
 
+let time = ref 0.0
+
 type t = {
   program_dir : string;
   summary_file : string;
@@ -292,6 +294,8 @@ let rec run_test ~is_start info queue e_method_info program_info =
   let result_ic = build_program info tc in
   if checking_bug_presence result_ic info.expected_bug then (
     "# of trial: " ^ (!trial |> string_of_int) |> print_endline;
+    "duration: " ^ (Float.sub (Unix.time ()) !time |> string_of_float)
+    |> print_endline;
     close_in result_ic |> ignore;
     tc)
   else (
@@ -299,6 +303,7 @@ let rec run_test ~is_start info queue e_method_info program_info =
     run_test ~is_start:false info tc_list e_method_info program_info)
 
 let run program_dir =
+  time := Unix.time ();
   let info = init program_dir in
   cp_test_file info.program_dir info.test_file;
   let summary = parse_summary info.summary_file in
