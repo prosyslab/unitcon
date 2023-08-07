@@ -13,15 +13,7 @@ module AST = Language.AST
 
 (* defining for constructor priority.
    if Range is wide then Range set 100 *)
-type domain = Top | Range of int
-
-type t = {
-  code : AST.t;
-  import : string list;
-  variable : ((string * Language.variable) * Language.summary) list;
-  score : int;
-  recv_package : string;
-}
+type domain = Top | Range of (Value.value * Value.value) | Bot
 
 module ImportSet = Set.Make (struct
   type t = string
@@ -54,17 +46,64 @@ let z3ctx =
 
 let solver = Z3.Solver.mk_solver z3ctx None
 
-(* return last condition *)
-let condition partial func = failwith "not implemented"
-
 let point value =
-  (* if value = top then 100, value range > 10 then 10, otherwise value range*)
-  failwith "not implemented"
+  match value with
+  | Value.Eq _ -> 1.0
+  | Neq _ | Le _ | Lt _ | Ge _ | Gt _ -> Float.div 1.0 100.0
+  | Between (l, u) -> (
+      match (l, u) with
+      | Int l, Int u | Int l, Long u | Long l, Int u | Long l, Long u ->
+          if u - l + 1 > 100 then Float.div 1.0 100.0
+          else 1 / (u - l + 1) |> float_of_int
+      | Float l, Float u
+      | Float l, Double u
+      | Double l, Float u
+      | Double l, Double u ->
+          if Float.add (Float.sub u l) 1.0 > 100.0 then Float.div 1.0 100.0
+          else Float.div 1.0 (Float.add (Float.sub u l) 1.0)
+      | _ -> 0.0)
+  | Outside (u, l) -> (
+      match (u, l) with
+      | Int u, Int l | Int u, Long l | Long u, Int l | Long u, Long l ->
+          if l - u + 1 > 100 then Float.div 1.0 100.0
+          else 1 / (l - u + 1) |> float_of_int
+      | Float u, Float l
+      | Float u, Double l
+      | Double u, Float l
+      | Double u, Double l ->
+          if Float.add (Float.sub l u) 1.0 > 100.0 then Float.div 1.0 100.0
+          else Float.div 1.0 (Float.add (Float.sub l u) 1.0)
+      | _ -> 0.0)
 
-let score t_summary p_summary p =
-  (* # of non-terminal for p + sum(point) *)
-  let length = AST.count_nt p in
-  failwith "not implemented"
+(* # of non-terminal for p + sum(point) *)
+let match_score p =
+  let rec summary_score s =
+    match s with
+    | AST.Assign (_, _, func, _) -> (
+        match func with
+        | AST.F f ->
+            Value.M.fold
+              (fun _ value accum -> Float.add (point value) accum)
+              f.summary.Language.value 0.0
+        | _ -> 0.0)
+    | Void (_, func, _) -> (
+        match func with
+        | AST.F f ->
+            Value.M.fold
+              (fun _ value accum -> Float.add (point value) accum)
+              f.summary.Language.value 0.0
+        | _ -> 0.0)
+    | Seq (s1, s2) -> Float.add (summary_score s1) (summary_score s2)
+    | _ -> 0.0
+  in
+  summary_score p
+
+let get_score p =
+  let length =
+    if AST.count_nt p = 0 then 1.0 else 1 / AST.count_nt p |> float_of_int
+  in
+  let point = match_score p in
+  Float.add length point
 
 let rec find_relation given_symbol relation =
   match Relation.M.find_opt given_symbol relation with
@@ -1143,7 +1182,7 @@ let satisfied_c method_summary id candidate_constructor summary =
   let target_symbol =
     get_id_symbol id method_symbols method_memory |> get_rh_name ~is_var:false
   in
-  if target_symbol = "" then (true, c_summarys |> List.hd, 0)
+  if target_symbol = "" then (true, c_summarys |> List.hd)
   else
     let target_symbol =
       find_relation target_symbol method_summary.Language.relation
@@ -1169,13 +1208,12 @@ let satisfied_c method_summary id candidate_constructor summary =
     List.fold_left
       (fun check_value (check_summary, c_summary) ->
         let check = List.filter (fun (_, c) -> c = false) check_summary in
-        let t_count =
-          List.filter (fun (_, c) -> c = true) check_summary |> List.length
+        let new_c_summary =
+          combine_value c_summary.Language.value check_summary
+          |> new_value_summary c_summary
         in
-        let new_values = combine_value c_summary.Language.value check_summary in
-        let new_c_summary = new_value_summary c_summary new_values in
-        if check = [] then (true, new_c_summary, t_count) else check_value)
-      (false, Language.empty_summary, 0)
+        if check = [] then (true, new_c_summary) else check_value)
+      (false, Language.empty_summary)
       check_summarys
 
 let match_constructor_name class_name method_name =
@@ -1379,11 +1417,9 @@ let get_ret_obj (class_package, class_name) m_info (c_info, ig) =
 let satisfied_c_list id t_summary summary summary_list =
   List.fold_left
     (fun list (constructor, import) ->
-      let check, summary, count =
-        satisfied_c t_summary id constructor summary
-      in
-      if !Cmdline.basic_mode then (constructor, summary, count, import) :: list
-      else if check then (constructor, summary, count, import) :: list
+      let check, summary = satisfied_c t_summary id constructor summary in
+      if !Cmdline.basic_mode then (constructor, summary, import) :: list
+      else if check then (constructor, summary, import) :: list
       else list)
     [] summary_list
 
@@ -1405,7 +1441,7 @@ let get_cfunc constructor m_info =
 
 let get_cfuncs list m_info =
   List.fold_left
-    (fun lst (c, s, _, i) -> get_cfunc (c, s, i) m_info :: lst)
+    (fun lst (c, s, i) -> get_cfunc (c, s, i) m_info :: lst)
     [] list
 
 let get_c ret summary m_info c_info =
@@ -1415,10 +1451,8 @@ let get_c ret summary m_info c_info =
     let id = AST.get_vinfo ret |> snd in
     let package = (AST.get_v ret).import in
     let summary_filtering list =
-      List.filter
-        (fun (c, _, _, _) -> is_public_or_default c m_info c_info)
-        list
-      |> List.filter (fun (c, _, _, _) ->
+      List.filter (fun (c, _, _) -> is_public_or_default c m_info c_info) list
+      |> List.filter (fun (c, _, _) ->
              is_recursive_param class_name c m_info |> not)
     in
     let s_list =
@@ -1435,10 +1469,8 @@ let get_ret_c ret summary m_info c_info =
     let id = AST.get_vinfo ret |> snd in
     let package = (AST.get_v ret).import in
     let summary_filtering list =
-      List.filter
-        (fun (c, _, _, _) -> is_public_or_default c m_info c_info)
-        list
-      |> List.filter (fun (c, _, _, _) ->
+      List.filter (fun (c, _, _) -> is_public_or_default c m_info c_info) list
+      |> List.filter (fun (c, _, _) ->
              is_recursive_param class_name c m_info |> not)
     in
     let s_list =
@@ -1658,7 +1690,7 @@ let pretty_format p =
   (import, code)
 
 let priority_q queue =
-  List.sort (fun p1 p2 -> compare (AST.count_nt p1) (AST.count_nt p2)) queue
+  List.sort (fun p1 p2 -> compare (get_score p2) (get_score p1)) queue
 
 let rec mk_testcase queue summary m_info c_info s_map =
   let queue = priority_q queue in
