@@ -552,14 +552,14 @@ module AST = struct
 
   let is_var = function Variable _ -> true | _ -> false
 
-  and is_cn = function ClassName c -> true | _ -> false
+  and is_cn = function ClassName _ -> true | _ -> false
 
   let var_code v =
     let v =
       match v.variable with
       | Var (typ, id), Some idx -> (typ, id ^ (idx |> string_of_int))
       | _, None -> failwith "Error: idx cannot be none"
-      | This typ, _ -> failwith "Error: This is not var"
+      | This _, _ -> failwith "Error: This is not var"
     in
     match v |> fst with
     | Int -> "int " ^ (v |> snd)
