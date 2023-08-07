@@ -4,21 +4,21 @@ export OPAMYES=1
 
 NCPU="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
 OCAML_VERSION="4.13.1"
-UNITGEN_OPAM_SWITCH=unitgen-"$OCAML_VERSION"
+UNITCON_OPAM_SWITCH=unitcon-"$OCAML_VERSION"
 opam init --compiler=$OCAML_VERSION -j $NCPU --no-setup
 
 switch_exists=no
 for installed_switch in $(opam switch list --short); do
-  if [[ "$installed_switch" == "$UNITGEN_OPAM_SWITCH" ]]; then
+  if [[ "$installed_switch" == "$UNITCON_OPAM_SWITCH" ]]; then
     switch_exists=yes
     break
   fi
 done
 
 if [ "$switch_exists" = "no" ]; then
-  opam switch create $UNITGEN_OPAM_SWITCH $OCAML_VERSION
+  opam switch create $UNITCON_OPAM_SWITCH $OCAML_VERSION
 else
-  opam switch $UNITGEN_OPAM_SWITCH
+  opam switch $UNITCON_OPAM_SWITCH
 fi
 
 git submodule init
@@ -33,7 +33,7 @@ if [ ! -d "build" ]; then
   mkdir build
 fi
 
-eval $(SHELL=bash opam config env --switch=$UNITGEN_OPAM_SWITCH)
+eval $(SHELL=bash opam config env --switch=$UNITCON_OPAM_SWITCH)
 opam pin add git+https://github.com/prosyslab/logger.git
-opam install -j $NCPU ocamlgraph yojson ppx_compare z3 core logger
+opam install -j $NCPU dune ocamlgraph yojson ppx_compare z3 core logger
 make
