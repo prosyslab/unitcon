@@ -65,14 +65,13 @@ let point value =
   | Outside (u, l) -> (
       match (u, l) with
       | Int u, Int l | Int u, Long l | Long u, Int l | Long u, Long l ->
-          if l - u + 1 > 100 then Float.div 1.0 100.0
-          else 1 / (l - u + 1) |> float_of_int
+          if l - u + 1 > 100 then 1.0 else (l - u + 1) / 100 |> float_of_int
       | Float u, Float l
       | Float u, Double l
       | Double u, Float l
       | Double u, Double l ->
-          if Float.add (Float.sub l u) 1.0 > 100.0 then Float.div 1.0 100.0
-          else Float.div 1.0 (Float.add (Float.sub l u) 1.0)
+          if Float.add (Float.sub l u) 1.0 > 100.0 then 1.0
+          else Float.div (Float.add (Float.sub l u) 1.0) 100.0
       | _ -> 0.0)
 
 (* # of non-terminal for p + sum(point) *)
@@ -99,11 +98,9 @@ let match_score p =
   summary_score p
 
 let get_score p =
-  let length =
-    if AST.count_nt p = 0 then 1.0 else 1 / AST.count_nt p |> float_of_int
-  in
+  let length = AST.count_nt p in
   let point = match_score p in
-  Float.add length point
+  (length, point)
 
 let rec find_relation given_symbol relation =
   match Relation.M.find_opt given_symbol relation with
@@ -1584,6 +1581,7 @@ let rec unroll p summary m_info c_info s_map =
       if
         is_nested_class (AST.get_func f).import
         && is_s_class (AST.get_func f).import c_info |> not
+        && is_init_method (AST.get_func f).method_name
       then (
         let recv, f, arg = get_inner_func f arg in
         let r2 = AST.recv_in_assign_rule2_1 p recv f arg in
@@ -1690,7 +1688,14 @@ let pretty_format p =
   (import, code)
 
 let priority_q queue =
-  List.sort (fun p1 p2 -> compare (get_score p2) (get_score p1)) queue
+  List.sort
+    (fun p1 p2 ->
+      let s1 = get_score p1 in
+      let s2 = get_score p2 in
+      if compare (s1 |> fst) (s2 |> fst) <> 0 then
+        compare (s1 |> fst) (s2 |> fst)
+      else compare (s2 |> snd) (s1 |> snd))
+    queue
 
 let rec mk_testcase queue summary m_info c_info s_map =
   let queue = priority_q queue in
