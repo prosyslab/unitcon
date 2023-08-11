@@ -63,7 +63,7 @@ let array_list_postmem =
 
 let file_var =
   Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "name")
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "file")
   |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
 let file_premem =
@@ -75,7 +75,7 @@ let file_premem =
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
   |> Condition.M.add (Condition.RH_Symbol "v3")
        (value_map
-       |> Condition.M.add (Condition.RH_Var "name") (Condition.RH_Symbol "v5"))
+       |> Condition.M.add (Condition.RH_Var "file") (Condition.RH_Symbol "v5"))
 
 let file_postmem =
   let value_map = Condition.M.empty in
@@ -86,7 +86,7 @@ let file_postmem =
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
   |> Condition.M.add (Condition.RH_Symbol "v3")
        (value_map
-       |> Condition.M.add (Condition.RH_Var "name") (Condition.RH_Symbol "v5"))
+       |> Condition.M.add (Condition.RH_Var "file") (Condition.RH_Symbol "v5"))
   |> Condition.M.add (Condition.RH_Symbol "v5")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
 
@@ -293,6 +293,8 @@ let array_var =
   |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "size")
   |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
+let array_value = Value.M.empty |> Value.M.add "v4" (Value.Gt (Int 0))
+
 let array_premem =
   let value_map = Condition.M.empty in
   Condition.M.empty
@@ -431,7 +433,7 @@ let array_summary =
   Language.
     {
       relation = Relation.M.empty;
-      value = Value.M.empty;
+      value = array_value;
       precond = (array_var, array_premem);
       postcond = (array_var, array_postmem);
       args = [];
@@ -440,8 +442,8 @@ let array_summary =
 let hashmap_put_info =
   let this = ("java.util.HashMap", Language.This (Object "HashMap")) in
   let arg_typ = Language.Object "Object" in
-  let arg1 = ("", Language.Var (arg_typ, "con_key")) in
-  let arg2 = ("", Language.Var (arg_typ, "con_value")) in
+  let arg1 = ("", Language.Var (arg_typ, "key")) in
+  let arg2 = ("", Language.Var (arg_typ, "value")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -464,7 +466,7 @@ let array_list_info =
 
 let file_info =
   let this = ("java.io.File", Language.This (Object "File")) in
-  let arg = ("", Language.Var (String, "unitcon_file")) in
+  let arg = ("", Language.Var (String, "file")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -489,9 +491,9 @@ let image_info =
   let this =
     ("java.awt.image.BufferedImage", Language.This (Object "BufferedImage"))
   in
-  let arg1 = ("", Language.Var (Int, "con_width")) in
-  let arg2 = ("", Language.Var (Int, "con_height")) in
-  let arg3 = ("", Language.Var (Int, "con_type")) in
+  let arg1 = ("", Language.Var (Int, "w")) in
+  let arg2 = ("", Language.Var (Int, "h")) in
+  let arg3 = ("", Language.Var (Int, "t")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -527,7 +529,7 @@ let class_get_info =
 
 let print_info =
   let this = ("java.io.PrintStream", Language.This (Object "PrintStream")) in
-  let arg = ("java.io.File", Language.Var (Object "File", "con_file")) in
+  let arg = ("java.io.File", Language.Var (Object "File", "file")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -541,7 +543,7 @@ let file_input_info =
   let this =
     ("java.io.FileInputStream", Language.This (Object "FileInputStream"))
   in
-  let arg = ("java.io.File", Language.Var (Object "File", "con_file")) in
+  let arg = ("java.io.File", Language.Var (Object "File", "file")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -564,7 +566,7 @@ let obj_info =
 
 let string_info =
   let this = ("java.lang.String", Language.This (Object "String")) in
-  let arg = ("java.lang.String", Language.Var (String, "con_string")) in
+  let arg = ("java.lang.String", Language.Var (String, "s")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -576,7 +578,7 @@ let string_info =
 
 let int_array_info =
   let this = ("", Language.This (Array Int)) in
-  let arg = ("", Language.Var (Int, "con_size")) in
+  let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -588,7 +590,7 @@ let int_array_info =
 
 let long_array_info =
   let this = ("", Language.This (Array Long)) in
-  let arg = ("", Language.Var (Int, "con_size")) in
+  let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -600,7 +602,7 @@ let long_array_info =
 
 let float_array_info =
   let this = ("", Language.This (Array Float)) in
-  let arg = ("", Language.Var (Int, "con_size")) in
+  let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -612,7 +614,7 @@ let float_array_info =
 
 let double_array_info =
   let this = ("", Language.This (Array Double)) in
-  let arg = ("", Language.Var (Int, "con_size")) in
+  let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -624,7 +626,7 @@ let double_array_info =
 
 let bool_array_info =
   let this = ("", Language.This (Array Bool)) in
-  let arg = ("", Language.Var (Int, "con_size")) in
+  let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -636,7 +638,7 @@ let bool_array_info =
 
 let char_array_info =
   let this = ("", Language.This (Array Char)) in
-  let arg = ("", Language.Var (Int, "con_size")) in
+  let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -648,7 +650,7 @@ let char_array_info =
 
 let string_array_info =
   let this = ("", Language.This (Array (Object "String"))) in
-  let arg = ("", Language.Var (Int, "con_size")) in
+  let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -660,7 +662,7 @@ let string_array_info =
 
 let object_array_info =
   let this = ("", Language.This (Array (Object "Object"))) in
-  let arg = ("", Language.Var (Int, "con_size")) in
+  let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
       modifier = Language.Public;
