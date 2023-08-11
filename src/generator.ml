@@ -1412,13 +1412,17 @@ let get_ret_obj (class_package, class_name) m_info (c_info, ig) =
     m_info []
 
 let satisfied_c_list id t_summary summary summary_list =
-  List.fold_left
-    (fun list (constructor, import) ->
-      let check, summary = satisfied_c t_summary id constructor summary in
-      if !Cmdline.basic_mode then (constructor, summary, import) :: list
-      else if check then (constructor, summary, import) :: list
-      else list)
-    [] summary_list
+  if !Cmdline.basic_mode then
+    List.fold_left
+      (fun list (constructor, import) ->
+        (constructor, Language.empty_summary, import) :: list)
+      [] summary_list
+  else
+    List.fold_left
+      (fun list (constructor, import) ->
+        let check, summary = satisfied_c t_summary id constructor summary in
+        if check then (constructor, summary, import) :: list else list)
+      [] summary_list
 
 let get_cfunc constructor m_info =
   let c, s, i = constructor in
