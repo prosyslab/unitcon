@@ -273,6 +273,14 @@ module AST = struct
   let get_param arg =
     match arg with Param p -> p | _ -> failwith "get_param: not supported"
 
+  let rec last_code p = match p with Seq (_, s) -> last_code s | _ -> p
+
+  let rec modify_last_assign p =
+    match p with
+    | Seq (s1, s2) -> Seq (s1, modify_last_assign s2)
+    | Assign _ -> Skip
+    | _ -> p
+
   let rec ground = function
     | Const (x, exp) -> (is_id x || is_exp exp) |> not
     | Assign (x0, x1, func, arg) ->
@@ -454,7 +462,7 @@ module AST = struct
     | _ -> s
 
   (* 5 *)
-  let void_rule1 s = match s with Seq (s1, _) -> s1 | _ -> s
+  let void_rule1 s = match s with Seq (s1, _) -> Seq (s1, Skip) | _ -> s
 
   let void_rule2 s =
     match s with

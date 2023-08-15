@@ -118,9 +118,12 @@ let rec get_tail_symbol field_name symbol memory =
       match Condition.M.find_opt (Condition.RH_Var field_name) sym with
       | Some s -> get_tail_symbol field_name s memory
       | None -> (
-          match Condition.M.find_opt Condition.RH_Any sym with
-          | Some any_sym -> get_tail_symbol field_name any_sym memory
-          | None -> symbol))
+          match Condition.M.find_opt (Condition.RH_Index field_name) sym with
+          | Some idx_s -> get_tail_symbol field_name idx_s memory
+          | None -> (
+              match Condition.M.find_opt Condition.RH_Any sym with
+              | Some any_sym -> get_tail_symbol field_name any_sym memory
+              | None -> symbol)))
   | None -> symbol
 
 let get_id_symbol id variable memory =
@@ -1536,14 +1539,20 @@ let get_arg_seq (args : AST.id list) =
 
 let rec unroll p summary m_info c_info s_map =
   match p with
-  | AST.Stmt -> [ AST.Skip ]
   | AST.Seq _ when AST.void p -> [ AST.void_rule1 p; AST.void_rule2 p ]
   | Seq (s1, s2) when AST.ground s1 |> not ->
       let lst = unroll s1 summary m_info c_info s_map in
       List.map (fun x -> AST.Seq (x, s2)) lst
-  | Seq (s1, s2) when AST.ground s2 |> not ->
-      let lst = unroll s2 summary m_info c_info s_map in
-      List.map (fun x -> AST.Seq (s1, x)) lst
+  | Seq (s1, s2) when AST.ground s2 |> not -> (
+      match AST.last_code s1 with
+      | AST.Assign _ when AST.is_stmt s2 ->
+          let lst =
+            unroll (AST.Seq (AST.last_code s1, s2)) summary m_info c_info s_map
+          in
+          List.map (fun x -> AST.Seq (AST.modify_last_assign s1, x)) lst
+      | _ ->
+          let lst = unroll s2 summary m_info c_info s_map in
+          List.map (fun x -> AST.Seq (s1, x)) lst)
   | Const (x, _) when AST.const p ->
       let typ, id = AST.get_vinfo x in
       if is_primitive x then
@@ -1621,6 +1630,7 @@ let rec unroll p summary m_info c_info s_map =
       List.map
         (fun x -> AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)))
         arg_seq
+  (* | AST.Stmt -> [ AST.Skip ] *)
   | _ -> [ p ]
 
 (* find error entry *)
