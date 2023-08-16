@@ -98,8 +98,8 @@ let match_score p =
   summary_score p
 
 let get_score p =
-  let length = AST.count_nt p in
-  let point = match_score p in
+  let length = AST.count_nt p + AST.length_p p in
+  let point = if !Cmdline.basic_mode then 0.0 else match_score p in
   (length, point)
 
 let rec find_relation given_symbol relation =
@@ -1371,28 +1371,32 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
   else
     let var = AST.get_v id in
     let name =
-      get_class_name ~infer:false var.import
-      |> String.split_on_char '.' |> List.rev |> List.hd
+      if var.import = "" then AST.get_vinfo id |> fst |> Language.get_class_name
+      else
+        get_class_name ~infer:false var.import
+        |> String.split_on_char '.' |> List.rev |> List.hd
     in
-    let setter_list =
-      try SetterMap.M.find name s_map
-      with _ -> [] |> List.filter (fun (s, _) -> is_private s m_info |> not)
-    in
-    List.map
-      (fun (s, _) ->
-        let f_arg =
-          mk_arg ~is_s:(is_s_method s m_info)
-            (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary
-        in
-        ( AST.F
-            {
-              typ = name;
-              method_name = s;
-              import = var.import;
-              summary = var.summary;
-            },
-          f_arg ))
-      setter_list
+    if name = "" || name = "String" then []
+    else
+      let setter_list =
+        try SetterMap.M.find name s_map
+        with _ -> [] |> List.filter (fun (s, _) -> is_private s m_info |> not)
+      in
+      List.map
+        (fun (s, _) ->
+          let f_arg =
+            mk_arg ~is_s:(is_s_method s m_info)
+              (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary
+          in
+          ( AST.F
+              {
+                typ = name;
+                method_name = s;
+                import = var.import;
+                summary = var.summary;
+              },
+            f_arg ))
+        setter_list
 
 let get_ret_obj (class_package, class_name) m_info (c_info, ig) =
   let full_class_name =
@@ -1471,7 +1475,7 @@ let get_c ret summary m_info c_info =
 
 let get_ret_c ret summary m_info c_info =
   let class_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
-  if class_name = "" then []
+  if class_name = "" || class_name = "String" then []
   else
     let id = AST.get_vinfo ret |> snd in
     let package = (AST.get_v ret).import in
@@ -1590,10 +1594,12 @@ let rec unroll p summary m_info c_info s_map =
         (get_ret_c x0 summary m_info c_info)
       |> List.map (fun x -> AST.fcall_in_assign_rule p (x |> fst) (x |> snd))
   | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
-      get_void_func x m_info c_info s_map
-      |> List.fold_left
-           (fun lst (f, arg) -> AST.fcall_in_void_rule p f (AST.Arg arg) :: lst)
-           []
+      let lst = get_void_func x m_info c_info s_map in
+      if lst = [] then [ AST.Skip ]
+      else
+        List.fold_left
+          (fun lst (f, arg) -> AST.fcall_in_void_rule p f (AST.Arg arg) :: lst)
+          [] lst
   | Assign (_, _, f, arg) when AST.recv_in_assign p ->
       if
         is_nested_class (AST.get_func f).import
@@ -1634,7 +1640,6 @@ let rec unroll p summary m_info c_info s_map =
       List.map
         (fun x -> AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)))
         arg_seq
-  (* | AST.Stmt -> [ AST.Skip ] *)
   | _ -> [ p ]
 
 (* find error entry *)
@@ -1710,8 +1715,7 @@ let priority_q queue =
     (fun p1 p2 ->
       let s1 = get_score p1 in
       let s2 = get_score p2 in
-      if !Cmdline.basic_mode then compare (s1 |> fst) (s2 |> fst)
-      else if compare (s1 |> fst) (s2 |> fst) <> 0 then
+      if compare (s1 |> fst) (s2 |> fst) <> 0 then
         compare (s1 |> fst) (s2 |> fst)
       else compare (s2 |> snd) (s1 |> snd))
     queue

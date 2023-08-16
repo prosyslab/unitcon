@@ -301,6 +301,16 @@ module AST = struct
     | Assign _ when ground p -> Skip
     | _ -> p
 
+  let rec length_p = function
+    | Const _ -> 0
+    | Assign (_, _, _, arg) -> length_arg arg
+    | Void (_, _, arg) -> length_arg arg
+    | Seq (s1, s2) -> length_p s1 + length_p s2
+    | Skip -> 0
+    | Stmt -> 0
+
+  and length_arg = function Param p -> List.length p + 1 | _ -> 0
+
   let rec count_nt = function
     | Const (x, exp) -> count_id x + count_exp exp
     | Assign (x0, x1, func, arg) ->
@@ -308,7 +318,7 @@ module AST = struct
     | Void (x, func, arg) -> count_id x + count_func func + count_arg arg
     | Seq (s1, s2) -> count_nt s1 + count_nt s2
     | Skip -> 0
-    | Stmt -> 1
+    | Stmt -> 3
 
   and count_arg = function Arg a -> List.length a + 1 | _ -> 0
 
@@ -520,6 +530,11 @@ module AST = struct
     if Str.string_match (".*Array\\.<init>" |> Str.regexp) fname 0 then true
     else false
 
+  let is_array_set f =
+    let fname = (get_func f).method_name in
+    if Str.string_match (".*Array\\.set" |> Str.regexp) fname 0 then true
+    else false
+
   let arg_code f arg =
     let cc code x idx = code ^ ", " ^ x ^ (idx |> string_of_int) in
     match arg with
@@ -533,7 +548,14 @@ module AST = struct
             "" p
           |> Regexp.rm_first_rest
         in
-        if is_array f then "[" ^ param ^ "]" else "(" ^ param ^ ")"
+        if is_array f then "[" ^ param ^ "]"
+        else if is_array_set f then
+          let lst = param |> Str.split Regexp.bm in
+          "["
+          ^ (lst |> List.hd |> Regexp.rm_space)
+          ^ "] = "
+          ^ (lst |> List.tl |> List.hd |> Regexp.rm_space)
+        else "(" ^ param ^ ")"
     | Arg _ -> failwith "Error: still need unrolling arg"
 
   let func_code func =
@@ -544,6 +566,7 @@ module AST = struct
           |> List.hd
           |> Regexp.first_rm (Str.regexp "Array")
           |> String.cat "new "
+        else if is_array_set func then ""
         else if Str.string_match (".*\\.<init>" |> Str.regexp) f.method_name 0
         then
           Str.split Regexp.dot f.method_name
@@ -590,9 +613,12 @@ module AST = struct
         | _ -> failwith "not supported variable")
     | _ -> failwith "not supported variable"
 
-  let recv_name_code = function
+  let recv_name_code recv func =
+    match recv with
     | Variable v -> (
         match v.variable with
+        | Var (_, id), Some idx when is_array_set func ->
+            id ^ (idx |> string_of_int)
         | Var (_, id), Some idx -> id ^ (idx |> string_of_int) ^ "."
         | _ -> "")
     | ClassName c -> (c |> Str.global_replace Regexp.dollar ".") ^ "."
@@ -610,6 +636,7 @@ module AST = struct
         | Bool ->
             if z = 0 then (false |> string_of_bool) ^ ";\n"
             else (true |> string_of_bool) ^ ";\n"
+        | String -> "\"" ^ (z |> string_of_int) ^ "\";\n"
         | _ -> (z |> string_of_int) ^ ";\n")
     | R r -> (r |> string_of_float) ^ ";\n"
     | B b -> (b |> string_of_bool) ^ ";\n"
@@ -627,7 +654,7 @@ module AST = struct
     | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x
     | Assign (x0, x1, func, arg) ->
         if is_var x1 then
-          id_code x0 ^ " = " ^ recv_name_code x1 ^ func_code func
+          id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
           ^ arg_code func arg ^ ";\n"
         else if
           Str.string_match
@@ -635,7 +662,7 @@ module AST = struct
             (get_func func).method_name 0
         then id_code x0 ^ " = " ^ func_code func ^ arg_code func arg ^ ";\n"
         else
-          id_code x0 ^ " = " ^ recv_name_code x1 ^ func_code func
+          id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
           ^ arg_code func arg ^ ";\n"
     | Void (x, func, arg) ->
         if
@@ -643,7 +670,7 @@ module AST = struct
             (".*\\.<init>" |> Str.regexp)
             (get_func func).method_name 0
         then func_code func ^ arg_code func arg ^ ";\n"
-        else recv_name_code x ^ func_code func ^ arg_code func arg ^ ";\n"
+        else recv_name_code x func ^ func_code func ^ arg_code func arg ^ ";\n"
     | Seq (s1, s2) -> code s1 ^ code s2
     | Skip -> ""
     | Stmt -> failwith "Error: still need unrolling stmt"
