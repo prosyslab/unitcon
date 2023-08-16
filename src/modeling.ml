@@ -5,6 +5,10 @@ module SummaryMap = Language.SummaryMap
 module MethodInfo = Language.MethodInfo
 module IG = Inheritance.G
 
+(* ************************************** *
+   Method Summary
+ * ************************************** *)
+
 let hashmap_put_var =
   Condition.M.empty
   |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "key")
@@ -319,6 +323,46 @@ let array_postmem =
   |> Condition.M.add (Condition.RH_Symbol "v5")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
 
+let array_set_var =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "index")
+  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var "elem")
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+
+let array_set_value = Value.M.empty |> Value.M.add "v5" (Value.Ge (Int 0))
+
+let array_set_premem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v4")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "index") (Condition.RH_Symbol "v7")
+       |> Condition.M.add (Condition.RH_Var "elem") (Condition.RH_Symbol "v8"))
+
+let array_set_postmem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v4")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "index") (Condition.RH_Symbol "v7")
+       |> Condition.M.add (Condition.RH_Var "elem") (Condition.RH_Symbol "v8"))
+  |> Condition.M.add (Condition.RH_Symbol "v7")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v8")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
+
 let hashmap_put_summary =
   Language.
     {
@@ -438,6 +482,20 @@ let array_summary =
       postcond = (array_var, array_postmem);
       args = [];
     }
+
+let array_set_summary =
+  Language.
+    {
+      relation = Relation.M.empty;
+      value = array_set_value;
+      precond = (array_set_var, array_set_premem);
+      postcond = (array_set_var, array_set_postmem);
+      args = [];
+    }
+
+(* ************************************** *
+   Method Info
+ * ************************************** *)
 
 let hashmap_put_info =
   let this = ("java.util.HashMap", Language.This (Object "HashMap")) in
@@ -577,7 +635,7 @@ let string_info =
     }
 
 let int_array_info =
-  let this = ("", Language.This (Array Int)) in
+  let this = ("IntArray", Language.This (Array Int)) in
   let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
@@ -589,7 +647,7 @@ let int_array_info =
     }
 
 let long_array_info =
-  let this = ("", Language.This (Array Long)) in
+  let this = ("LongArray", Language.This (Array Long)) in
   let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
@@ -601,7 +659,7 @@ let long_array_info =
     }
 
 let float_array_info =
-  let this = ("", Language.This (Array Float)) in
+  let this = ("FloatArray", Language.This (Array Float)) in
   let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
@@ -613,7 +671,7 @@ let float_array_info =
     }
 
 let double_array_info =
-  let this = ("", Language.This (Array Double)) in
+  let this = ("DoubleArray", Language.This (Array Double)) in
   let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
@@ -625,7 +683,7 @@ let double_array_info =
     }
 
 let bool_array_info =
-  let this = ("", Language.This (Array Bool)) in
+  let this = ("BoolArray", Language.This (Array Bool)) in
   let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
@@ -637,7 +695,7 @@ let bool_array_info =
     }
 
 let char_array_info =
-  let this = ("", Language.This (Array Char)) in
+  let this = ("CharArray", Language.This (Array Char)) in
   let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
@@ -649,7 +707,7 @@ let char_array_info =
     }
 
 let string_array_info =
-  let this = ("", Language.This (Array (Object "String"))) in
+  let this = ("StringArray", Language.This (Array (Object "String"))) in
   let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
@@ -661,7 +719,7 @@ let string_array_info =
     }
 
 let object_array_info =
-  let this = ("", Language.This (Array (Object "Object"))) in
+  let this = ("ObjectArray", Language.This (Array (Object "Object"))) in
   let arg = ("", Language.Var (Int, "size")) in
   MethodInfo.
     {
@@ -673,6 +731,110 @@ let object_array_info =
     }
 
 (*TODO: array_array_info *)
+
+let int_array_set_info =
+  let this = ("IntArray", Language.This (Array Int)) in
+  let arg1 = ("", Language.Var (Int, "index")) in
+  let arg2 = ("", Language.Var (Int, "elem")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg1; arg2 ];
+      return = "void";
+      filename = "";
+    }
+
+let long_array_set_info =
+  let this = ("LongArray", Language.This (Array Long)) in
+  let arg1 = ("", Language.Var (Int, "index")) in
+  let arg2 = ("", Language.Var (Long, "elem")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg1; arg2 ];
+      return = "void";
+      filename = "";
+    }
+
+let float_array_set_info =
+  let this = ("FloatArray", Language.This (Array Float)) in
+  let arg1 = ("", Language.Var (Int, "index")) in
+  let arg2 = ("", Language.Var (Float, "elem")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg1; arg2 ];
+      return = "void";
+      filename = "";
+    }
+
+let double_array_set_info =
+  let this = ("DoubleArray", Language.This (Array Double)) in
+  let arg1 = ("", Language.Var (Int, "index")) in
+  let arg2 = ("", Language.Var (Double, "elem")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg1; arg2 ];
+      return = "void";
+      filename = "";
+    }
+
+let bool_array_set_info =
+  let this = ("BoolArray", Language.This (Array Bool)) in
+  let arg1 = ("", Language.Var (Int, "index")) in
+  let arg2 = ("", Language.Var (Bool, "elem")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg1; arg2 ];
+      return = "void";
+      filename = "";
+    }
+
+let char_array_set_info =
+  let this = ("CharArray", Language.This (Array Char)) in
+  let arg1 = ("", Language.Var (Int, "index")) in
+  let arg2 = ("", Language.Var (Char, "elem")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg1; arg2 ];
+      return = "void";
+      filename = "";
+    }
+
+let string_array_set_info =
+  let this = ("StringArray", Language.This (Array (Object "string"))) in
+  let arg1 = ("", Language.Var (Int, "index")) in
+  let arg2 = ("", Language.Var (String, "elem")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg1; arg2 ];
+      return = "void";
+      filename = "";
+    }
+
+let object_array_set_info =
+  let this = ("ObjectArray", Language.This (Array (Object "Object"))) in
+  let arg1 = ("", Language.Var (Int, "index")) in
+  let arg2 = ("", Language.Var (Object "Object", "elem")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg1; arg2 ];
+      return = "void";
+      filename = "";
+    }
 
 let add_java_package_summary mmap =
   SummaryMap.M.add "HashMap.put(Object,Object)" [ hashmap_put_summary ] mmap
@@ -694,6 +856,14 @@ let add_java_package_summary mmap =
   |> SummaryMap.M.add "CharArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "StringArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "ObjectArray.<init>(int)" [ array_summary ]
+  |> SummaryMap.M.add "IntArray.set(int,int)" [ array_set_summary ]
+  |> SummaryMap.M.add "LongArray.set(int,long)" [ array_set_summary ]
+  |> SummaryMap.M.add "FloatArray.set(int,float)" [ array_set_summary ]
+  |> SummaryMap.M.add "DoubleArray.set(int,double)" [ array_set_summary ]
+  |> SummaryMap.M.add "BoolArray.set(int,boolean)" [ array_set_summary ]
+  |> SummaryMap.M.add "CharArray.set(int,char)" [ array_set_summary ]
+  |> SummaryMap.M.add "StringArray.set(int,String)" [ array_set_summary ]
+  |> SummaryMap.M.add "ObjectArray.set(int,Object)" [ array_set_summary ]
 
 let add_java_package_method mmap =
   MethodInfo.M.add "HashMap.put(Object,Object)" hashmap_put_info mmap
@@ -715,6 +885,14 @@ let add_java_package_method mmap =
   |> MethodInfo.M.add "CharArray.<init>(int)" char_array_info
   |> MethodInfo.M.add "StringArray.<init>(int)" string_array_info
   |> MethodInfo.M.add "ObjectArray.<init>(int)" object_array_info
+  |> MethodInfo.M.add "IntArray.set(int,int)" int_array_set_info
+  |> MethodInfo.M.add "LongArray.set(int,long)" long_array_set_info
+  |> MethodInfo.M.add "FloatArray.set(int,float)" float_array_set_info
+  |> MethodInfo.M.add "DoubleArray.set(int,double)" double_array_set_info
+  |> MethodInfo.M.add "BoolArray.set(int,boolean)" bool_array_set_info
+  |> MethodInfo.M.add "CharArray.set(int,char)" char_array_set_info
+  |> MethodInfo.M.add "StringArray.set(int,String)" string_array_set_info
+  |> MethodInfo.M.add "ObjectArray.set(int,Object)" object_array_set_info
 
 let add_java_package_inheritance ig =
   let add_inheritance super child ig = IG.add_edge ig super child in
