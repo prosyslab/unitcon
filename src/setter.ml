@@ -76,7 +76,7 @@ let find_setter m_name m_summarys m_infos mmap =
   in
   if
     (MethodInfo.M.find m_name m_infos).MethodInfo.return <> "void"
-    && FieldMap.M.is_empty change_fields
+    (* && FieldMap.M.is_empty change_fields *)
   then mmap
   else
     let fields =

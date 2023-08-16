@@ -1370,7 +1370,10 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
       [] typ_list
   else
     let var = AST.get_v id in
-    let name = get_class_name ~infer:false var.import in
+    let name =
+      get_class_name ~infer:false var.import
+      |> String.split_on_char '.' |> List.rev |> List.hd
+    in
     let setter_list =
       try SetterMap.M.find name s_map
       with _ -> [] |> List.filter (fun (s, _) -> is_private s m_info |> not)
@@ -1545,7 +1548,8 @@ let rec unroll p summary m_info c_info s_map =
       List.map (fun x -> AST.Seq (x, s2)) lst
   | Seq (s1, s2) when AST.ground s2 |> not -> (
       match AST.last_code s1 with
-      | AST.Assign _ when AST.is_stmt s2 ->
+      | AST.Assign (x0, x1, f, arg)
+        when AST.void (AST.Seq (AST.Assign (x0, x1, f, arg), s2)) ->
           let lst =
             unroll (AST.Seq (AST.last_code s1, s2)) summary m_info c_info s_map
           in
