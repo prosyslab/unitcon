@@ -811,9 +811,9 @@ let char_array_set_info =
     }
 
 let string_array_set_info =
-  let this = ("StringArray", Language.This (Array (Object "string"))) in
+  let this = ("StringArray", Language.This (Array (Object "String"))) in
   let arg1 = ("", Language.Var (Int, "index")) in
-  let arg2 = ("", Language.Var (String, "elem")) in
+  let arg2 = ("java.lang.String", Language.Var (Object "String", "elem")) in
   MethodInfo.
     {
       modifier = Language.Public;
