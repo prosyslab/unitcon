@@ -138,7 +138,7 @@ let string_of_expected_bug file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
   match open_in file |> input_line with
   | s when Str.string_match ("^test_case" |> Str.regexp) s 0 -> TESTCASE
-  | s -> TRACE s
+  | s -> TRACE (Str.global_replace Regexp.dollar "\\$" s)
 
 let simple_compiler program_dir build_command =
   let current_dir = Unix.getcwd () in
