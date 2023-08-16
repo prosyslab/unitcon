@@ -1710,7 +1710,8 @@ let priority_q queue =
     (fun p1 p2 ->
       let s1 = get_score p1 in
       let s2 = get_score p2 in
-      if compare (s1 |> fst) (s2 |> fst) <> 0 then
+      if !Cmdline.basic_mode then compare (s1 |> fst) (s2 |> fst)
+      else if compare (s1 |> fst) (s2 |> fst) <> 0 then
         compare (s1 |> fst) (s2 |> fst)
       else compare (s2 |> snd) (s1 |> snd))
     queue
