@@ -30,6 +30,8 @@ let in_n = Str.regexp "in_N"
 
 let in_bk = Str.regexp "in\\["
 
+let open_bk = Str.regexp "\\["
+
 let end_bk = Str.regexp "\\]"
 
 let ots = Str.regexp "not_in\\["

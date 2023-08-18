@@ -11,10 +11,6 @@ module CG = Callgraph.G
 module IG = Inheritance.G
 module AST = Language.AST
 
-(* defining for constructor priority.
-   if Range is wide then Range set 100 *)
-type domain = Top | Range of (Value.value * Value.value) | Bot
-
 module ImportSet = Set.Make (struct
   type t = string
 
@@ -98,7 +94,7 @@ let match_score p =
   summary_score p
 
 let get_score p =
-  let length = AST.count_nt p + AST.length_p p in
+  let length = AST.count_nt p (* + AST.length_p p *) in
   let point = if !Cmdline.basic_mode then 0.0 else match_score p in
   (length, point)
 
@@ -118,12 +114,9 @@ let rec get_tail_symbol field_name symbol memory =
       match Condition.M.find_opt (Condition.RH_Var field_name) sym with
       | Some s -> get_tail_symbol field_name s memory
       | None -> (
-          match Condition.M.find_opt (Condition.RH_Index field_name) sym with
-          | Some idx_s -> get_tail_symbol field_name idx_s memory
-          | None -> (
-              match Condition.M.find_opt Condition.RH_Any sym with
-              | Some any_sym -> get_tail_symbol field_name any_sym memory
-              | None -> symbol)))
+          match Condition.M.find_opt Condition.RH_Any sym with
+          | Some any_sym -> get_tail_symbol field_name any_sym memory
+          | None -> symbol))
   | None -> symbol
 
 let get_id_symbol id variable memory =
@@ -183,6 +176,9 @@ let rec find_real_head head_symbol memory =
   if exist_head_symbol = "" then head_symbol
   else find_real_head exist_head_symbol memory
 
+(* (symbol, value, head)
+   value is set only when the symbol is RH_Index.
+*)
 let get_head_symbol symbol memory =
   Condition.M.fold
     (fun head_symbol trace head_list ->
@@ -190,10 +186,18 @@ let get_head_symbol symbol memory =
         find_real_head (get_rh_name ~is_var:false head_symbol) memory
       in
       Condition.M.fold
-        (fun _ trace_tail head_list ->
+        (fun trace_head trace_tail head_list ->
           match trace_tail with
-          | Condition.RH_Symbol s when symbol = s -> [ (symbol, head) ]
-          | _ -> head_list)
+          | Condition.RH_Symbol s when symbol = s -> [ (symbol, None, head) ]
+          | _ -> (
+              match trace_head with
+              | Condition.RH_Index i when symbol = i ->
+                  [
+                    ( symbol,
+                      Some (trace_tail |> get_rh_name ~is_var:false),
+                      head );
+                  ]
+              | _ -> head_list))
         trace head_list)
     memory []
 
@@ -203,7 +207,7 @@ let get_head_symbol symbol memory =
 let get_head_symbol_list symbols (_, memory) =
   List.map
     (fun symbol ->
-      try get_head_symbol symbol memory |> List.hd with _ -> (symbol, ""))
+      try get_head_symbol symbol memory |> List.hd with _ -> (symbol, None, ""))
     symbols
 
 let get_param_index head_symbol variables formal_params =
@@ -227,7 +231,7 @@ let get_param_index head_symbol variables formal_params =
 (* if param_index = -1 then this symbol can be any value *)
 let get_param_index_list head_symbol_list (variables, _) formal_params =
   List.map
-    (fun (symbol, head_symbol) ->
+    (fun (symbol, _, head_symbol) ->
       if head_symbol = "" then (symbol, head_symbol, -1)
       else
         let index = get_param_index head_symbol variables formal_params in
@@ -673,6 +677,32 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
       check_one caller_symbol callee_symbol)
     vs_list
 
+(* value_symbol_list: (caller, callee) list
+   callee_sym_list: (symbol, value, head) list --> value is set only when symbol is index
+*)
+let combine_memory base_summary value_symbol_list callee_sym_list =
+  let _, memory = base_summary.Language.precond in
+  List.fold_left
+    (fun mem (r, _) ->
+      List.fold_left
+        (fun mem (s, v, _) ->
+          match v with
+          | Some value -> (
+              match Condition.M.find_opt (Condition.RH_Symbol r) mem with
+              | Some m ->
+                  Condition.M.add (Condition.RH_Symbol r)
+                    (Condition.M.add (Condition.RH_Index s)
+                       (Condition.RH_Symbol value) m)
+                    mem
+              | _ ->
+                  Condition.M.add (Condition.RH_Symbol r)
+                    (Condition.M.add (Condition.RH_Index s)
+                       (Condition.RH_Symbol value) Condition.M.empty)
+                    mem)
+          | _ -> mem)
+        mem callee_sym_list)
+    memory value_symbol_list
+
 let combine_value base_value vc_list =
   List.fold_left
     (fun prop_values (prop_value, _) ->
@@ -699,6 +729,9 @@ let satisfy callee_method callee_summary call_prop m_info =
   let value_symbol_list =
     get_caller_value_symbol_list call_prop param_indexes
   in
+  let caller_new_mem =
+    combine_memory call_prop value_symbol_list callee_head_symbols
+  in
   let intersect_value =
     let values_and_check =
       check_intersect ~is_init:false call_prop callee_summary value_symbol_list
@@ -708,7 +741,8 @@ let satisfy callee_method callee_summary call_prop m_info =
     (values, check)
   in
   let values, check = intersect_value in
-  if check = [] then (values, true) else (values, false)
+  if check = [] then (values, caller_new_mem, true)
+  else (values, caller_new_mem, false)
 
 let new_value_summary old_summary new_value =
   Language.
@@ -717,6 +751,16 @@ let new_value_summary old_summary new_value =
       value = new_value;
       precond = old_summary.precond;
       postcond = old_summary.postcond;
+      args = old_summary.args;
+    }
+
+let new_mem_summary old_summary new_mem =
+  Language.
+    {
+      relation = old_summary.relation;
+      value = old_summary.value;
+      precond = (old_summary.precond |> fst, new_mem);
+      postcond = (old_summary.postcond |> fst, new_mem);
       args = old_summary.args;
     }
 
@@ -1078,6 +1122,79 @@ let get_value typ id summary =
   if not_found_value find_value then default_values
   else [ calc_value id find_value ]
 
+let org_array array summary =
+  let variable, memory = summary.Language.precond in
+  let array_symbol =
+    Condition.M.fold
+      (fun symbol symbol_id array_symbol ->
+        match symbol_id with
+        | Condition.RH_Var v when v = array ->
+            symbol |> get_rh_name ~is_var:false
+        | _ -> array_symbol)
+      variable ""
+  in
+  Condition.M.fold
+    (fun symbol symbol_trace find_variable ->
+      let symbol = get_rh_name ~is_var:false symbol in
+      if symbol = array_symbol then
+        Condition.M.fold
+          (fun _ trace_tail trace_find_var ->
+            match trace_tail with
+            | Condition.RH_Symbol s -> s
+            | _ -> trace_find_var)
+          symbol_trace find_variable
+      else find_variable)
+    memory ""
+
+let get_array_size array summary =
+  let _, memory = summary.Language.precond in
+  let array_symbol = org_array array summary in
+  match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
+  | Some x -> Condition.M.fold (fun _ _ size -> size + 1) x 0
+  | None -> 0
+
+let get_array_index array summary =
+  let _, memory = summary.Language.precond in
+  let array_symbol = org_array array summary in
+  let values = summary.Language.value in
+  let find_value s =
+    Value.M.fold
+      (fun symbol value find_value -> if symbol = s then value else find_value)
+      values (Value.Eq None)
+  in
+  match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
+  | Some x ->
+      Condition.M.fold
+        (fun sym v ((idx, idx_value), (elem, elem_value)) ->
+          match sym with
+          | Condition.RH_Index s when idx = "" ->
+              ( (s, find_value s),
+                ( v |> get_rh_name ~is_var:false,
+                  find_value
+                    (get_tail_symbol "" v memory |> get_rh_name ~is_var:false)
+                ) )
+          | _ -> ((idx, idx_value), (elem, elem_value)))
+        x
+        (("", Value.Eq (Int 0)), ("", Value.Eq None))
+  | None -> (("", Value.Eq (Int 0)), ("", Value.Eq None))
+
+let remove_array_index array idx summary =
+  let _, memory = summary.Language.precond in
+  let array_symbol = org_array array summary in
+  match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
+  | Some x ->
+      let array_new_mem =
+        Condition.M.fold
+          (fun sym _ new_mem ->
+            match sym with
+            | Condition.RH_Index s when idx = s ->
+                Condition.M.remove sym new_mem
+            | _ -> new_mem)
+          x x
+      in
+      Condition.M.add (Condition.RH_Symbol array_symbol) array_new_mem memory
+  | None -> memory
+
 let get_field_value_map field_name value_map field_map value memory =
   Condition.M.fold
     (fun _ symbol old_field_map ->
@@ -1421,6 +1538,77 @@ let get_ret_obj (class_package, class_name) m_info (c_info, ig) =
         method_list class_to_find)
     m_info []
 
+let modify_summary id t_summary a_summary =
+  let variable, _ = a_summary.Language.precond in
+  let size_sym =
+    Condition.M.fold
+      (fun symbol symbol_id this_symbol ->
+        match symbol_id with
+        | Condition.RH_Var v when v = "size" ->
+            symbol |> get_rh_name ~is_var:false
+        | _ -> this_symbol)
+      variable ""
+  in
+  let new_value =
+    Value.M.add size_sym
+      (Value.Eq (Int (get_array_size id t_summary)))
+      a_summary.Language.value
+  in
+  let new_mem_summary old_summary memory =
+    Language.
+      {
+        relation = old_summary.relation;
+        value = old_summary.value;
+        precond = (old_summary.precond |> fst, memory);
+        postcond = (old_summary.postcond |> fst, memory);
+        args = old_summary.args;
+      }
+  in
+  let new_this_summary old_summary values =
+    let this_symbol = Condition.RH_Symbol (org_array "this" old_summary) in
+    let new_premem =
+      Condition.M.find this_symbol (old_summary.precond |> snd)
+      |> Condition.M.add
+           (Condition.RH_Index (values |> fst |> fst))
+           (Condition.RH_Symbol (values |> snd |> fst))
+    in
+    let new_postmem =
+      Condition.M.find this_symbol (old_summary.postcond |> snd)
+      |> Condition.M.add
+           (Condition.RH_Index (values |> fst |> fst))
+           (Condition.RH_Symbol (values |> snd |> fst))
+    in
+    Language.
+      {
+        relation = old_summary.relation;
+        value =
+          Value.M.add
+            (values |> fst |> fst)
+            (values |> fst |> snd)
+            old_summary.value
+          |> Value.M.add (values |> snd |> fst) (values |> snd |> snd);
+        precond =
+          ( old_summary.precond |> fst,
+            Condition.M.add this_symbol new_premem (old_summary.precond |> snd)
+          );
+        postcond =
+          ( old_summary.postcond |> fst,
+            Condition.M.add this_symbol new_postmem (old_summary.postcond |> snd)
+          );
+        args = old_summary.args;
+      }
+  in
+  let rec mk_new_summary new_summary summary =
+    let tmp = get_array_index id summary in
+    if tmp |> fst |> fst = "" then (new_summary, summary)
+    else
+      let new_mem = remove_array_index id (tmp |> fst |> fst) summary in
+      mk_new_summary
+        (new_this_summary new_summary tmp)
+        (new_mem_summary summary new_mem)
+  in
+  mk_new_summary (new_value_summary a_summary new_value) t_summary |> fst
+
 let satisfied_c_list id t_summary summary summary_list =
   if !Cmdline.basic_mode then
     List.fold_left
@@ -1431,7 +1619,12 @@ let satisfied_c_list id t_summary summary summary_list =
     List.fold_left
       (fun list (constructor, import) ->
         let check, summary = satisfied_c t_summary id constructor summary in
-        if check then (constructor, summary, import) :: list else list)
+        if check then
+          if Str.string_match (".*Array\\.<init>" |> Str.regexp) constructor 0
+          then
+            (constructor, modify_summary id t_summary summary, import) :: list
+          else (constructor, summary, import) :: list
+        else list)
       [] summary_list
 
 let get_cfunc constructor m_info =
@@ -1645,13 +1838,17 @@ let rec unroll p summary m_info c_info s_map =
 (* find error entry *)
 let rec find_ee e_method e_summary cg summary call_prop_map m_info =
   let propagation caller_method caller_preconds call_prop =
-    let new_value, check_match = satisfy e_method e_summary call_prop m_info in
+    let new_value, new_mem, check_match =
+      satisfy e_method e_summary call_prop m_info
+    in
     if !Cmdline.basic_mode then
       ErrorEntrySet.union caller_preconds
         (find_ee caller_method Language.empty_summary cg summary call_prop_map
            m_info)
     else if check_match then
-      let new_call_prop = new_value_summary call_prop new_value in
+      let new_call_prop =
+        new_mem_summary (new_value_summary call_prop new_value) new_mem
+      in
       ErrorEntrySet.union caller_preconds
         (find_ee caller_method new_call_prop cg summary call_prop_map m_info)
     else caller_preconds

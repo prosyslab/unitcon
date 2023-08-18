@@ -11,7 +11,9 @@ let mk_rh_type v =
   let check_index v = Str.string_match Regexp.index v 0 in
   let check_any_value v = Str.string_match Regexp.any v 0 in
   if check_symbol v then Condition.RH_Symbol v
-  else if check_index v then Condition.RH_Index v
+  else if check_index v then
+    Condition.RH_Index
+      (v |> Regexp.first_rm Regexp.open_bk |> Regexp.first_rm Regexp.end_bk)
   else if check_any_value v then Condition.RH_Any
   else Condition.RH_Var v
 
