@@ -330,7 +330,11 @@ let mapping_method_info method_info mmap =
   let info =
     MethodInfo.{ modifier; is_static; formal_params; return; filename }
   in
-  MethodInfo.M.add method_name info mmap
+  if
+    Str.string_match (".*access\\$.*" |> Str.regexp) method_name 0
+    || Str.string_match (".*access_org.*" |> Str.regexp) method_name 0
+  then mmap
+  else MethodInfo.M.add method_name info mmap
 
 let mapping_summary method_summarys mmap =
   let method_name = get_method_name method_summarys in
@@ -342,7 +346,11 @@ let mapping_summary method_summarys mmap =
   let summarys =
     if summarys = [] then [ Language.empty_summary ] else summarys
   in
-  SummaryMap.M.add method_name summarys mmap
+  if
+    Str.string_match (".*access\\$.*" |> Str.regexp) method_name 0
+    || Str.string_match (".*access_org.*" |> Str.regexp) method_name 0
+  then mmap
+  else SummaryMap.M.add method_name summarys mmap
 
 let from_method_json json =
   let json = JsonUtil.to_list json in
