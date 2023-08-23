@@ -10,13 +10,19 @@ J_LANGUAGE = Language('build/languages.so', 'java')
 parser = Parser()
 parser.set_language(J_LANGUAGE)
 
-extract_enum_query = J_LANGUAGE.query("""
-(enum_declaration
-name: (identifier) @enum-name
-)
-(enum_body
-(enum_constant) @enum-const)
+extract_class_name_query = J_LANGUAGE.query("""
+(class_declaration
+(modifiers)* @class-modifier
+  name: (identifier) @class-name)
+""")
 
+extract_enum_query = J_LANGUAGE.query("""
+(class_declaration
+  name: (identifier) @class-name)*
+(enum_declaration
+  name: (identifier) @enum-name
+(enum_body
+(enum_constant) @enum-const))
 """)
 
 enum_list = []
@@ -38,13 +44,33 @@ def get_text(node, src):
     return text
 
 
+def get_parent_class_name(node, src, name):
+    parent = node.parent
+    if parent == None or parent.type == 'program':
+        return name
+    else:
+        if parent.type == 'class_body':
+            parent = parent.parent
+        parent_name = list(
+            filter(lambda x: x[1] == 'class-name',
+                   [i for i in extract_class_name_query.captures(parent)]))
+        parent_name = get_text(parent_name[0], src)
+        name = get_parent_class_name(parent, src, parent_name + '$' + name)
+        return name
+
+
 def get_enum(node, src):
     match_list = extract_enum_query.captures(node)
     enum_name = ''
+    public_class = ''
     for i in match_list:
         text = get_text(i, src)
-        if i[1] == 'enum-name':
+        if i[1] == 'class-name':
+            public_class = get_parent_class_name(i[0], src, '')
+        elif i[1] == 'enum-name' and i[0].parent.parent.type == 'program':
             enum_name = text
+        elif i[1] == 'enum-name' and i[0].parent.parent.type == 'class_body':
+            enum_name = public_class + text
         elif i[1] == 'enum-const':
             enum_list.append({
                 'enum': enum_name,
