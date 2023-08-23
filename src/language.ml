@@ -223,6 +223,16 @@ module FieldMap = struct
   type t = Value.op M.t
 end
 
+module EnumInfo = struct
+  module M = Map.Make (struct
+    type t = string [@@deriving compare]
+  end)
+
+  type const = string
+
+  type t = const list M.t (* key: enum name, value: enum const list *)
+end
+
 module AST = struct
   type var = {
     import : import;
@@ -318,7 +328,7 @@ module AST = struct
     | Void (x, func, arg) -> count_id x + count_func func + count_arg arg
     | Seq (s1, s2) -> count_nt s1 + count_nt s2
     | Skip -> 0
-    | Stmt -> 3
+    | Stmt -> 1
 
   and count_arg = function Arg a -> List.length a + 1 | _ -> 0
 
@@ -327,6 +337,16 @@ module AST = struct
   and count_id = function Id -> 1 | _ -> 0
 
   and count_exp = function Exp -> 1 | _ -> 0
+
+  let is_array f =
+    let fname = (get_func f).method_name in
+    if Str.string_match (".*Array\\.<init>" |> Str.regexp) fname 0 then true
+    else false
+
+  let is_array_set f =
+    let fname = (get_func f).method_name in
+    if Str.string_match (".*Array\\.set" |> Str.regexp) fname 0 then true
+    else false
 
   (* ************************************** *
      Checking for Synthesis Rules
@@ -471,13 +491,187 @@ module AST = struct
     | _ -> s
 
   (* 5 *)
+  let rec get_tail_symbol field_name symbol memory =
+    let next_symbol = Condition.M.find_opt symbol memory in
+    match next_symbol with
+    | Some sym -> (
+        match Condition.M.find_opt (Condition.RH_Var field_name) sym with
+        | Some s -> get_tail_symbol field_name s memory
+        | None -> (
+            match Condition.M.find_opt Condition.RH_Any sym with
+            | Some any_sym -> get_tail_symbol field_name any_sym memory
+            | None -> symbol))
+    | None -> symbol
+
+  let get_rh_name ~is_var rh =
+    if is_var then match rh with Condition.RH_Var v -> v | _ -> ""
+    else match rh with Condition.RH_Symbol s -> s | _ -> ""
+
+  let org_symbol id summary =
+    let variable, memory = summary.precond in
+    let id_symbol =
+      Condition.M.fold
+        (fun symbol symbol_id id_symbol ->
+          match symbol_id with
+          | Condition.RH_Var v when v = id ->
+              symbol |> get_rh_name ~is_var:false
+          | _ -> id_symbol)
+        variable ""
+    in
+    Condition.M.fold
+      (fun symbol symbol_trace find_variable ->
+        let symbol = get_rh_name ~is_var:false symbol in
+        if symbol = id_symbol then
+          Condition.M.fold
+            (fun _ tail trace_find_var ->
+              match tail with Condition.RH_Symbol s -> s | _ -> trace_find_var)
+            symbol_trace find_variable
+        else find_variable)
+      memory ""
+
+  let get_array_index array summary =
+    let _, memory = summary.precond in
+    let array_symbol = org_symbol array summary in
+    let values = summary.value in
+    let find_value s =
+      Value.M.fold
+        (fun symbol value find_value ->
+          if symbol = s then value else find_value)
+        values (Value.Eq None)
+    in
+    match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
+    | Some x ->
+        Condition.M.fold
+          (fun sym v ((idx, idx_value), (elem, elem_value)) ->
+            match sym with
+            | Condition.RH_Index s when idx = "" ->
+                ( (s, find_value s),
+                  ( v |> get_rh_name ~is_var:false,
+                    find_value
+                      (get_tail_symbol "" v memory |> get_rh_name ~is_var:false)
+                  ) )
+            | _ -> ((idx, idx_value), (elem, elem_value)))
+          x
+          (("", Value.Ge (Int 0)), ("", Value.Eq None))
+    | None -> (("", Value.Ge (Int 0)), ("", Value.Eq None))
+
+  let remove_array_index array summary =
+    let _, memory = summary.precond in
+    let array_symbol = org_symbol array summary in
+    match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
+    | Some x ->
+        let array_new_mem =
+          Condition.M.fold
+            (fun sym _ new_mem ->
+              match sym with
+              | Condition.RH_Index _ -> Condition.M.remove sym new_mem
+              | _ -> new_mem)
+            x x
+        in
+        Condition.M.add (Condition.RH_Symbol array_symbol) array_new_mem memory
+    | None -> memory
+
   let void_rule1 s = match s with Seq (s1, _) -> Seq (s1, Skip) | _ -> s
 
   let void_rule2 s =
     match s with
     | Seq (s1, _) -> (
         match s1 with
-        | Assign (x0, _, _, _) -> Seq (Seq (s1, Stmt), Void (x0, Func, Arg []))
+        | Assign (x0, x1, f, arg) ->
+            if is_array f then
+              let new_value =
+                get_array_index (x0 |> get_vinfo |> snd) (x0 |> get_v).summary
+              in
+              let new_variable =
+                Condition.M.add
+                  (Condition.RH_Symbol (new_value |> fst |> fst))
+                  (Condition.RH_Var "index")
+                  ((x0 |> get_v).summary.precond |> fst)
+                |> Condition.M.add
+                     (Condition.RH_Symbol (new_value |> snd |> fst))
+                     (Condition.RH_Var "elem")
+              in
+              let new_next_mem =
+                remove_array_index
+                  (x0 |> get_vinfo |> snd)
+                  (x0 |> get_v).summary
+              in
+              let new_current_mem =
+                Condition.M.add (Condition.RH_Symbol "v5")
+                  (Condition.M.add Condition.RH_Any
+                     (Condition.RH_Symbol (new_value |> fst |> fst))
+                     Condition.M.empty)
+                  ((x0 |> get_v).summary.precond |> snd)
+                |> Condition.M.add (Condition.RH_Symbol "v6")
+                     (Condition.M.add Condition.RH_Any
+                        (Condition.RH_Symbol (new_value |> snd |> fst))
+                        Condition.M.empty)
+              in
+              let new_next_summary =
+                {
+                  relation = (x0 |> get_v).summary.relation;
+                  value = (x0 |> get_v).summary.value;
+                  precond = ((x0 |> get_v).summary.precond |> fst, new_next_mem);
+                  postcond =
+                    ((x0 |> get_v).summary.postcond |> fst, new_next_mem);
+                  args = (x0 |> get_v).summary.args;
+                }
+              in
+              let new_current_summary =
+                {
+                  relation = (x0 |> get_v).summary.relation;
+                  value = (x0 |> get_v).summary.value;
+                  precond = (new_variable, new_current_mem);
+                  postcond = (new_variable, new_current_mem);
+                  args = (x0 |> get_v).summary.args;
+                }
+              in
+              if new_value |> fst |> fst <> "" then
+                Seq
+                  ( Seq
+                      ( Assign
+                          ( Variable
+                              {
+                                import = (x0 |> get_v).import;
+                                variable = (x0 |> get_v).variable;
+                                summary = new_next_summary;
+                              },
+                            x1,
+                            f,
+                            arg ),
+                        Stmt ),
+                    Void
+                      ( Variable
+                          {
+                            import = (x0 |> get_v).import;
+                            variable = (x0 |> get_v).variable;
+                            summary = new_current_summary;
+                          },
+                        Func,
+                        Arg [] ) )
+              else
+                Seq
+                  ( Assign
+                      ( Variable
+                          {
+                            import = (x0 |> get_v).import;
+                            variable = (x0 |> get_v).variable;
+                            summary = new_next_summary;
+                          },
+                        x1,
+                        f,
+                        arg ),
+                    Void
+                      ( Variable
+                          {
+                            import = (x0 |> get_v).import;
+                            variable = (x0 |> get_v).variable;
+                            summary = new_current_summary;
+                          },
+                        Func,
+                        Arg [] ) )
+            else Seq (Seq (s1, Stmt), Void (x0, Func, Arg []))
+              (* else Seq (s1, Void (x0, Func, Arg [])) *)
         | _ -> s)
     | _ -> s
 
@@ -524,16 +718,6 @@ module AST = struct
   (* ************************************** *
      Return Code
    * ************************************** *)
-
-  let is_array f =
-    let fname = (get_func f).method_name in
-    if Str.string_match (".*Array\\.<init>" |> Str.regexp) fname 0 then true
-    else false
-
-  let is_array_set f =
-    let fname = (get_func f).method_name in
-    if Str.string_match (".*Array\\.set" |> Str.regexp) fname 0 then true
-    else false
 
   let arg_code f arg =
     let cc code x idx = code ^ ", " ^ x ^ (idx |> string_of_int) in
@@ -588,8 +772,8 @@ module AST = struct
     let v =
       match v.variable with
       | Var (typ, id), Some idx -> (typ, id ^ (idx |> string_of_int))
-      | _, None -> failwith "Error: idx cannot be none"
-      | This _, _ -> failwith "Error: This is not var"
+      | _, None -> (None, "")
+      | This _, _ -> (None, "")
     in
     match v |> fst with
     | Int -> "int " ^ (v |> snd)
@@ -610,8 +794,8 @@ module AST = struct
         | Char -> "char[] " ^ (v |> snd)
         | String -> "String[] " ^ (v |> snd)
         | Object _ -> "Object[] " ^ (v |> snd)
-        | _ -> failwith "not supported variable")
-    | _ -> failwith "not supported variable"
+        | _ -> "")
+    | _ -> ""
 
   let recv_name_code recv func =
     match recv with

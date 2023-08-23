@@ -1,7 +1,7 @@
 module F = Format
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
-module SetterMap = Language.SetterMap
+module EnumInfo = Language.EnumInfo
 
 let blacklist : string list ref = ref [] (* unusing method list *)
 
@@ -17,6 +17,7 @@ type t = {
   error_summary_file : string;
   call_prop_file : string;
   inheritance_file : string;
+  enum_file : string;
   build_command : string;
   test_command : string;
   test_file : string;
@@ -82,6 +83,10 @@ let parse_class_info filename =
   let elem = JsonUtil.to_list json |> List.hd in
   let info = Inheritance.of_json elem in
   (info |> fst, info |> snd |> Modeling.add_java_package_inheritance)
+
+let parse_enum_info filename =
+  if not (Sys.file_exists filename) then EnumInfo.M.empty
+  else Json.from_file filename |> Enum.of_json
 
 (* ************************************** *
    build program
@@ -254,6 +259,7 @@ let init program_dir =
     error_summary_file = cons con_path "error_summarys" |> cons program_dir;
     call_prop_file = cons con_path "call_proposition" |> cons program_dir;
     inheritance_file = cons con_path "inheritance_info.json" |> cons program_dir;
+    enum_file = cons con_path "enum_info.json" |> cons program_dir;
     build_command = cons con_path "build_command" |> cons program_dir;
     test_command = cons con_path "test_command" |> cons program_dir;
     test_file =
@@ -311,8 +317,15 @@ let run program_dir =
   let callgraph = parse_callgraph info.summary_file in
   let setter_map = get_setter summary method_info in
   let class_info = parse_class_info info.inheritance_file in
+  let enum_info = parse_enum_info info.enum_file in
   let call_prop_map = parse_callprop info.call_prop_file in
   let error_method_info = parse_error_summary info.error_summary_file in
   run_test ~is_start:true info [] error_method_info
-    (callgraph, summary, call_prop_map, method_info, class_info, setter_map)
+    ( callgraph,
+      summary,
+      call_prop_map,
+      method_info,
+      class_info,
+      setter_map,
+      enum_info )
   |> snd |> print_endline

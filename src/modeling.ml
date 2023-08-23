@@ -9,13 +9,13 @@ module IG = Inheritance.G
    Method Summary
  * ************************************** *)
 
-let hashmap_put_var =
+let map_put_var =
   Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "key")
   |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var "value")
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "key")
   |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
-let hashmap_put_premem =
+let map_put_premem =
   let value_map = Condition.M.empty in
   Condition.M.empty
   |> Condition.M.add (Condition.RH_Symbol "v1")
@@ -30,7 +30,7 @@ let hashmap_put_premem =
        |> Condition.M.add (Condition.RH_Var "value") (Condition.RH_Symbol "v8")
        )
 
-let hashmap_put_postmem =
+let map_put_postmem =
   let value_map = Condition.M.empty in
   Condition.M.empty
   |> Condition.M.add (Condition.RH_Symbol "v1")
@@ -112,9 +112,9 @@ let file_create_postmem =
 
 let image_var =
   Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "w")
-  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var "h")
   |> Condition.M.add (Condition.RH_Symbol "v4") (Condition.RH_Var "t")
+  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var "h")
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "w")
   |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
 let image_premem =
@@ -297,7 +297,7 @@ let array_var =
   |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "size")
   |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
-let array_value = Value.M.empty |> Value.M.add "v4" (Value.Gt (Int 0))
+let array_value = Value.M.empty |> Value.M.add "v4" (Value.Ge (Int 1))
 
 let array_premem =
   let value_map = Condition.M.empty in
@@ -325,8 +325,8 @@ let array_postmem =
 
 let array_set_var =
   Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "index")
   |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var "elem")
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "index")
   |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
 let array_set_value = Value.M.empty |> Value.M.add "v5" (Value.Ge (Int 0))
@@ -363,13 +363,51 @@ let array_set_postmem =
   |> Condition.M.add (Condition.RH_Symbol "v8")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
 
-let hashmap_put_summary =
+let point_var =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var "y")
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "x")
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+
+let point_premem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v7") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v4")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "x") (Condition.RH_Symbol "v8")
+       |> Condition.M.add (Condition.RH_Var "y") (Condition.RH_Symbol "v9"))
+
+let point_postmem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v7") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v4")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "x") (Condition.RH_Symbol "v8")
+       |> Condition.M.add (Condition.RH_Var "y") (Condition.RH_Symbol "v9"))
+  |> Condition.M.add (Condition.RH_Symbol "v6")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v8") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v7")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v9") value_map)
+
+let map_put_summary =
   Language.
     {
       relation = Relation.M.empty;
       value = Value.M.empty;
-      precond = (hashmap_put_var, hashmap_put_premem);
-      postcond = (hashmap_put_var, hashmap_put_postmem);
+      precond = (map_put_var, map_put_premem);
+      postcond = (map_put_var, map_put_postmem);
       args = [];
     }
 
@@ -493,15 +531,25 @@ let array_set_summary =
       args = [];
     }
 
+let point_summary =
+  Language.
+    {
+      relation = Relation.M.empty;
+      value = Value.M.empty;
+      precond = (point_var, point_premem);
+      postcond = (point_var, point_postmem);
+      args = [];
+    }
+
 (* ************************************** *
    Method Info
  * ************************************** *)
 
-let hashmap_put_info =
-  let this = ("java.util.HashMap", Language.This (Object "HashMap")) in
+let map_put_info =
+  let this = ("java.util.Map", Language.This (Object "Map")) in
   let arg_typ = Language.Object "Object" in
-  let arg1 = ("", Language.Var (arg_typ, "key")) in
-  let arg2 = ("", Language.Var (arg_typ, "value")) in
+  let arg1 = ("java.lang.Object", Language.Var (arg_typ, "key")) in
+  let arg2 = ("java.lang.Object", Language.Var (arg_typ, "value")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -524,7 +572,7 @@ let array_list_info =
 
 let file_info =
   let this = ("java.io.File", Language.This (Object "File")) in
-  let arg = ("", Language.Var (String, "file")) in
+  let arg = ("java.lang.String", Language.Var (String, "file")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -826,7 +874,7 @@ let string_array_set_info =
 let object_array_set_info =
   let this = ("ObjectArray", Language.This (Array (Object "Object"))) in
   let arg1 = ("", Language.Var (Int, "index")) in
-  let arg2 = ("", Language.Var (Object "Object", "elem")) in
+  let arg2 = ("java.lang.Object", Language.Var (Object "Object", "elem")) in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -836,8 +884,21 @@ let object_array_set_info =
       filename = "";
     }
 
+let point_info =
+  let this = ("Point", Language.This (Object "Point")) in
+  let arg1 = ("", Language.Var (Int, "x")) in
+  let arg2 = ("", Language.Var (Int, "y")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg1; arg2 ];
+      return = "";
+      filename = "";
+    }
+
 let add_java_package_summary mmap =
-  SummaryMap.M.add "HashMap.put(Object,Object)" [ hashmap_put_summary ] mmap
+  SummaryMap.M.add "Map.put(Object,Object)" [ map_put_summary ] mmap
   |> SummaryMap.M.add "ArrayList.<init>()" [ array_list_summary ]
   |> SummaryMap.M.add "File.<init>(String)" [ file_summary ]
   |> SummaryMap.M.add "File.createNewFile()" [ file_create_summary ]
@@ -864,9 +925,10 @@ let add_java_package_summary mmap =
   |> SummaryMap.M.add "CharArray.set(int,char)" [ array_set_summary ]
   |> SummaryMap.M.add "StringArray.set(int,String)" [ array_set_summary ]
   |> SummaryMap.M.add "ObjectArray.set(int,Object)" [ array_set_summary ]
+  |> SummaryMap.M.add "Point.<init>(int,int)" [ point_summary ]
 
 let add_java_package_method mmap =
-  MethodInfo.M.add "HashMap.put(Object,Object)" hashmap_put_info mmap
+  MethodInfo.M.add "Map.put(Object,Object)" map_put_info mmap
   |> MethodInfo.M.add "ArrayList.<init>()" array_list_info
   |> MethodInfo.M.add "File.<init>(String)" file_info
   |> MethodInfo.M.add "File.createNewFile()" file_create_info
@@ -893,10 +955,12 @@ let add_java_package_method mmap =
   |> MethodInfo.M.add "CharArray.set(int,char)" char_array_set_info
   |> MethodInfo.M.add "StringArray.set(int,String)" string_array_set_info
   |> MethodInfo.M.add "ObjectArray.set(int,Object)" object_array_set_info
+  |> MethodInfo.M.add "Point.<init>(int,int)" point_info
 
 let add_java_package_inheritance ig =
   let add_inheritance super child ig = IG.add_edge ig super child in
   add_inheritance "java.util.Collection" "java.util.ArrayList" ig
   |> add_inheritance "java.util.List" "java.util.ArrayList"
   |> add_inheritance "java.io.InputStream" "java.io.FileInputStream"
-  |> add_inheritance "java.util.Map" "Java.util.HashMap"
+  |> add_inheritance "java.util.Map" "java.util.HashMap"
+  |> add_inheritance "java.lang.Object" "java.lang.String"

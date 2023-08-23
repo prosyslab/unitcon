@@ -7,6 +7,7 @@ module CallPropMap = Language.CallPropMap
 module ClassInfo = Language.ClassInfo
 module SetterMap = Language.SetterMap
 module FieldMap = Language.FieldMap
+module EnumInfo = Language.EnumInfo
 module CG = Callgraph.G
 module IG = Inheritance.G
 module AST = Language.AST
@@ -94,7 +95,7 @@ let match_score p =
   summary_score p
 
 let get_score p =
-  let length = AST.count_nt p (* + AST.length_p p *) in
+  let length = AST.count_nt p (* + AST.length_p p  *) in
   let point = if !Cmdline.basic_mode then 0.0 else match_score p in
   (length, point)
 
@@ -658,7 +659,9 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
         let callee_value =
           Value.M.find callee_symbol callee_summary.Language.value
         in
-        (Value.M.add caller_symbol callee_value caller_prop.Language.value, true)
+        ( Value.M.add caller_symbol callee_value caller_prop.Language.value
+          |> Value.M.add callee_symbol callee_value,
+          true )
       with Not_found -> (
         try
           (* constructor prop propagation *)
@@ -838,6 +841,12 @@ let get_package_from_method t_method (c_info, _) =
   in
   full_class_name
 
+let get_package t_method m_info c_info =
+  let info = MethodInfo.M.find t_method m_info in
+  let p_package = get_package_from_param info.MethodInfo.formal_params in
+  let m_package = get_package_from_method t_method c_info in
+  if p_package = "" then m_package else p_package
+
 (* e.g., java.util. --> not contain class name *)
 let get_import t_method (c_info, _) =
   let class_name = get_class_name ~infer:true t_method in
@@ -864,9 +873,7 @@ let is_public_or_default method_name m_info c_info =
        don't use it even if the modifier is public*)
     is_test_file info.MethodInfo.filename
   in
-  let p_package = get_package_from_param info.MethodInfo.formal_params in
-  let m_package = get_package_from_method method_name c_info in
-  let package = if p_package = "" then m_package else p_package in
+  let package = get_package method_name m_info c_info in
   let name =
     try
       Str.split Regexp.dot package
@@ -1109,7 +1116,7 @@ let get_value typ id summary =
               | _ -> trace_find_var)
             symbol_trace find_variable
         else find_variable)
-      mem ""
+      mem target_variable
   in
   let values = summary.Language.value in
   let default_values = default_value_list typ in
@@ -1122,40 +1129,37 @@ let get_value typ id summary =
   if not_found_value find_value then default_values
   else [ calc_value id find_value ]
 
-let org_array array summary =
+let org_symbol id summary =
   let variable, memory = summary.Language.precond in
-  let array_symbol =
+  let id_symbol =
     Condition.M.fold
-      (fun symbol symbol_id array_symbol ->
+      (fun symbol symbol_id id_symbol ->
         match symbol_id with
-        | Condition.RH_Var v when v = array ->
-            symbol |> get_rh_name ~is_var:false
-        | _ -> array_symbol)
+        | Condition.RH_Var v when v = id -> symbol |> get_rh_name ~is_var:false
+        | _ -> id_symbol)
       variable ""
   in
   Condition.M.fold
     (fun symbol symbol_trace find_variable ->
       let symbol = get_rh_name ~is_var:false symbol in
-      if symbol = array_symbol then
+      if symbol = id_symbol then
         Condition.M.fold
-          (fun _ trace_tail trace_find_var ->
-            match trace_tail with
-            | Condition.RH_Symbol s -> s
-            | _ -> trace_find_var)
+          (fun _ tail trace_find_var ->
+            match tail with Condition.RH_Symbol s -> s | _ -> trace_find_var)
           symbol_trace find_variable
       else find_variable)
     memory ""
 
 let get_array_size array summary =
   let _, memory = summary.Language.precond in
-  let array_symbol = org_array array summary in
+  let array_symbol = org_symbol array summary in
   match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
   | Some x -> Condition.M.fold (fun _ _ size -> size + 1) x 0
-  | None -> 0
+  | None -> 1
 
 let get_array_index array summary =
   let _, memory = summary.Language.precond in
-  let array_symbol = org_array array summary in
+  let array_symbol = org_symbol array summary in
   let values = summary.Language.value in
   let find_value s =
     Value.M.fold
@@ -1175,12 +1179,12 @@ let get_array_index array summary =
                 ) )
           | _ -> ((idx, idx_value), (elem, elem_value)))
         x
-        (("", Value.Eq (Int 0)), ("", Value.Eq None))
-  | None -> (("", Value.Eq (Int 0)), ("", Value.Eq None))
+        (("", Value.Ge (Int 0)), ("", Value.Eq None))
+  | None -> (("", Value.Ge (Int 0)), ("", Value.Eq None))
 
 let remove_array_index array idx summary =
   let _, memory = summary.Language.precond in
-  let array_symbol = org_array array summary in
+  let array_symbol = org_symbol array summary in
   match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
   | Some x ->
       let array_new_mem =
@@ -1340,12 +1344,9 @@ let match_constructor_name class_name method_name =
 
 let match_return_object class_name method_name m_info =
   let class_name = Str.split Regexp.dot class_name |> List.rev |> List.hd in
-  let c_method =
-    try Str.split Regexp.dot method_name |> List.hd with _ -> ""
-  in
   let info = MethodInfo.M.find method_name m_info in
   let return = info.MethodInfo.return in
-  Str.string_match (Str.regexp class_name) return 0 && c_method <> return
+  Str.string_match (Str.regexp class_name) return 0
 
 let get_clist (class_package, class_name) m_info (c_info, ig) =
   let full_class_name =
@@ -1367,6 +1368,15 @@ let get_clist (class_package, class_name) m_info (c_info, ig) =
           else init_list)
         method_list class_to_find)
     m_info []
+
+let find_enum_var_list c_name e_info =
+  if EnumInfo.M.mem c_name e_info then
+    List.fold_left
+      (fun gvar_list const ->
+        AST.GlobalConstant (c_name ^ "." ^ const) :: gvar_list)
+      []
+      (EnumInfo.M.find c_name e_info)
+  else []
 
 let find_global_var_list c_name t_var mem summary m_info =
   let all_var s_trace =
@@ -1407,7 +1417,7 @@ let find_global_var_list c_name t_var mem summary m_info =
       else list)
     summary []
 
-let global_var_list class_name t_summary summary m_info =
+let global_var_list class_name t_summary summary m_info e_info =
   let vars, mem = t_summary.Language.precond in
   let t_var =
     Condition.M.fold
@@ -1421,7 +1431,9 @@ let global_var_list class_name t_summary summary m_info =
       vars None
   in
   match t_var with
-  | None -> find_global_var_list class_name None mem summary m_info
+  | None ->
+      let gvlist = find_global_var_list class_name None mem summary m_info in
+      if gvlist = [] then find_enum_var_list class_name e_info else gvlist
   | Some x ->
       let target_variable =
         Condition.M.fold
@@ -1454,11 +1466,16 @@ let is_receiver id =
 
 let mk_arg ~is_s param s =
   let param = if is_s then param else param |> List.tl in
-  List.map
-    (fun (i, v) ->
-      incr new_var;
-      AST.{ import = i; variable = (v, Some !new_var); summary = s })
-    param
+  List.fold_left
+    (fun params (i, v) ->
+      match v with
+      | Language.Var (typ, _) when typ = Language.None -> params
+      | _ ->
+          incr new_var;
+          AST.{ import = i; variable = (v, Some !new_var); summary = s }
+          :: params)
+    [] param
+  |> List.rev
 
 (* id is receiver variable *)
 let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
@@ -1466,7 +1483,7 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
   if AST.is_id id then
     let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
     let f_arg = mk_arg ~is_s:(is_s_method ee m_info) param es in
-    let import = get_package_from_method ee c_info in
+    let import = get_package ee m_info c_info in
     let typ_list =
       if is_private_class import c_info then
         try IG.succ (c_info |> snd) import |> List.cons import
@@ -1532,26 +1549,17 @@ let get_ret_obj (class_package, class_name) m_info (c_info, ig) =
             && is_private method_name m_info |> not
             && is_init_method method_name |> not
           then
-            (method_name, get_package_from_method method_name (c_info, ig))
+            (method_name, get_package method_name m_info (c_info, ig))
             :: init_list
           else init_list)
         method_list class_to_find)
     m_info []
 
 let modify_summary id t_summary a_summary =
-  let variable, _ = a_summary.Language.precond in
-  let size_sym =
-    Condition.M.fold
-      (fun symbol symbol_id this_symbol ->
-        match symbol_id with
-        | Condition.RH_Var v when v = "size" ->
-            symbol |> get_rh_name ~is_var:false
-        | _ -> this_symbol)
-      variable ""
-  in
   let new_value =
-    Value.M.add size_sym
-      (Value.Eq (Int (get_array_size id t_summary)))
+    Value.M.add
+      (org_symbol "size" a_summary)
+      (Value.Ge (Int (get_array_size id t_summary)))
       a_summary.Language.value
   in
   let new_mem_summary old_summary memory =
@@ -1565,7 +1573,7 @@ let modify_summary id t_summary a_summary =
       }
   in
   let new_this_summary old_summary values =
-    let this_symbol = Condition.RH_Symbol (org_array "this" old_summary) in
+    let this_symbol = Condition.RH_Symbol (org_symbol "this" old_summary) in
     let new_premem =
       Condition.M.find this_symbol (old_summary.precond |> snd)
       |> Condition.M.add
@@ -1623,6 +1631,15 @@ let satisfied_c_list id t_summary summary summary_list =
           if Str.string_match (".*Array\\.<init>" |> Str.regexp) constructor 0
           then
             (constructor, modify_summary id t_summary summary, import) :: list
+          else if
+            Str.string_match
+              ("String\\.<init>(String)" |> Str.regexp)
+              constructor 0
+            |> not
+            && Str.string_match
+                 ("String\\.<init>.*" |> Str.regexp)
+                 constructor 0
+          then list
           else (constructor, summary, import) :: list
         else list)
       [] summary_list
@@ -1737,22 +1754,23 @@ let get_arg_seq (args : AST.id list) =
              (List.fold_left (fun lst x -> AST.mk_assign_arg x arg :: lst) [] s))
     [ AST.Skip ] args
 
-let rec unroll p summary m_info c_info s_map =
+let rec unroll p summary m_info c_info s_map e_info =
   match p with
   | AST.Seq _ when AST.void p -> [ AST.void_rule1 p; AST.void_rule2 p ]
   | Seq (s1, s2) when AST.ground s1 |> not ->
-      let lst = unroll s1 summary m_info c_info s_map in
+      let lst = unroll s1 summary m_info c_info s_map e_info in
       List.map (fun x -> AST.Seq (x, s2)) lst
   | Seq (s1, s2) when AST.ground s2 |> not -> (
       match AST.last_code s1 with
-      | AST.Assign (x0, x1, f, arg)
-        when AST.void (AST.Seq (AST.Assign (x0, x1, f, arg), s2)) ->
+      | AST.Assign _ when AST.void (AST.Seq (AST.last_code s1, s2)) ->
           let lst =
-            unroll (AST.Seq (AST.last_code s1, s2)) summary m_info c_info s_map
+            unroll
+              (AST.Seq (AST.last_code s1, s2))
+              summary m_info c_info s_map e_info
           in
           List.map (fun x -> AST.Seq (AST.modify_last_assign s1, x)) lst
       | _ ->
-          let lst = unroll s2 summary m_info c_info s_map in
+          let lst = unroll s2 summary m_info c_info s_map e_info in
           List.map (fun x -> AST.Seq (s1, x)) lst)
   | Const (x, _) when AST.const p ->
       let typ, id = AST.get_vinfo x in
@@ -1777,7 +1795,7 @@ let rec unroll p summary m_info c_info s_map =
             []
             (global_var_list
                (Language.get_class_name (AST.get_vinfo x |> fst))
-               (AST.get_v x).summary summary m_info)
+               (AST.get_v x).summary summary m_info e_info)
         in
         if is_receiver (AST.get_vinfo x |> snd) then r2
         else List.rev_append r3 r2
@@ -1917,7 +1935,7 @@ let priority_q queue =
       else compare (s2 |> snd) (s1 |> snd))
     queue
 
-let rec mk_testcase queue summary m_info c_info s_map =
+let rec mk_testcase queue summary m_info c_info s_map e_info =
   let queue = priority_q queue in
   match queue with
   | p :: tl ->
@@ -1925,13 +1943,13 @@ let rec mk_testcase queue summary m_info c_info s_map =
       else
         mk_testcase
           (List.rev_append
-             (unroll p summary m_info c_info s_map |> List.rev)
+             (unroll p summary m_info c_info s_map e_info |> List.rev)
              tl)
-          summary m_info c_info s_map
+          summary m_info c_info s_map e_info
   | [] -> []
 
 let mk_testcases ~is_start queue (e_method, error_summary)
-    (cg, summary, call_prop_map, m_info, c_info, s_map) =
+    (cg, summary, call_prop_map, m_info, c_info, s_map, e_info) =
   let apply_rule list =
     List.fold_left
       (fun lst (func, arg) ->
@@ -1949,5 +1967,5 @@ let mk_testcases ~is_start queue (e_method, error_summary)
         []
     else queue
   in
-  let result = mk_testcase init summary m_info c_info s_map in
+  let result = mk_testcase init summary m_info c_info s_map e_info in
   if result = [] then (("", ""), []) else List.hd result
