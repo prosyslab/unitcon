@@ -27,7 +27,7 @@ let parse_param param =
     | "double" -> ("", Language.Double)
     | "_Bool" | "boolean" -> ("", Language.Bool)
     | "unsigned short" | "signed char" | "unsigned char" -> ("", Language.Char)
-    | "java.lang.String*" -> ("java.lang.String", Language.Object "String")
+    | "java.lang.String*" -> ("java.lang.String", Language.String)
     | "" -> ("", Language.None)
     | _ when Str.string_match Regexp.array t 0 ->
         let _, typ = t |> Regexp.first_rm Regexp.rm_array |> get_type in

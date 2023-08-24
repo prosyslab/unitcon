@@ -95,7 +95,7 @@ let match_score p =
   summary_score p
 
 let get_score p =
-  let length = AST.count_nt p (* + AST.length_p p  *) in
+  let length = AST.count_nt p + AST.length_p p in
   let point = if !Cmdline.basic_mode then 0.0 else match_score p in
   (length, point)
 
@@ -107,6 +107,15 @@ let rec find_relation given_symbol relation =
 let get_rh_name ~is_var rh =
   if is_var then match rh with Condition.RH_Var v -> v | _ -> ""
   else match rh with Condition.RH_Symbol s -> s | _ -> ""
+
+let get_next_symbol symbol memory =
+  let next_symbol = Condition.M.find_opt symbol memory in
+  match next_symbol with
+  | Some sym -> (
+      match Condition.M.find_opt Condition.RH_Any sym with
+      | Some s -> s
+      | None -> symbol)
+  | None -> symbol
 
 let rec get_tail_symbol field_name symbol memory =
   let next_symbol = Condition.M.find_opt symbol memory in
@@ -193,11 +202,12 @@ let get_head_symbol symbol memory =
           | _ -> (
               match trace_head with
               | Condition.RH_Index i when symbol = i ->
-                  [
-                    ( symbol,
-                      Some (trace_tail |> get_rh_name ~is_var:false),
-                      head );
-                  ]
+                  ( symbol,
+                    Some
+                      (get_next_symbol trace_tail memory
+                      |> get_rh_name ~is_var:false),
+                    head )
+                  :: head_list
               | _ -> head_list))
         trace head_list)
     memory []
@@ -206,10 +216,12 @@ let get_head_symbol symbol memory =
 (* return: (callee_actual_symbol * head_symbol) list *)
 (* if head = "" then this symbol can be any value *)
 let get_head_symbol_list symbols (_, memory) =
-  List.map
-    (fun symbol ->
-      try get_head_symbol symbol memory |> List.hd with _ -> (symbol, None, ""))
-    symbols
+  List.fold_left
+    (fun list symbol ->
+      let head_sym_list = get_head_symbol symbol memory in
+      if head_sym_list = [] then (symbol, None, "") :: list
+      else List.fold_left (fun list elem -> elem :: list) list head_sym_list)
+    [] symbols
 
 let get_param_index head_symbol variables formal_params =
   let variable = find_variable head_symbol variables in
@@ -232,11 +244,14 @@ let get_param_index head_symbol variables formal_params =
 (* if param_index = -1 then this symbol can be any value *)
 let get_param_index_list head_symbol_list (variables, _) formal_params =
   List.map
-    (fun (symbol, _, head_symbol) ->
+    (fun (symbol, idx_value, head_symbol) ->
       if head_symbol = "" then (symbol, head_symbol, -1)
       else
-        let index = get_param_index head_symbol variables formal_params in
-        (symbol, head_symbol, index))
+        match idx_value with
+        | None ->
+            let index = get_param_index head_symbol variables formal_params in
+            (symbol, head_symbol, index)
+        | _ -> (symbol, head_symbol, -1))
     head_symbol_list
 
 (* caller_prop: contains boitv, citv, precond, postcond, arg *)
@@ -688,20 +703,21 @@ let combine_memory base_summary value_symbol_list callee_sym_list =
   List.fold_left
     (fun mem (r, _) ->
       List.fold_left
-        (fun mem (s, v, _) ->
+        (fun mem (s, v, head) ->
           match v with
           | Some value -> (
               match Condition.M.find_opt (Condition.RH_Symbol r) mem with
-              | Some m ->
+              | Some m when find_real_head r memory = head ->
                   Condition.M.add (Condition.RH_Symbol r)
                     (Condition.M.add (Condition.RH_Index s)
                        (Condition.RH_Symbol value) m)
                     mem
-              | _ ->
+              | None when find_real_head r memory = head ->
                   Condition.M.add (Condition.RH_Symbol r)
                     (Condition.M.add (Condition.RH_Index s)
                        (Condition.RH_Symbol value) Condition.M.empty)
-                    mem)
+                    mem
+              | _ -> mem)
           | _ -> mem)
         mem callee_sym_list)
     memory value_symbol_list
@@ -924,6 +940,8 @@ let default_value_list typ =
           AST.Primitive (Z (-1));
           AST.Primitive (Z 100);
           AST.Primitive (Z (-100));
+          AST.Primitive (Z 500);
+          AST.Primitive (Z (-500));
         ]
     | Float | Double ->
         [
@@ -935,7 +953,7 @@ let default_value_list typ =
         ]
     | Bool -> [ AST.Primitive (B false); AST.Primitive (B true) ]
     | Char -> [ AST.Primitive (C 'x') ]
-    | String -> [ AST.Primitive (S ""); AST.Primitive (S "string") ]
+    | String -> [ AST.Null; AST.Primitive (S ""); AST.Primitive (S "string") ]
     | _ -> [ AST.Null ]
   in
   default_value
@@ -1272,29 +1290,29 @@ let rec collect_field m_symbol c_symbol m_value c_value m_mem c_mem field_map =
           m_field_map field_map
   with _ -> field_map
 
-let get_setter_list constructor m_info setter_map =
-  let class_name = get_class_name ~infer:false constructor in
-  (try SetterMap.M.find class_name setter_map with _ -> [])
-  |> List.filter (fun setter -> is_private setter m_info |> not)
+(* let get_setter_list constructor m_info setter_map =
+     let class_name = get_class_name ~infer:false constructor in
+     (try SetterMap.M.find class_name setter_map with _ -> [])
+     |> List.filter (fun setter -> is_private setter m_info |> not)
 
-let get_setter constructor id method_summary c_summary m_info setter_map =
-  if c_summary = Language.empty_summary then
-    (FieldMap.M.empty, get_setter_list constructor m_info setter_map)
-  else
-    let m_pre_var, m_pre_mem = method_summary.Language.precond in
-    let m_pre_value = method_summary.Language.value in
-    let c_post_var, c_post_mem = c_summary.Language.postcond in
-    let c_post_value = c_summary.Language.value in
-    let m_id_symbol = get_id_symbol id m_pre_var m_pre_mem in
-    let c_this_symbol = get_id_symbol "this" c_post_var c_post_mem in
-    (* need_setter_field:
-       The setter field map that must be met.
-       This value is got from the method summary.*)
-    let need_setter_field =
-      collect_field m_id_symbol c_this_symbol m_pre_value c_post_value m_pre_mem
-        c_post_mem FieldMap.M.empty
-    in
-    (need_setter_field, get_setter_list constructor m_info setter_map)
+   let get_setter constructor id method_summary c_summary m_info setter_map =
+     if c_summary = Language.empty_summary then
+       (FieldMap.M.empty, get_setter_list constructor m_info setter_map)
+     else
+       let m_pre_var, m_pre_mem = method_summary.Language.precond in
+       let m_pre_value = method_summary.Language.value in
+       let c_post_var, c_post_mem = c_summary.Language.postcond in
+       let c_post_value = c_summary.Language.value in
+       let m_id_symbol = get_id_symbol id m_pre_var m_pre_mem in
+       let c_this_symbol = get_id_symbol "this" c_post_var c_post_mem in
+       (* need_setter_field:
+          The setter field map that must be met.
+          This value is got from the method summary.*)
+       let need_setter_field =
+         collect_field m_id_symbol c_this_symbol m_pre_value c_post_value m_pre_mem
+           c_post_mem FieldMap.M.empty
+       in
+       (need_setter_field, get_setter_list constructor m_info setter_map) *)
 
 let satisfied_c method_summary id candidate_constructor summary =
   let c_summarys = SummaryMap.M.find candidate_constructor summary in
@@ -1513,8 +1531,8 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
     if name = "" || name = "String" then []
     else
       let setter_list =
-        try SetterMap.M.find name s_map
-        with _ -> [] |> List.filter (fun (s, _) -> is_private s m_info |> not)
+        (try SetterMap.M.find name s_map with _ -> [])
+        |> List.filter (fun (s, _) -> is_private s m_info |> not)
       in
       List.map
         (fun (s, _) ->

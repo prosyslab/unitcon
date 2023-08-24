@@ -276,13 +276,13 @@ module AST = struct
     | This typ, _ -> (typ, "this")
 
   let get_func func =
-    match func with F f -> f | _ -> failwith "get_func: not supported"
+    match func with
+    | F f -> f
+    | _ -> { typ = ""; method_name = ""; import = ""; summary = empty_summary }
 
-  let get_arg arg =
-    match arg with Arg a -> a | _ -> failwith "get_arg: not supported"
+  let get_arg arg = match arg with Arg a -> a | _ -> []
 
-  let get_param arg =
-    match arg with Param p -> p | _ -> failwith "get_param: not supported"
+  let get_param arg = match arg with Param p -> p | _ -> []
 
   let rec ground = function
     | Const (x, exp) -> (is_id x || is_exp exp) |> not
@@ -555,7 +555,7 @@ module AST = struct
           (("", Value.Ge (Int 0)), ("", Value.Eq None))
     | None -> (("", Value.Ge (Int 0)), ("", Value.Eq None))
 
-  let remove_array_index array summary =
+  let remove_array_index array idx summary =
     let _, memory = summary.precond in
     let array_symbol = org_symbol array summary in
     match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
@@ -564,7 +564,8 @@ module AST = struct
           Condition.M.fold
             (fun sym _ new_mem ->
               match sym with
-              | Condition.RH_Index _ -> Condition.M.remove sym new_mem
+              | Condition.RH_Index i when idx = i ->
+                  Condition.M.remove sym new_mem
               | _ -> new_mem)
             x x
         in
@@ -594,15 +595,16 @@ module AST = struct
               let new_next_mem =
                 remove_array_index
                   (x0 |> get_vinfo |> snd)
+                  (new_value |> fst |> fst)
                   (x0 |> get_v).summary
               in
               let new_current_mem =
                 Condition.M.add (Condition.RH_Symbol "v5")
-                  (Condition.M.add Condition.RH_Any
+                  (Condition.M.add (Condition.RH_Var "index")
                      (Condition.RH_Symbol (new_value |> fst |> fst))
                      Condition.M.empty)
                   ((x0 |> get_v).summary.precond |> snd)
-                |> Condition.M.add (Condition.RH_Symbol "v6")
+                |> Condition.M.add (Condition.RH_Var "elem")
                      (Condition.M.add Condition.RH_Any
                         (Condition.RH_Symbol (new_value |> snd |> fst))
                         Condition.M.empty)
@@ -671,7 +673,6 @@ module AST = struct
                         Func,
                         Arg [] ) )
             else Seq (Seq (s1, Stmt), Void (x0, Func, Arg []))
-              (* else Seq (s1, Void (x0, Func, Arg [])) *)
         | _ -> s)
     | _ -> s
 
@@ -740,7 +741,7 @@ module AST = struct
           ^ "] = "
           ^ (lst |> List.tl |> List.hd |> Regexp.rm_space)
         else "(" ^ param ^ ")"
-    | Arg _ -> failwith "Error: still need unrolling arg"
+    | Arg _ -> "Arg"
 
   let func_code func =
     match func with
@@ -762,7 +763,7 @@ module AST = struct
           |> List.tl |> List.hd
           |> Regexp.global_rm (Str.regexp "(.*)$")
           |> Str.global_replace Regexp.dollar "."
-    | _ -> failwith "Error: still need unrolling func"
+    | _ -> "Func"
 
   let is_var = function Variable _ -> true | _ -> false
 
@@ -806,12 +807,12 @@ module AST = struct
         | Var (_, id), Some idx -> id ^ (idx |> string_of_int) ^ "."
         | _ -> "")
     | ClassName c -> (c |> Str.global_replace Regexp.dollar ".") ^ "."
-    | _ -> failwith "Error: still need unrolling id"
+    | _ -> "ID."
 
   let id_code = function
     | Variable v -> var_code v
     | ClassName c -> c
-    | Id -> failwith "Error: still need unrolling id"
+    | Id -> "ID"
 
   let primitive_code p x =
     match p with
@@ -832,7 +833,7 @@ module AST = struct
     | Primitive p -> primitive_code p x
     | GlobalConstant g -> g ^ ";\n"
     | Null -> "null;\n"
-    | Exp -> failwith "Error: still need unrolling exp"
+    | Exp -> "Exp;\n"
 
   let rec code = function
     | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x
@@ -857,5 +858,5 @@ module AST = struct
         else recv_name_code x func ^ func_code func ^ arg_code func arg ^ ";\n"
     | Seq (s1, s2) -> code s1 ^ code s2
     | Skip -> ""
-    | Stmt -> failwith "Error: still need unrolling stmt"
+    | Stmt -> "Stmt"
 end
