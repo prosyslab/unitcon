@@ -6,7 +6,7 @@ module SummaryMap = Language.SummaryMap
 module CallPropMap = Language.CallPropMap
 module ClassInfo = Language.ClassInfo
 module SetterMap = Language.SetterMap
-module FieldMap = Language.FieldMap
+module FieldSet = Language.FieldSet
 module EnumInfo = Language.EnumInfo
 module CG = Callgraph.G
 module IG = Inheritance.G
@@ -1318,18 +1318,25 @@ let mk_arg ~is_s param s =
       | Language.Var (typ, _) when typ = Language.None -> params
       | _ ->
           incr new_var;
-          AST.{ import = i; variable = (v, Some !new_var); summary = s }
+          AST.
+            {
+              import = i;
+              variable = (v, Some !new_var);
+              field = FieldSet.S.empty;
+              summary = s;
+            }
           :: params)
     [] param
   |> List.rev
 
-let get_field_map c_name s_map =
+let get_field_map ret s_map =
+  let c_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
   List.fold_left
     (fun fm (_, fields) ->
       List.fold_left
-        (fun inner_fm field -> FieldMap.M.add field (Value.Eq None) inner_fm)
+        (fun inner_fm field -> FieldSet.S.add field inner_fm)
         fm fields)
-    FieldMap.M.empty
+    FieldSet.S.empty
     (try SetterMap.M.find c_name s_map with _ -> [])
 
 let error_entry_func ee es m_info c_info =
@@ -1584,6 +1591,7 @@ let get_inner_func f arg =
                   |> Regexp.first_rm (Str.regexp ("\\$" ^ fname))),
                 "con_outer" ),
             Some !outer );
+        field = FieldSet.S.empty;
         summary = recv.summary;
       }
   in
@@ -1659,12 +1667,13 @@ let rec unroll p summary m_info c_info s_map e_info =
         if is_receiver (AST.get_vinfo x |> snd) then r2
         else List.rev_append r3 r2
   | Assign (x0, _, _, _) when AST.fcall_in_assign p ->
+      let field_map = get_field_map x0 s_map in
       List.rev_append
         (get_c x0 summary m_info c_info)
         (get_ret_c x0 summary m_info c_info)
       |> List.fold_left
            (fun lst x ->
-             AST.fcall_in_assign_rule p (x |> fst) (x |> snd) :: lst)
+             AST.fcall_in_assign_rule p field_map (x |> fst) (x |> snd) :: lst)
            []
   | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
       let lst = get_void_func x m_info c_info s_map in

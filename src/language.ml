@@ -215,12 +215,12 @@ module SetterMap = struct
   type t = setter list M.t
 end
 
-module FieldMap = struct
-  module M = Map.Make (struct
+module FieldSet = struct
+  module S = Set.Make (struct
     type t = string [@@deriving compare]
   end)
 
-  type t = Value.op M.t
+  type t = S.t
 end
 
 module EnumInfo = struct
@@ -237,6 +237,7 @@ module AST = struct
   type var = {
     import : import;
     variable : variable * int option;
+    field : FieldSet.t;
     summary : summary;
   }
 
@@ -429,8 +430,20 @@ module AST = struct
   let const_rule3 s = match s with Const (x, _) -> Const (x, Null) | _ -> s
 
   (* 2 *)
-  let fcall_in_assign_rule s f arg =
-    match s with Assign (x0, x1, _, _) -> Assign (x0, x1, f, arg) | _ -> s
+  let fcall_in_assign_rule s field f arg =
+    match s with
+    | Assign (x0, x1, _, _) ->
+        let new_x0 =
+          Variable
+            {
+              import = (x0 |> get_v).import;
+              variable = (x0 |> get_v).variable;
+              field;
+              summary = (x0 |> get_v).summary;
+            }
+        in
+        Assign (new_x0, x1, f, arg)
+    | _ -> s
 
   (* 3 *)
   let recv_in_assign_rule1 s c =
@@ -447,6 +460,7 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
+              field = FieldSet.S.empty;
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -463,6 +477,7 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
+              field = FieldSet.S.empty;
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -619,6 +634,7 @@ module AST = struct
       {
         import = (id |> get_v).import;
         variable = (id |> get_v).variable;
+        field = (id |> get_v).field;
         summary;
       }
 
@@ -669,6 +685,7 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
+              field = FieldSet.S.empty;
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -685,6 +702,7 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
+              field = FieldSet.S.empty;
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }

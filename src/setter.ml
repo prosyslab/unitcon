@@ -3,7 +3,7 @@ module Value = Language.Value
 module Condition = Language.Condition
 module SummaryMap = Language.SummaryMap
 module SetterMap = Language.SetterMap
-module FieldMap = Language.FieldMap
+module FieldSet = Language.FieldSet
 module MethodInfo = Language.MethodInfo
 
 let get_this_symbol variable =
@@ -24,22 +24,16 @@ let rec get_tail_symbol symbol memory =
       | None -> symbol)
   | None -> symbol
 
-let merge_field_map m1 m2 =
-  FieldMap.M.merge
-    (fun _ v1 v2 ->
-      match (v1, v2) with Some _, _ -> v1 | _, Some _ -> v2 | _ -> None)
-    m1 m2
-
-let rec get_change_field post_key field_name pre_mem post_mem field_map =
+let rec get_change_field post_key field_name pre_mem post_mem field_set =
   match Condition.M.find_opt post_key post_mem with
-  | None -> field_map
+  | None -> field_set
   | Some value_map -> (
       match Condition.M.find_opt post_key pre_mem with
-      | None -> FieldMap.M.add field_name (Value.Eq Null) field_map
+      | None -> FieldSet.S.add field_name field_set
       | Some _ ->
           Condition.M.fold
-            (fun field value old_field_map ->
-              let new_field_map =
+            (fun field value old_field_set ->
+              let new_field_set =
                 match field with
                 | Condition.RH_Var id ->
                     let pre_tail_symbol = get_tail_symbol value pre_mem in
@@ -48,18 +42,18 @@ let rec get_change_field post_key field_name pre_mem post_mem field_map =
                       | None -> true
                       | Some _ -> false
                     in
-                    if is_post_tail then field_map
-                    else FieldMap.M.add id (Value.Eq Null) field_map
+                    if is_post_tail then field_set
+                    else FieldSet.S.add id field_set
                 | _ ->
-                    get_change_field value field_name pre_mem post_mem field_map
+                    get_change_field value field_name pre_mem post_mem field_set
               in
-              merge_field_map new_field_map old_field_map)
-            value_map field_map)
+              FieldSet.S.union new_field_set old_field_set)
+            value_map field_set)
 
 let get_change_fields
     Language.{ precond = _, pre_mem; postcond = post_var, post_mem; _ } =
   let post_this = get_this_symbol post_var in
-  get_change_field post_this "" pre_mem post_mem FieldMap.M.empty
+  get_change_field post_this "" pre_mem post_mem FieldSet.S.empty
 
 let get_class_name method_name = String.split_on_char '.' method_name |> List.hd
 
@@ -70,19 +64,19 @@ let find_setter m_name m_summarys m_infos mmap =
   let class_name = get_class_name m_name in
   let change_fields =
     List.fold_left
-      (fun field_map summary ->
-        get_change_fields summary |> merge_field_map field_map)
-      FieldMap.M.empty m_summarys
+      (fun field_set summary ->
+        get_change_fields summary |> FieldSet.S.union field_set)
+      FieldSet.S.empty m_summarys
   in
   if
     (MethodInfo.M.find m_name m_infos).MethodInfo.return <> "void"
-    && FieldMap.M.is_empty change_fields
+    && FieldSet.S.is_empty change_fields
     || (MethodInfo.M.find m_name m_infos).MethodInfo.return = ""
   then mmap
   else
     let fields =
-      FieldMap.M.fold
-        (fun field _ field_list -> field :: field_list)
+      FieldSet.S.fold
+        (fun field field_list -> field :: field_list)
         change_fields []
     in
     if SetterMap.M.mem class_name mmap then
