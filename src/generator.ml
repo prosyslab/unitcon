@@ -790,6 +790,8 @@ let is_primitive x =
   | Int | Long | Float | Double | Bool | Char | String -> true
   | _ -> false
 
+let is_receiver id = if id = "con_recv" || id = "con_outer" then true else false
+
 let is_nested_class name = String.contains name '$'
 
 let is_normal_class class_name c_info =
@@ -1147,177 +1149,17 @@ let get_value typ id summary =
   if not_found_value find_value then default_values
   else [ calc_value id find_value ]
 
-let org_symbol id summary =
-  let variable, memory = summary.Language.precond in
-  let id_symbol =
-    Condition.M.fold
-      (fun symbol symbol_id id_symbol ->
-        match symbol_id with
-        | Condition.RH_Var v when v = id -> symbol |> get_rh_name ~is_var:false
-        | _ -> id_symbol)
-      variable ""
-  in
-  Condition.M.fold
-    (fun symbol symbol_trace find_variable ->
-      let symbol = get_rh_name ~is_var:false symbol in
-      if symbol = id_symbol then
-        Condition.M.fold
-          (fun _ tail trace_find_var ->
-            match tail with Condition.RH_Symbol s -> s | _ -> trace_find_var)
-          symbol_trace find_variable
-      else find_variable)
-    memory ""
-
 let get_array_size array summary =
   let _, memory = summary.Language.precond in
-  let array_symbol = org_symbol array summary in
+  let array_symbol = AST.org_symbol array summary in
   match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
   | Some x -> Condition.M.fold (fun _ _ size -> size + 1) x 0
   | None -> 1
 
-let get_array_index array summary =
-  let _, memory = summary.Language.precond in
-  let array_symbol = org_symbol array summary in
-  let values = summary.Language.value in
-  let find_value s =
-    Value.M.fold
-      (fun symbol value find_value -> if symbol = s then value else find_value)
-      values (Value.Eq None)
-  in
-  match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
-  | Some x ->
-      Condition.M.fold
-        (fun sym v ((idx, idx_value), (elem, elem_value)) ->
-          match sym with
-          | Condition.RH_Index s when idx = "" ->
-              ( (s, find_value s),
-                ( v |> get_rh_name ~is_var:false,
-                  find_value
-                    (get_tail_symbol "" v memory |> get_rh_name ~is_var:false)
-                ) )
-          | _ -> ((idx, idx_value), (elem, elem_value)))
-        x
-        (("", Value.Ge (Int 0)), ("", Value.Eq None))
-  | None -> (("", Value.Ge (Int 0)), ("", Value.Eq None))
-
-let remove_array_index array idx summary =
-  let _, memory = summary.Language.precond in
-  let array_symbol = org_symbol array summary in
-  match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
-  | Some x ->
-      let array_new_mem =
-        Condition.M.fold
-          (fun sym _ new_mem ->
-            match sym with
-            | Condition.RH_Index s when idx = s ->
-                Condition.M.remove sym new_mem
-            | _ -> new_mem)
-          x x
-      in
-      Condition.M.add (Condition.RH_Symbol array_symbol) array_new_mem memory
-  | None -> memory
-
-let get_field_value_map field_name value_map field_map value memory =
-  Condition.M.fold
-    (fun _ symbol old_field_map ->
-      let field_symbol = get_tail_symbol field_name symbol memory in
-      let field_value =
-        Value.M.find (field_symbol |> get_rh_name ~is_var:false) value
-      in
-      FieldMap.M.add field_name field_value old_field_map)
-    value_map field_map
-
-let rec collect_field m_symbol c_symbol m_value c_value m_mem c_mem field_map =
-  try
-    let next_m_symbol = Condition.M.find m_symbol m_mem in
-    let next_c_symbol = Condition.M.find c_symbol c_mem in
-    let is_m_field =
-      if Condition.M.cardinal next_m_symbol > 1 then true else false
-    in
-    let is_c_field =
-      if Condition.M.cardinal next_c_symbol > 1 then true else false
-    in
-    match (is_m_field, is_c_field) with
-    | false, false ->
-        let m = Condition.M.find Condition.RH_Any next_m_symbol in
-        let c = Condition.M.find Condition.RH_Any next_c_symbol in
-        collect_field m c m_value c_value m_mem c_mem field_map
-    | true, false ->
-        let field_name, field_symbol =
-          Condition.M.fold
-            (fun field symbol field_symbol ->
-              match field with
-              | Condition.RH_Var v -> (v, symbol)
-              | _ -> field_symbol)
-            next_m_symbol ("", Condition.RH_Any)
-        in
-        let next_m_symbol = Condition.M.find field_symbol m_mem in
-        get_field_value_map field_name next_m_symbol field_map m_value m_mem
-    | false, true -> field_map
-    | true, true ->
-        let m_field_name, m_field_symbol =
-          Condition.M.fold
-            (fun field symbol field_symbol ->
-              match field with
-              | Condition.RH_Var v -> (v, symbol)
-              | _ -> field_symbol)
-            next_m_symbol ("", Condition.RH_Any)
-        in
-        let next_m_symbol = Condition.M.find m_field_symbol m_mem in
-        let c_field_name, c_field_symbol =
-          Condition.M.fold
-            (fun field symbol field_symbol ->
-              match field with
-              | Condition.RH_Var v when v = m_field_name -> (v, symbol)
-              | _ -> field_symbol)
-            next_c_symbol ("", Condition.RH_Any)
-        in
-        let next_c_symbol = Condition.M.find c_field_symbol c_mem in
-        let m_field_map =
-          get_field_value_map m_field_name next_m_symbol FieldMap.M.empty
-            m_value m_mem
-        in
-        let c_field_map =
-          get_field_value_map c_field_name next_c_symbol FieldMap.M.empty
-            c_value c_mem
-        in
-        FieldMap.M.fold
-          (fun field m_value old_field_map ->
-            let c_value = FieldMap.M.find_opt field c_field_map in
-            match c_value with
-            | Some value when value = m_value -> old_field_map
-            | _ -> FieldMap.M.add field m_value old_field_map)
-          m_field_map field_map
-  with _ -> field_map
-
-(* let get_setter_list constructor m_info setter_map =
-     let class_name = get_class_name ~infer:false constructor in
-     (try SetterMap.M.find class_name setter_map with _ -> [])
-     |> List.filter (fun setter -> is_private setter m_info |> not)
-
-   let get_setter constructor id method_summary c_summary m_info setter_map =
-     if c_summary = Language.empty_summary then
-       (FieldMap.M.empty, get_setter_list constructor m_info setter_map)
-     else
-       let m_pre_var, m_pre_mem = method_summary.Language.precond in
-       let m_pre_value = method_summary.Language.value in
-       let c_post_var, c_post_mem = c_summary.Language.postcond in
-       let c_post_value = c_summary.Language.value in
-       let m_id_symbol = get_id_symbol id m_pre_var m_pre_mem in
-       let c_this_symbol = get_id_symbol "this" c_post_var c_post_mem in
-       (* need_setter_field:
-          The setter field map that must be met.
-          This value is got from the method summary.*)
-       let need_setter_field =
-         collect_field m_id_symbol c_this_symbol m_pre_value c_post_value m_pre_mem
-           c_post_mem FieldMap.M.empty
-       in
-       (need_setter_field, get_setter_list constructor m_info setter_map) *)
-
 let satisfied_c method_summary id candidate_constructor summary =
   let c_summarys = SummaryMap.M.find candidate_constructor summary in
   let method_symbols, method_memory = method_summary.Language.precond in
-  let id = if id = "gen1" then "this" else id in
+  let id = if is_receiver id then "this" else id in
   let target_symbol =
     get_id_symbol id method_symbols method_memory |> get_rh_name ~is_var:false
   in
@@ -1468,20 +1310,6 @@ let global_var_list class_name t_summary summary m_info e_info =
       in
       find_global_var_list class_name target_variable mem summary m_info
 
-let mk_setter_format setter m_info =
-  let m_info = MethodInfo.M.find setter m_info in
-  let setter_statement =
-    Str.split Regexp.dot setter
-    |> List.tl |> List.hd
-    |> Regexp.global_rm (Str.regexp "(.*)$")
-  in
-  (setter_statement, m_info.MethodInfo.formal_params)
-
-let is_receiver id =
-  let new_id1 = Str.replace_first (Str.regexp "con_recv") "" id in
-  let new_id2 = Str.replace_first (Str.regexp "con_outer") "" id in
-  if new_id1 = "" || new_id2 = "" then true else false
-
 let mk_arg ~is_s param s =
   let param = if is_s then param else param |> List.tl in
   List.fold_left
@@ -1495,31 +1323,42 @@ let mk_arg ~is_s param s =
     [] param
   |> List.rev
 
+let get_field_map c_name s_map =
+  List.fold_left
+    (fun fm (_, fields) ->
+      List.fold_left
+        (fun inner_fm field -> FieldMap.M.add field (Value.Eq None) inner_fm)
+        fm fields)
+    FieldMap.M.empty
+    (try SetterMap.M.find c_name s_map with _ -> [])
+
+let error_entry_func ee es m_info c_info =
+  let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
+  let f_arg = mk_arg ~is_s:(is_s_method ee m_info) param es in
+  let import = get_package ee m_info c_info in
+  let typ_list =
+    if is_private_class import c_info then
+      try IG.succ (c_info |> snd) import |> List.cons import
+      with Invalid_argument _ -> [ import ]
+    else [ import ]
+  in
+  List.fold_left
+    (fun lst x ->
+      ( AST.F
+          {
+            typ = x |> Str.split Regexp.dot |> List.rev |> List.hd;
+            method_name = ee;
+            import = x;
+            summary = es;
+          },
+        f_arg )
+      :: lst)
+    [] typ_list
+
 (* id is receiver variable *)
 let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
     s_map =
-  if AST.is_id id then
-    let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
-    let f_arg = mk_arg ~is_s:(is_s_method ee m_info) param es in
-    let import = get_package ee m_info c_info in
-    let typ_list =
-      if is_private_class import c_info then
-        try IG.succ (c_info |> snd) import |> List.cons import
-        with Invalid_argument _ -> [ import ]
-      else [ import ]
-    in
-    List.fold_left
-      (fun lst x ->
-        ( AST.F
-            {
-              typ = x |> Str.split Regexp.dot |> List.rev |> List.hd;
-              method_name = ee;
-              import = x;
-              summary = es;
-            },
-          f_arg )
-        :: lst)
-      [] typ_list
+  if AST.is_id id then error_entry_func ee es m_info c_info
   else
     let var = AST.get_v id in
     let name =
@@ -1576,7 +1415,7 @@ let get_ret_obj (class_package, class_name) m_info (c_info, ig) =
 let modify_summary id t_summary a_summary =
   let new_value =
     Value.M.add
-      (org_symbol "size" a_summary)
+      (AST.org_symbol "size" a_summary)
       (Value.Ge (Int (get_array_size id t_summary)))
       a_summary.Language.value
   in
@@ -1591,7 +1430,7 @@ let modify_summary id t_summary a_summary =
       }
   in
   let new_this_summary old_summary values =
-    let this_symbol = Condition.RH_Symbol (org_symbol "this" old_summary) in
+    let this_symbol = Condition.RH_Symbol (AST.org_symbol "this" old_summary) in
     let new_premem =
       Condition.M.find this_symbol (old_summary.precond |> snd)
       |> Condition.M.add
@@ -1625,10 +1464,10 @@ let modify_summary id t_summary a_summary =
       }
   in
   let rec mk_new_summary new_summary summary =
-    let tmp = get_array_index id summary in
+    let tmp = AST.get_array_index id summary in
     if tmp |> fst |> fst = "" then (new_summary, summary)
     else
-      let new_mem = remove_array_index id (tmp |> fst |> fst) summary in
+      let new_mem = AST.remove_array_index id (tmp |> fst |> fst) summary in
       mk_new_summary
         (new_this_summary new_summary tmp)
         (new_mem_summary summary new_mem)
@@ -1777,7 +1616,7 @@ let rec unroll p summary m_info c_info s_map e_info =
   | AST.Seq _ when AST.void p -> [ AST.void_rule1 p; AST.void_rule2 p ]
   | Seq (s1, s2) when AST.ground s1 |> not ->
       let lst = unroll s1 summary m_info c_info s_map e_info in
-      List.map (fun x -> AST.Seq (x, s2)) lst
+      List.fold_left (fun lst x -> AST.Seq (x, s2) :: lst) [] lst
   | Seq (s1, s2) when AST.ground s2 |> not -> (
       match AST.last_code s1 with
       | AST.Assign _ when AST.void (AST.Seq (AST.last_code s1, s2)) ->
@@ -1786,10 +1625,12 @@ let rec unroll p summary m_info c_info s_map e_info =
               (AST.Seq (AST.last_code s1, s2))
               summary m_info c_info s_map e_info
           in
-          List.map (fun x -> AST.Seq (AST.modify_last_assign s1, x)) lst
+          List.fold_left
+            (fun lst x -> AST.Seq (AST.modify_last_assign s1, x) :: lst)
+            [] lst
       | _ ->
           let lst = unroll s2 summary m_info c_info s_map e_info in
-          List.map (fun x -> AST.Seq (s1, x)) lst)
+          List.fold_left (fun lst x -> AST.Seq (s1, x) :: lst) [] lst)
   | Const (x, _) when AST.const p ->
       let typ, id = AST.get_vinfo x in
       if is_primitive x then
@@ -1821,7 +1662,10 @@ let rec unroll p summary m_info c_info s_map e_info =
       List.rev_append
         (get_c x0 summary m_info c_info)
         (get_ret_c x0 summary m_info c_info)
-      |> List.map (fun x -> AST.fcall_in_assign_rule p (x |> fst) (x |> snd))
+      |> List.fold_left
+           (fun lst x ->
+             AST.fcall_in_assign_rule p (x |> fst) (x |> snd) :: lst)
+           []
   | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
       let lst = get_void_func x m_info c_info s_map in
       if lst = [] then [ AST.Skip ]
@@ -1857,18 +1701,26 @@ let rec unroll p summary m_info c_info s_map e_info =
         r2 :: [ r3 ]
   | Assign (_, _, _, arg) when AST.arg_in_assign p ->
       let arg_seq =
-        get_arg_seq (List.map (fun x -> AST.Variable x) (arg |> AST.get_arg))
+        get_arg_seq
+          (List.fold_left
+             (fun lst x -> AST.Variable x :: lst)
+             [] (arg |> AST.get_arg))
       in
-      List.map
-        (fun x -> AST.arg_in_assign_rule p x (AST.Param (arg |> AST.get_arg)))
-        arg_seq
+      List.fold_left
+        (fun lst x ->
+          AST.arg_in_assign_rule p x (AST.Param (arg |> AST.get_arg)) :: lst)
+        [] arg_seq
   | Void (_, _, arg) when AST.arg_in_void p ->
       let arg_seq =
-        get_arg_seq (List.map (fun x -> AST.Variable x) (arg |> AST.get_arg))
+        get_arg_seq
+          (List.fold_left
+             (fun lst x -> AST.Variable x :: lst)
+             [] (arg |> AST.get_arg))
       in
-      List.map
-        (fun x -> AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)))
-        arg_seq
+      List.fold_left
+        (fun lst x ->
+          AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)) :: lst)
+        [] arg_seq
   | _ -> [ p ]
 
 (* find error entry *)
