@@ -205,22 +205,22 @@ module ClassInfo = struct
   type t = info M.t
 end
 
-module SetterMap = struct
-  module M = Map.Make (struct
-    type t = class_name [@@deriving compare]
-  end)
-
-  type setter = method_name * id list
-
-  type t = setter list M.t
-end
-
 module FieldSet = struct
   module S = Set.Make (struct
     type t = string [@@deriving compare]
   end)
 
   type t = S.t
+end
+
+module SetterMap = struct
+  module M = Map.Make (struct
+    type t = class_name [@@deriving compare]
+  end)
+
+  type setter = method_name * FieldSet.t
+
+  type t = setter list M.t
 end
 
 module EnumInfo = struct
@@ -638,6 +638,15 @@ module AST = struct
         summary;
       }
 
+  let new_field id field =
+    Variable
+      {
+        import = (id |> get_v).import;
+        variable = (id |> get_v).variable;
+        field;
+        summary = (id |> get_v).summary;
+      }
+
   (* 5 *)
   let void_rule1 s = match s with Seq (s1, _) -> Seq (s1, Skip) | _ -> s
 
@@ -661,12 +670,30 @@ module AST = struct
                   (array_field_var (x0 |> get_v).summary (new_idx, new_elem))
                   (array_current_mem (x0 |> get_v).summary (new_idx, new_elem))
               in
-              Seq
-                ( Seq (Assign (new_id x0 new_next_summary, x1, f, arg), Stmt),
-                  Void (new_id x0 new_current_summary, Func, Arg []) )
-            else Seq (Seq (s1, Stmt), Void (x0, Func, Arg []))
-        | _ -> s)
-    | _ -> s
+              [
+                Seq
+                  ( Seq (Assign (new_id x0 new_next_summary, x1, f, arg), Stmt),
+                    Void (new_id x0 new_current_summary, Func, Arg []) );
+              ]
+            else
+              FieldSet.S.fold
+                (fun field lst ->
+                  Seq
+                    ( Seq
+                        ( Assign
+                            ( new_field x0
+                                (FieldSet.S.remove field (x0 |> get_v).field),
+                              x1,
+                              f,
+                              arg ),
+                          Stmt ),
+                      Void
+                        (new_field x0 (FieldSet.S.singleton field), Func, Arg [])
+                    )
+                  :: lst)
+                (x0 |> get_v).field []
+        | _ -> [ s ])
+    | _ -> [ s ]
 
   (* 6, 7 *)
   let fcall_in_void_rule s f arg =

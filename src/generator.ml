@@ -1340,10 +1340,7 @@ let mk_arg ~is_s param s =
 let get_field_map ret s_map =
   let c_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
   List.fold_left
-    (fun fm (_, fields) ->
-      List.fold_left
-        (fun inner_fm field -> FieldSet.S.add field inner_fm)
-        fm fields)
+    (fun fm (_, fields) -> FieldSet.S.union fields fm)
     FieldSet.S.empty
     (try SetterMap.M.find c_name s_map with _ -> [])
 
@@ -1386,7 +1383,8 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
     else
       let setter_list =
         (try SetterMap.M.find name s_map with _ -> [])
-        |> List.filter (fun (s, _) -> is_private s m_info |> not)
+        |> List.filter (fun (s, fields) ->
+               is_private s m_info |> not && FieldSet.S.subset var.field fields)
       in
       List.map
         (fun (s, _) ->
@@ -1620,7 +1618,7 @@ let get_arg_seq (args : AST.id list) =
 
 let rec unroll p summary m_info c_info s_map e_info =
   match p with
-  | AST.Seq _ when AST.void p -> [ AST.void_rule1 p; AST.void_rule2 p ]
+  | AST.Seq _ when AST.void p -> AST.void_rule1 p :: AST.void_rule2 p
   | Seq (s1, s2) when AST.ground s1 |> not ->
       let lst = unroll s1 summary m_info c_info s_map e_info in
       List.fold_left (fun lst x -> AST.Seq (x, s2) :: lst) [] lst

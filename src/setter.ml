@@ -73,18 +73,12 @@ let find_setter m_name m_summarys m_infos mmap =
     && FieldSet.S.is_empty change_fields
     || (MethodInfo.M.find m_name m_infos).MethodInfo.return = ""
   then mmap
-  else
-    let fields =
-      FieldSet.S.fold
-        (fun field field_list -> field :: field_list)
-        change_fields []
+  else if SetterMap.M.mem class_name mmap then
+    let setter_list =
+      SetterMap.M.find class_name mmap |> List.cons (m_name, change_fields)
     in
-    if SetterMap.M.mem class_name mmap then
-      let setter_list =
-        SetterMap.M.find class_name mmap |> List.cons (m_name, fields)
-      in
-      SetterMap.M.add class_name setter_list mmap
-    else SetterMap.M.add class_name [ (m_name, fields) ] mmap
+    SetterMap.M.add class_name setter_list mmap
+  else SetterMap.M.add class_name [ (m_name, change_fields) ] mmap
 
 let from_summary_map summary m_infos =
   SummaryMap.M.fold
