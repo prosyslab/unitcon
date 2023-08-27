@@ -175,6 +175,20 @@ let insert_test test_type test org_file new_file =
     | "Javac" -> Regexp.first_rm (Str.regexp "@.*\\\n.*{\\\n") code
     | _ -> failwith "not supported"
   in
+  let need_default_class tc =
+    match Str.search_forward ("unitcon_interface" |> Str.regexp) tc 0 with
+    | exception _ -> (
+        match Str.search_forward ("unitcon_enum" |> Str.regexp) tc 0 with
+        | exception _ -> None
+        | _ -> Some "unitcon_enum")
+    | _ -> Some "unitcon_interface"
+  in
+  let insert_default_class c =
+    match c with
+    | Some "unitcon_interface" -> "interface unitcon_interface {}\n"
+    | Some "unitcon_enum" -> "enum unitcon_enum {}\n"
+    | _ -> ""
+  in
   let check_symbol = function
     | "JUnit" -> ".*@Test"
     | "Not_JUnit" -> ".*class"
@@ -189,6 +203,8 @@ let insert_test test_type test org_file new_file =
     | s
       when Str.string_match (Str.regexp (check_symbol test_type)) s 0
            && not check_test ->
+        insert_default_class (test |> snd |> need_default_class)
+        |> output_string oc;
         output_string oc ((test |> snd |> modify_test_code test_type) ^ "\n");
         output_string oc (s ^ "\n");
         insert_maven test_type check_import true ic oc

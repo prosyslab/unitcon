@@ -1229,6 +1229,12 @@ let get_clist (class_package, class_name) m_info (c_info, ig) =
         method_list class_to_find)
     m_info []
 
+let find_class_file =
+  List.fold_left
+    (fun gvar_list const -> AST.GlobalConstant (const ^ ".class") :: gvar_list)
+    []
+    [ "unitcon_interface"; "unitcon_enum" ]
+
 let find_enum_var_list c_name e_info =
   if EnumInfo.M.mem c_name e_info then
     List.fold_left
@@ -1292,8 +1298,10 @@ let global_var_list class_name t_summary summary m_info e_info =
   in
   match t_var with
   | None ->
-      let gvlist = find_global_var_list class_name None mem summary m_info in
-      if gvlist = [] then find_enum_var_list class_name e_info else gvlist
+      if class_name = "Class" then find_class_file
+      else
+        let gvlist = find_global_var_list class_name None mem summary m_info in
+        if gvlist = [] then find_enum_var_list class_name e_info else gvlist
   | Some x ->
       let target_variable =
         Condition.M.fold
@@ -1495,15 +1503,6 @@ let satisfied_c_list id t_summary summary summary_list =
           if Str.string_match (".*Array\\.<init>" |> Str.regexp) constructor 0
           then
             (constructor, modify_summary id t_summary summary, import) :: list
-          else if
-            Str.string_match
-              ("String\\.<init>(String)" |> Str.regexp)
-              constructor 0
-            |> not
-            && Str.string_match
-                 ("String\\.<init>.*" |> Str.regexp)
-                 constructor 0
-          then list
           else (constructor, summary, import) :: list
         else list)
       [] summary_list
