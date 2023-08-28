@@ -1616,26 +1616,15 @@ let get_arg_seq (args : AST.id list) =
              (List.fold_left (fun lst x -> AST.mk_assign_arg x arg :: lst) [] s))
     [ AST.Skip ] args
 
-let rec unroll p summary m_info c_info s_map e_info =
+let rec unroll ~assign_ground p summary m_info c_info s_map e_info =
   match p with
-  | AST.Seq _ when AST.void p -> AST.void_rule1 p :: AST.void_rule2 p
-  | Seq (s1, s2) when AST.ground s1 |> not ->
-      let lst = unroll s1 summary m_info c_info s_map e_info in
+  | _ when assign_ground -> unroll_void p
+  | AST.Seq (s1, s2) when AST.assign_ground s1 |> not ->
+      let lst = unroll ~assign_ground s1 summary m_info c_info s_map e_info in
       List.fold_left (fun lst x -> AST.Seq (x, s2) :: lst) [] lst
-  | Seq (s1, s2) when AST.ground s2 |> not -> (
-      match AST.last_code s1 with
-      | AST.Assign _ when AST.void (AST.Seq (AST.last_code s1, s2)) ->
-          let lst =
-            unroll
-              (AST.Seq (AST.last_code s1, s2))
-              summary m_info c_info s_map e_info
-          in
-          List.fold_left
-            (fun lst x -> AST.Seq (AST.modify_last_assign s1, x) :: lst)
-            [] lst
-      | _ ->
-          let lst = unroll s2 summary m_info c_info s_map e_info in
-          List.fold_left (fun lst x -> AST.Seq (s1, x) :: lst) [] lst)
+  | Seq (s1, s2) when AST.assign_ground s2 |> not ->
+      let lst = unroll ~assign_ground s2 summary m_info c_info s_map e_info in
+      List.fold_left (fun lst x -> AST.Seq (s1, x) :: lst) [] lst
   | Const (x, _) when AST.const p ->
       let typ, id = AST.get_vinfo x in
       if is_primitive x then
@@ -1729,6 +1718,23 @@ let rec unroll p summary m_info c_info s_map e_info =
         [] arg_seq
   | _ -> [ p ]
 
+and unroll_void p =
+  match p with
+  | _ when AST.ground p -> [ p ]
+  | AST.Seq _ when AST.void p -> AST.void_rule1 p :: AST.void_rule2 p
+  | Seq (s1, s2) ->
+      let ns1, ns2 =
+        match AST.last_code s1 with
+        | AST.Assign _ when AST.is_stmt s2 ->
+            (AST.modify_last_assign s1, AST.Seq (AST.last_code s1, s2))
+        | _ -> (s1, s2)
+      in
+      List.fold_left
+        (fun l x ->
+          List.fold_left (fun l2 y -> AST.Seq (x, y) :: l2) l (unroll_void ns2))
+        [] (unroll_void ns1)
+  | _ -> [ p ]
+
 (* find error entry *)
 let rec find_ee e_method e_summary cg summary call_prop_map m_info =
   let propagation caller_method caller_preconds call_prop =
@@ -1819,7 +1825,9 @@ let rec mk_testcase queue summary m_info c_info s_map e_info =
       else
         mk_testcase
           (List.rev_append
-             (unroll p summary m_info c_info s_map e_info |> List.rev)
+             (unroll ~assign_ground:(AST.assign_ground p) p summary m_info
+                c_info s_map e_info
+             |> List.rev)
              tl)
           summary m_info c_info s_map e_info
   | [] -> []
