@@ -529,6 +529,13 @@ module AST = struct
 
   let get_rh_name rh = match rh with Condition.RH_Symbol s -> s | _ -> ""
 
+  let get_index_value v =
+    match v with
+    | Value.Eq (Int i) -> i |> string_of_int
+    | Value.Ge (Int i) -> i |> string_of_int
+    | Value.Gt (Int i) -> i + 1 |> string_of_int
+    | _ -> ""
+
   let org_symbol id summary =
     let variable, memory = summary.precond in
     let id_symbol =
@@ -629,6 +636,8 @@ module AST = struct
       args = org_summary.args;
     }
 
+  let new_seq assign void = Seq (Seq (assign, Stmt), void)
+
   let new_id id summary =
     Variable
       {
@@ -650,48 +659,48 @@ module AST = struct
   (* 5 *)
   let void_rule1 s = match s with Seq (s1, _) -> Seq (s1, Skip) | _ -> s
 
+  let void_rule2_array x0 x1 f arg =
+    let arr_id = x0 |> get_vinfo |> snd in
+    let new_idx, new_elem = get_array_index arr_id (x0 |> get_v).summary in
+    (* remove setter of duplicate index *)
+    if FieldSet.S.mem (new_idx |> snd |> get_index_value) (x0 |> get_v).field
+    then []
+    else
+      let nfield =
+        FieldSet.S.add (new_idx |> snd |> get_index_value) (x0 |> get_v).field
+      in
+      let new_next_summary =
+        next_summary_in_void (x0 |> get_v).summary
+          (remove_array_index arr_id (new_idx |> fst) (x0 |> get_v).summary)
+      in
+      let new_current_summary =
+        current_summary_in_assign (x0 |> get_v).summary
+          (array_field_var (x0 |> get_v).summary (new_idx, new_elem))
+          (array_current_mem (x0 |> get_v).summary (new_idx, new_elem))
+      in
+      [
+        new_seq
+          (Assign (new_id (new_field x0 nfield) new_next_summary, x1, f, arg))
+          (Void (new_id x0 new_current_summary, Func, Arg []));
+      ]
+
+  let void_rule2_normal x0 x1 f arg =
+    let remove = FieldSet.S.remove in
+    FieldSet.S.fold
+      (fun field lst ->
+        new_seq
+          (Assign (new_field x0 (remove field (x0 |> get_v).field), x1, f, arg))
+          (Void (new_field x0 (FieldSet.S.singleton field), Func, Arg []))
+        :: lst)
+      (x0 |> get_v).field []
+
   let void_rule2 s =
     match s with
     | Seq (s1, _) -> (
         match s1 with
         | Assign (x0, x1, f, arg) ->
-            if is_array f then
-              let arr_id = x0 |> get_vinfo |> snd in
-              let new_idx, new_elem =
-                get_array_index arr_id (x0 |> get_v).summary
-              in
-              let new_next_summary =
-                next_summary_in_void (x0 |> get_v).summary
-                  (remove_array_index arr_id (new_idx |> fst)
-                     (x0 |> get_v).summary)
-              in
-              let new_current_summary =
-                current_summary_in_assign (x0 |> get_v).summary
-                  (array_field_var (x0 |> get_v).summary (new_idx, new_elem))
-                  (array_current_mem (x0 |> get_v).summary (new_idx, new_elem))
-              in
-              [
-                Seq
-                  ( Seq (Assign (new_id x0 new_next_summary, x1, f, arg), Stmt),
-                    Void (new_id x0 new_current_summary, Func, Arg []) );
-              ]
-            else
-              FieldSet.S.fold
-                (fun field lst ->
-                  Seq
-                    ( Seq
-                        ( Assign
-                            ( new_field x0
-                                (FieldSet.S.remove field (x0 |> get_v).field),
-                              x1,
-                              f,
-                              arg ),
-                          Stmt ),
-                      Void
-                        (new_field x0 (FieldSet.S.singleton field), Func, Arg [])
-                    )
-                  :: lst)
-                (x0 |> get_v).field []
+            if is_array f then void_rule2_array x0 x1 f arg
+            else void_rule2_normal x0 x1 f arg
         | _ -> [ s ])
     | _ -> [ s ]
 

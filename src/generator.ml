@@ -1384,7 +1384,9 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
       let setter_list =
         (try SetterMap.M.find name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
-               is_private s m_info |> not && FieldSet.S.subset var.field fields)
+               is_private s m_info |> not
+               && (FieldSet.S.subset var.field fields
+                  || Str.string_match (".*Array\\.set" |> Str.regexp) s 0))
       in
       List.map
         (fun (s, _) ->
