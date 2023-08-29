@@ -24,12 +24,20 @@ let rec get_tail_symbol symbol memory =
       | None -> symbol)
   | None -> symbol
 
-let rec get_change_field post_key field_name pre_mem post_mem field_set =
+let get_head_of_tail symbol memory =
+  Condition.M.fold
+    (fun head value t ->
+      match Condition.M.find_opt Condition.RH_Any value with
+      | Some any_s when symbol = any_s -> head
+      | _ -> t)
+    memory symbol
+
+let get_change_field post_key pre_mem post_mem field_set =
   match Condition.M.find_opt post_key post_mem with
   | None -> field_set
   | Some value_map -> (
       match Condition.M.find_opt post_key pre_mem with
-      | None -> FieldSet.S.add field_name field_set
+      | None -> field_set
       | Some _ ->
           Condition.M.fold
             (fun field value old_field_set ->
@@ -37,15 +45,15 @@ let rec get_change_field post_key field_name pre_mem post_mem field_set =
                 match field with
                 | Condition.RH_Var id ->
                     let pre_tail_symbol = get_tail_symbol value pre_mem in
-                    let is_post_tail =
-                      match Condition.M.find_opt pre_tail_symbol post_mem with
-                      | None -> true
-                      | Some _ -> false
+                    let check_change =
+                      get_head_of_tail pre_tail_symbol post_mem
                     in
-                    if is_post_tail then field_set
-                    else FieldSet.S.add id field_set
-                | _ ->
-                    get_change_field value field_name pre_mem post_mem field_set
+                    let change_field =
+                      if pre_tail_symbol = check_change then false else true
+                    in
+                    if change_field then FieldSet.S.add id field_set
+                    else field_set
+                | _ -> field_set
               in
               FieldSet.S.union new_field_set old_field_set)
             value_map field_set)
@@ -53,6 +61,7 @@ let rec get_change_field post_key field_name pre_mem post_mem field_set =
 let get_change_fields
     Language.{ precond = _, pre_mem; postcond = post_var, post_mem; _ } =
   let post_this = get_this_symbol post_var in
+  let post_this = get_tail_symbol post_this post_mem in
   get_change_field post_this "" pre_mem post_mem FieldSet.S.empty
 
 let get_class_name method_name = String.split_on_char '.' method_name |> List.hd

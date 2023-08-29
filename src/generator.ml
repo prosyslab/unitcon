@@ -1198,12 +1198,19 @@ let satisfied_c method_summary id candidate_constructor summary =
       check_summarys
 
 let match_constructor_name class_name method_name =
-  let class_name = Str.split Regexp.dot class_name |> List.rev |> List.hd in
-  let class_name = Str.global_replace Regexp.dollar "\\$" class_name in
+  let class_name =
+    Str.split Regexp.dot class_name
+    |> List.rev |> List.hd
+    |> Str.global_replace Regexp.dollar "\\$"
+  in
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
 let match_return_object class_name method_name m_info =
-  let class_name = Str.split Regexp.dot class_name |> List.rev |> List.hd in
+  let class_name =
+    Str.split Regexp.dot class_name
+    |> List.rev |> List.hd
+    |> Str.global_replace Regexp.dollar "\\$"
+  in
   let info = MethodInfo.M.find method_name m_info in
   let return = info.MethodInfo.return in
   Str.string_match (Str.regexp class_name) return 0
@@ -1503,6 +1510,10 @@ let satisfied_c_list id t_summary summary summary_list =
           if Str.string_match (".*Array\\.<init>" |> Str.regexp) constructor 0
           then
             (constructor, modify_summary id t_summary summary, import) :: list
+          else if
+            Str.string_match (".*builder()" |> Str.regexp) constructor 0 |> not
+            && id = "con_recv"
+          then list
           else (constructor, summary, import) :: list
         else list)
       [] summary_list
