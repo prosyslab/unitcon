@@ -43,61 +43,8 @@ let z3ctx =
 
 let solver = Z3.Solver.mk_solver z3ctx None
 
-let point value =
-  match value with
-  | Value.Eq _ -> 1.0
-  | Neq _ | Le _ | Lt _ | Ge _ | Gt _ -> Float.div 1.0 100.0
-  | Between (l, u) -> (
-      match (l, u) with
-      | Int l, Int u | Int l, Long u | Long l, Int u | Long l, Long u ->
-          if u - l + 1 > 100 then Float.div 1.0 100.0
-          else 1 / (u - l + 1) |> float_of_int
-      | Float l, Float u
-      | Float l, Double u
-      | Double l, Float u
-      | Double l, Double u ->
-          if Float.add (Float.sub u l) 1.0 > 100.0 then Float.div 1.0 100.0
-          else Float.div 1.0 (Float.add (Float.sub u l) 1.0)
-      | _ -> 0.0)
-  | Outside (u, l) -> (
-      match (u, l) with
-      | Int u, Int l | Int u, Long l | Long u, Int l | Long u, Long l ->
-          if l - u + 1 > 100 then 1.0 else (l - u + 1) / 100 |> float_of_int
-      | Float u, Float l
-      | Float u, Double l
-      | Double u, Float l
-      | Double u, Double l ->
-          if Float.add (Float.sub l u) 1.0 > 100.0 then 1.0
-          else Float.div (Float.add (Float.sub l u) 1.0) 100.0
-      | _ -> 0.0)
-
-(* # of non-terminal for p + sum(point) *)
-let match_score p =
-  let rec summary_score s =
-    match s with
-    | AST.Assign (_, _, func, _) -> (
-        match func with
-        | AST.F f ->
-            Value.M.fold
-              (fun _ value accum -> Float.add (point value) accum)
-              f.summary.Language.value 0.0
-        | _ -> 0.0)
-    | Void (_, func, _) -> (
-        match func with
-        | AST.F f ->
-            Value.M.fold
-              (fun _ value accum -> Float.add (point value) accum)
-              f.summary.Language.value 0.0
-        | _ -> 0.0)
-    | Seq (s1, s2) -> Float.add (summary_score s1) (summary_score s2)
-    | _ -> 0.0
-  in
-  summary_score p
-
-let get_score p =
-  let length = AST.count_nt p + AST.length_p p in
-  let point = if !Cmdline.basic_mode then 0.0 else match_score p in
-  (length, point)
+(* # of non-terminals for p, # of statements for p *)
+let get_cost p = (AST.count_nt p, AST.count_s p)
 
 let rec find_relation given_symbol relation =
   match Relation.M.find_opt given_symbol relation with
@@ -920,6 +867,17 @@ let is_recursive_param parent_class method_name m_info =
       | _ -> check)
     false info.MethodInfo.formal_params
 
+let rec is_self_constructor c clist =
+  let class_name =
+    get_class_name ~infer:true c |> Str.global_replace Regexp.dollar "\\$"
+  in
+  match clist with
+  | hd :: _ when Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) hd 0
+    ->
+      true
+  | _ :: tl -> is_self_constructor c tl
+  | [] -> false
+
 let calc_z3 id z3exp =
   let solver = Z3.Solver.mk_solver z3ctx None in
   Z3.Solver.add solver z3exp;
@@ -1510,10 +1468,6 @@ let satisfied_c_list id t_summary summary summary_list =
           if Str.string_match (".*Array\\.<init>" |> Str.regexp) constructor 0
           then
             (constructor, modify_summary id t_summary summary, import) :: list
-          else if
-            Str.string_match (".*builder()" |> Str.regexp) constructor 0 |> not
-            && id = "con_recv"
-          then list
           else (constructor, summary, import) :: list
         else list)
       [] summary_list
@@ -1539,7 +1493,7 @@ let get_cfuncs list m_info =
     (fun lst (c, s, i) -> get_cfunc (c, s, i) m_info :: lst)
     [] list
 
-let get_c ret summary m_info c_info =
+let get_c ret summary cg m_info c_info =
   let class_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
   if class_name = "" then []
   else
@@ -1550,10 +1504,15 @@ let get_c ret summary m_info c_info =
       |> List.filter (fun (c, _, _) ->
              is_recursive_param class_name c m_info |> not)
     in
+    let caller_filtering list =
+      List.filter
+        (fun (c, _, _) -> is_self_constructor c (CG.pred cg c) |> not)
+        list
+    in
     let s_list =
       get_clist (package, class_name) m_info c_info
       |> satisfied_c_list id (AST.get_v ret).summary summary
-      |> summary_filtering
+      |> summary_filtering |> caller_filtering
     in
     get_cfuncs s_list m_info
 
@@ -1629,14 +1588,18 @@ let get_arg_seq (args : AST.id list) =
              (List.fold_left (fun lst x -> AST.mk_assign_arg x arg :: lst) [] s))
     [ AST.Skip ] args
 
-let rec unroll ~assign_ground p summary m_info c_info s_map e_info =
+let rec unroll ~assign_ground p summary cg m_info c_info s_map e_info =
   match p with
   | _ when assign_ground -> unroll_void p
   | AST.Seq (s1, s2) when AST.assign_ground s1 |> not ->
-      let lst = unroll ~assign_ground s1 summary m_info c_info s_map e_info in
+      let lst =
+        unroll ~assign_ground s1 summary cg m_info c_info s_map e_info
+      in
       List.fold_left (fun lst x -> AST.Seq (x, s2) :: lst) [] lst
   | Seq (s1, s2) when AST.assign_ground s2 |> not ->
-      let lst = unroll ~assign_ground s2 summary m_info c_info s_map e_info in
+      let lst =
+        unroll ~assign_ground s2 summary cg m_info c_info s_map e_info
+      in
       List.fold_left (fun lst x -> AST.Seq (s1, x) :: lst) [] lst
   | Const (x, _) when AST.const p ->
       let typ, id = AST.get_vinfo x in
@@ -1668,7 +1631,7 @@ let rec unroll ~assign_ground p summary m_info c_info s_map e_info =
   | Assign (x0, _, _, _) when AST.fcall_in_assign p ->
       let field_map = get_field_map x0 s_map in
       List.rev_append
-        (get_c x0 summary m_info c_info)
+        (get_c x0 summary cg m_info c_info)
         (get_ret_c x0 summary m_info c_info)
       |> List.fold_left
            (fun lst x ->
@@ -1823,14 +1786,14 @@ let pretty_format p =
 let priority_q queue =
   List.sort
     (fun p1 p2 ->
-      let s1 = get_score p1 in
-      let s2 = get_score p2 in
+      let s1 = get_cost p1 in
+      let s2 = get_cost p2 in
       if compare (s1 |> fst) (s2 |> fst) <> 0 then
         compare (s1 |> fst) (s2 |> fst)
-      else compare (s2 |> snd) (s1 |> snd))
+      else compare (s1 |> snd) (s2 |> snd))
     queue
 
-let rec mk_testcase queue summary m_info c_info s_map e_info =
+let rec mk_testcase queue summary cg m_info c_info s_map e_info =
   let queue = priority_q queue in
   match queue with
   | p :: tl ->
@@ -1838,11 +1801,11 @@ let rec mk_testcase queue summary m_info c_info s_map e_info =
       else
         mk_testcase
           (List.rev_append
-             (unroll ~assign_ground:(AST.assign_ground p) p summary m_info
+             (unroll ~assign_ground:(AST.assign_ground p) p summary cg m_info
                 c_info s_map e_info
              |> List.rev)
              tl)
-          summary m_info c_info s_map e_info
+          summary cg m_info c_info s_map e_info
   | [] -> []
 
 let mk_testcases ~is_start queue (e_method, error_summary)
@@ -1864,5 +1827,5 @@ let mk_testcases ~is_start queue (e_method, error_summary)
         []
     else queue
   in
-  let result = mk_testcase init summary m_info c_info s_map e_info in
+  let result = mk_testcase init summary cg m_info c_info s_map e_info in
   if result = [] then (("", ""), []) else List.hd result

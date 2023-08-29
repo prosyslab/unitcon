@@ -321,15 +321,13 @@ module AST = struct
     | Assign _ when ground p -> Skip
     | _ -> p
 
-  let rec length_p = function
-    | Const _ -> 0
-    | Assign (_, _, _, arg) -> length_arg arg
-    | Void (_, _, arg) -> length_arg arg
-    | Seq (s1, s2) -> length_p s1 + length_p s2
-    | Skip -> 0
+  let rec count_s = function
+    | Const _ -> 1
+    | Assign _ -> 1
+    | Void _ -> 1
+    | Seq (s1, s2) -> count_s s1 + count_s s2
+    | Skip -> 1
     | Stmt -> 0
-
-  and length_arg = function Param p -> List.length p + 1 | _ -> 0
 
   let rec count_nt = function
     | Const (x, exp) -> count_id x + count_exp exp
@@ -771,7 +769,7 @@ module AST = struct
           ^ "] = "
           ^ (lst |> List.tl |> List.hd |> Regexp.rm_space)
         else "(" ^ param ^ ")"
-    | Arg _ -> "Arg"
+    | Arg x -> "Arg(" ^ (x |> List.length |> string_of_int) ^ ")"
 
   let func_code func =
     match func with
