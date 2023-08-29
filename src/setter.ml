@@ -62,7 +62,7 @@ let get_change_fields
     Language.{ precond = _, pre_mem; postcond = post_var, post_mem; _ } =
   let post_this = get_this_symbol post_var in
   let post_this = get_tail_symbol post_this post_mem in
-  get_change_field post_this "" pre_mem post_mem FieldSet.S.empty
+  get_change_field post_this pre_mem post_mem FieldSet.S.empty
 
 let get_class_name method_name = String.split_on_char '.' method_name |> List.hd
 
