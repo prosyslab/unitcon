@@ -867,16 +867,29 @@ let is_recursive_param parent_class method_name m_info =
       | _ -> check)
     false info.MethodInfo.formal_params
 
-let rec is_self_constructor c clist =
-  let class_name =
+let is_self_constructor c clist =
+  let c_name =
     get_class_name ~infer:true c |> Str.global_replace Regexp.dollar "\\$"
   in
-  match clist with
-  | hd :: _ when Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) hd 0
-    ->
-      true
-  | _ :: tl -> is_self_constructor c tl
-  | [] -> false
+  let rec check lst =
+    match lst with
+    | hd :: _ when Str.string_match (c_name ^ "\\.<init>" |> Str.regexp) hd 0 ->
+        true
+    | _ :: tl -> check tl
+    | [] -> false
+  in
+  check clist
+
+let is_void_method m_name s_map =
+  let c_name = get_class_name ~infer:true m_name in
+  let slist = try SetterMap.M.find c_name s_map with _ -> [] in
+  let rec check lst =
+    match lst with
+    | hd :: _ when m_name = (hd |> fst) -> true
+    | _ :: tl -> check tl
+    | [] -> false
+  in
+  check slist
 
 let calc_z3 id z3exp =
   let solver = Z3.Solver.mk_solver z3ctx None in
@@ -1369,7 +1382,7 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
             f_arg ))
         setter_list
 
-let get_ret_obj (class_package, class_name) m_info (c_info, ig) =
+let get_ret_obj (class_package, class_name) m_info (c_info, ig) s_map =
   let full_class_name =
     if class_package = "" then class_name else class_package
   in
@@ -1385,6 +1398,7 @@ let get_ret_obj (class_package, class_name) m_info (c_info, ig) =
             match_return_object class_name_to_find method_name m_info
             && is_private method_name m_info |> not
             && is_init_method method_name |> not
+            && is_void_method method_name s_map |> not
           then
             (method_name, get_package method_name m_info (c_info, ig))
             :: init_list
@@ -1519,7 +1533,7 @@ let get_c ret summary cg m_info c_info =
     in
     get_cfuncs s_list m_info
 
-let get_ret_c ret summary m_info c_info =
+let get_ret_c ret summary m_info c_info s_map =
   let class_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
   if class_name = "" || class_name = "String" then []
   else
@@ -1531,7 +1545,7 @@ let get_ret_c ret summary m_info c_info =
              is_recursive_param class_name c m_info |> not)
     in
     let s_list =
-      get_ret_obj (package, class_name) m_info c_info
+      get_ret_obj (package, class_name) m_info c_info s_map
       |> satisfied_c_list id (AST.get_v ret).summary summary
       |> summary_filtering
     in
@@ -1635,7 +1649,7 @@ let rec unroll ~assign_ground p summary cg m_info c_info s_map e_info =
       let field_map = get_field_map x0 s_map in
       List.rev_append
         (get_c x0 summary cg m_info c_info)
-        (get_ret_c x0 summary m_info c_info)
+        (get_ret_c x0 summary m_info c_info s_map)
       |> List.fold_left
            (fun lst x ->
              AST.fcall_in_assign_rule p field_map (x |> fst) (x |> snd) :: lst)
