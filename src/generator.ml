@@ -784,6 +784,19 @@ let is_public m_name m_info =
 let is_init_method method_name =
   Str.string_match (".*\\.<init>" |> Str.regexp) method_name 0
 
+let is_array_init m =
+  let arr =
+    [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
+  in
+  let rec check arr =
+    match arr with
+    | h :: t ->
+        if Str.string_match (h ^ "Array\\.<init>" |> Str.regexp) m 0 then true
+        else check t
+    | [] -> false
+  in
+  check arr
+
 let get_class_name ~infer method_name =
   if infer then Regexp.global_rm ("\\..+(.*)" |> Str.regexp) method_name
   else Regexp.global_rm ("(.*)" |> Str.regexp) method_name
@@ -1479,9 +1492,12 @@ let satisfied_c_list id t_summary summary summary_list =
       (fun list (constructor, import) ->
         let check, summary = satisfied_c t_summary id constructor summary in
         if check then
-          if Str.string_match (".*Array\\.<init>" |> Str.regexp) constructor 0
-          then
+          if is_array_init constructor then
             (constructor, modify_summary id t_summary summary, import) :: list
+          else if
+            Str.string_match ("String\\.<init>" |> Str.regexp) constructor 0
+            && "String.<init>(String)" <> constructor
+          then list
           else (constructor, summary, import) :: list
         else list)
       [] summary_list

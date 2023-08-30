@@ -263,34 +263,34 @@ let obj_postmem =
   |> Condition.M.add (Condition.RH_Symbol "v1")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
 
-(* let string_var =
-     Condition.M.empty
-     |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "s")
-     |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+let string_var =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "s")
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
-   let string_premem =
-     let value_map = Condition.M.empty in
-     Condition.M.empty
-     |> Condition.M.add (Condition.RH_Symbol "v1")
-          (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-     |> Condition.M.add (Condition.RH_Symbol "v2")
-          (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-     |> Condition.M.add (Condition.RH_Symbol "v3")
-          (value_map
-          |> Condition.M.add (Condition.RH_Var "s") (Condition.RH_Symbol "v5"))
+let string_premem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "s") (Condition.RH_Symbol "v5"))
 
-   let string_postmem =
-     let value_map = Condition.M.empty in
-     Condition.M.empty
-     |> Condition.M.add (Condition.RH_Symbol "v1")
-          (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-     |> Condition.M.add (Condition.RH_Symbol "v2")
-          (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-     |> Condition.M.add (Condition.RH_Symbol "v3")
-          (value_map
-          |> Condition.M.add (Condition.RH_Var "s") (Condition.RH_Symbol "v5"))
-     |> Condition.M.add (Condition.RH_Symbol "v5")
-          (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map) *)
+let string_postmem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "s") (Condition.RH_Symbol "v5"))
+  |> Condition.M.add (Condition.RH_Symbol "v5")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
 
 let array_var =
   Condition.M.empty
@@ -501,15 +501,15 @@ let obj_summary =
       args = [];
     }
 
-(* let string_summary =
-   Language.
-     {
-       relation = Relation.M.empty;
-       value = Value.M.empty;
-       precond = (string_var, string_premem);
-       postcond = (string_var, string_postmem);
-       args = [];
-     } *)
+let string_summary =
+  Language.
+    {
+      relation = Relation.M.empty;
+      value = Value.M.empty;
+      precond = (string_var, string_premem);
+      postcond = (string_var, string_postmem);
+      args = [];
+    }
 
 let array_summary =
   Language.
@@ -670,17 +670,17 @@ let obj_info =
       filename = "";
     }
 
-(* let string_info =
-   let this = ("java.lang.String", Language.This String) in
-   let arg = ("java.lang.String", Language.Var (String, "s")) in
-   MethodInfo.
-     {
-       modifier = Language.Public;
-       is_static = false;
-       formal_params = [ this; arg ];
-       return = "";
-       filename = "";
-     } *)
+let string_info =
+  let this = ("java.lang.String", Language.This String) in
+  let arg = ("java.lang.String", Language.Var (String, "s")) in
+  MethodInfo.
+    {
+      modifier = Language.Public;
+      is_static = false;
+      formal_params = [ this; arg ];
+      return = "";
+      filename = "";
+    }
 
 let int_array_info =
   let this = ("IntArray", Language.This (Array Int)) in
@@ -908,7 +908,7 @@ let add_java_package_summary mmap =
   |> SummaryMap.M.add "PrintStream.<init>(File)" [ print_summary ]
   |> SummaryMap.M.add "FileInputStream.<init>(File)" [ file_input_summary ]
   |> SummaryMap.M.add "Object.<init>()" [ obj_summary ]
-  (* |> SummaryMap.M.add "String.<init>(String)" [ string_summary ] *)
+  |> SummaryMap.M.add "String.<init>(String)" [ string_summary ]
   |> SummaryMap.M.add "IntArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "LongArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "FloatArray.<init>(int)" [ array_summary ]
@@ -938,7 +938,7 @@ let add_java_package_method mmap =
   |> MethodInfo.M.add "PrintStream.<init>(File)" print_info
   |> MethodInfo.M.add "FileInputStream.<init>(File)" file_input_info
   |> MethodInfo.M.add "Object.<init>()" obj_info
-  (* |> MethodInfo.M.add "String.<init>(String)" string_info *)
+  |> MethodInfo.M.add "String.<init>(String)" string_info
   |> MethodInfo.M.add "IntArray.<init>(int)" int_array_info
   |> MethodInfo.M.add "LongArray.<init>(int)" long_array_info
   |> MethodInfo.M.add "FloatArray.<init>(int)" float_array_info
