@@ -1506,7 +1506,10 @@ let get_c ret summary cg m_info c_info =
     in
     let caller_filtering list =
       List.filter
-        (fun (c, _, _) -> is_self_constructor c (CG.pred cg c) |> not)
+        (fun (c, _, _) ->
+          is_self_constructor c
+            (try CG.pred cg c with Invalid_argument _ -> [])
+          |> not)
         list
     in
     let s_list =
