@@ -772,14 +772,14 @@ let is_s_method m_name m_info =
   | Some m -> m.MethodInfo.is_static
 
 let is_private m_name m_info =
-  match (MethodInfo.M.find m_name m_info).MethodInfo.modifier with
-  | Private -> true
-  | _ -> false
+  match MethodInfo.M.find_opt m_name m_info with
+  | None -> false
+  | Some m -> ( match m.MethodInfo.modifier with Private -> true | _ -> false)
 
 let is_public m_name m_info =
-  match (MethodInfo.M.find m_name m_info).MethodInfo.modifier with
-  | Public -> true
-  | _ -> false
+  match MethodInfo.M.find_opt m_name m_info with
+  | None -> false
+  | Some m -> ( match m.MethodInfo.modifier with Public -> true | _ -> false)
 
 let is_init_method method_name =
   Str.string_match (".*\\.<init>" |> Str.regexp) method_name 0
@@ -880,18 +880,18 @@ let is_recursive_param parent_class method_name m_info =
       | _ -> check)
     false info.MethodInfo.formal_params
 
-let is_self_constructor c clist =
-  let c_name =
-    get_class_name ~infer:true c |> Str.global_replace Regexp.dollar "\\$"
-  in
-  let rec check lst =
-    match lst with
-    | hd :: _ when Str.string_match (c_name ^ "\\.<init>" |> Str.regexp) hd 0 ->
-        true
-    | _ :: tl -> check tl
-    | [] -> false
-  in
-  check clist
+(* let is_self_constructor c clist =
+   let c_name =
+     get_class_name ~infer:true c |> Str.global_replace Regexp.dollar "\\$"
+   in
+   let rec check lst =
+     match lst with
+     | hd :: _ when Str.string_match (c_name ^ "\\.<init>" |> Str.regexp) hd 0 ->
+         true
+     | _ :: tl -> check tl
+     | [] -> false
+   in
+   check clist *)
 
 let is_void_method m_name s_map =
   let c_name = get_class_name ~infer:true m_name in
@@ -1523,7 +1523,7 @@ let get_cfuncs list m_info =
     (fun lst (c, s, i) -> get_cfunc (c, s, i) m_info :: lst)
     [] list
 
-let get_c ret summary cg m_info c_info =
+let get_c ret summary _ m_info c_info =
   let class_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
   if class_name = "" then []
   else
@@ -1534,18 +1534,19 @@ let get_c ret summary cg m_info c_info =
       |> List.filter (fun (c, _, _) ->
              is_recursive_param class_name c m_info |> not)
     in
-    let caller_filtering list =
-      List.filter
-        (fun (c, _, _) ->
-          is_self_constructor c
-            (try CG.pred cg c with Invalid_argument _ -> [])
-          |> not)
-        list
-    in
+    (* let caller_filtering list =
+         List.filter
+           (fun (c, _, _) ->
+             is_self_constructor c
+               (try CG.pred cg c with Invalid_argument _ -> [])
+             |> not)
+           list
+       in *)
     let s_list =
       get_clist (package, class_name) m_info c_info
       |> satisfied_c_list id (AST.get_v ret).summary summary
-      |> summary_filtering |> caller_filtering
+      |> summary_filtering
+      (* |> caller_filtering *)
     in
     get_cfuncs s_list m_info
 
@@ -1821,6 +1822,7 @@ let priority_q queue =
     (fun p1 p2 ->
       let s1 = get_cost p1 in
       let s2 = get_cost p2 in
+      (* compare ((s1 |> fst) + (s1 |> snd)) ((s2 |> fst) + (s2 |> snd)) *)
       if compare (s1 |> fst) (s2 |> fst) <> 0 then
         compare (s1 |> fst) (s2 |> fst)
       else compare (s1 |> snd) (s2 |> snd))

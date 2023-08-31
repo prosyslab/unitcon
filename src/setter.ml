@@ -81,17 +81,19 @@ let find_setter m_name m_summarys m_infos mmap =
         get_change_fields summary |> FieldSet.S.union field_set)
       FieldSet.S.empty m_summarys
   in
-  if
-    (MethodInfo.M.find m_name m_infos).MethodInfo.return <> "void"
-    && FieldSet.S.is_empty change_fields
-    || (MethodInfo.M.find m_name m_infos).MethodInfo.return = ""
-  then mmap
-  else if SetterMap.M.mem class_name mmap then
-    let setter_list =
-      SetterMap.M.find class_name mmap |> List.cons (m_name, change_fields)
-    in
-    SetterMap.M.add class_name setter_list mmap
-  else SetterMap.M.add class_name [ (m_name, change_fields) ] mmap
+  match MethodInfo.M.find_opt m_name m_infos with
+  | Some i ->
+      if
+        (i.MethodInfo.return <> "void" && FieldSet.S.is_empty change_fields)
+        || i.MethodInfo.return = ""
+      then mmap
+      else if SetterMap.M.mem class_name mmap then
+        let setter_list =
+          SetterMap.M.find class_name mmap |> List.cons (m_name, change_fields)
+        in
+        SetterMap.M.add class_name setter_list mmap
+      else SetterMap.M.add class_name [ (m_name, change_fields) ] mmap
+  | _ -> mmap
 
 let from_summary_map summary m_infos =
   SummaryMap.M.fold
