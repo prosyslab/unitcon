@@ -3,8 +3,6 @@ module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 module EnumInfo = Language.EnumInfo
 
-let blacklist : string list ref = ref [] (* unusing method list *)
-
 let con_path = "unitcon_properties"
 
 let trial = ref 0
@@ -27,6 +25,12 @@ type t = {
 type build_type = Maven | Javac of string
 
 type expected_bug_type = TESTCASE | TRACE of string
+
+let get_pkg str =
+  str
+  |> Regexp.first_rm (".*/java/" |> Str.regexp)
+  |> Regexp.first_rm ("[a-zA-Z0-9]*\\.java$" |> Str.regexp)
+  |> Str.global_replace ("/" |> Str.regexp) "."
 
 (* ************************************** *
    parse analyzer's output
@@ -309,9 +313,9 @@ let build_program info tc =
       x
 
 (* queue: (testcase * list(partial testcase)) *)
-let rec run_test ~is_start info queue e_method_info program_info =
+let rec run_test ~is_start pkg info queue e_method_info p_info =
   incr trial;
-  let tc, tc_list = make_testcase ~is_start queue e_method_info program_info in
+  let tc, tc_list = make_testcase ~is_start pkg queue e_method_info p_info in
   if tc = ("", "") then failwith "can't proceed anymore";
   let result_ic = build_program info tc in
   if checking_bug_presence result_ic info.expected_bug then (
@@ -322,7 +326,7 @@ let rec run_test ~is_start info queue e_method_info program_info =
     tc)
   else (
     close_in result_ic |> ignore;
-    run_test ~is_start:false info tc_list e_method_info program_info)
+    run_test ~is_start:false pkg info tc_list e_method_info p_info)
 
 let run program_dir =
   time := Unix.time ();
@@ -336,7 +340,7 @@ let run program_dir =
   let enum_info = parse_enum_info info.enum_file in
   let call_prop_map = parse_callprop info.call_prop_file in
   let error_method_info = parse_error_summary info.error_summary_file in
-  run_test ~is_start:true info [] error_method_info
+  run_test ~is_start:true (get_pkg info.test_file) info [] error_method_info
     ( callgraph,
       summary,
       call_prop_map,

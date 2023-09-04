@@ -30,7 +30,7 @@ let recv = ref 0
 
 let new_var = ref 0
 
-let tc_num = ref 0
+let pkg = ref ""
 
 let z3ctx =
   Z3.mk_context
@@ -861,7 +861,7 @@ let is_public_or_default method_name m_info c_info =
   in
   let s = name ^ "$" in
   let package = Regexp.global_rm (Str.regexp s) package in
-  if Str.string_match (Str.regexp package) package 0 then
+  if Str.string_match (Str.regexp package) !pkg 0 then
     match info.MethodInfo.modifier with
     | Default | Protected | Public -> true
     | _ -> false
@@ -1842,7 +1842,7 @@ let rec mk_testcase queue summary cg m_info c_info s_map e_info =
           summary cg m_info c_info s_map e_info
   | [] -> []
 
-let mk_testcases ~is_start queue (e_method, error_summary)
+let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
     (cg, summary, call_prop_map, m_info, c_info, s_map, e_info) =
   let apply_rule list =
     List.fold_left
@@ -1852,13 +1852,14 @@ let mk_testcases ~is_start queue (e_method, error_summary)
       [] list
   in
   let init =
-    if is_start then
+    if is_start then (
+      pkg := pkg_name;
       ErrorEntrySet.fold
         (fun (ee, ee_s) init_list ->
           apply_rule (get_void_func AST.Id ~ee ~es:ee_s m_info c_info s_map)
           |> List.rev_append init_list)
         (find_ee e_method error_summary cg summary call_prop_map m_info)
-        []
+        [])
     else queue
   in
   let result = mk_testcase init summary cg m_info c_info s_map e_info in
