@@ -83,10 +83,7 @@ let find_setter m_name m_summarys m_infos mmap =
   in
   match MethodInfo.M.find_opt m_name m_infos with
   | Some i ->
-      if
-        (i.MethodInfo.return <> "void" && FieldSet.S.is_empty change_fields)
-        || i.MethodInfo.return = ""
-      then mmap
+      if i.MethodInfo.return = "" || i.MethodInfo.return <> "void" then mmap
       else if SetterMap.M.mem class_name mmap then
         let setter_list =
           SetterMap.M.find class_name mmap |> List.cons (m_name, change_fields)

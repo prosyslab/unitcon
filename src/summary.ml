@@ -307,6 +307,29 @@ let get_return assoc =
   in
   return
 
+let is_unnes_method fparam =
+  let check_anony_class t =
+    match t with
+    | Language.Object o ->
+        let clist = Str.split Regexp.dollar o in
+        List.fold_left
+          (fun check name ->
+            match name |> int_of_string_opt with Some _ -> true | _ -> check)
+          false clist
+    | _ -> false
+  in
+  let check_lambda id =
+    if Str.string_match ("\\$bcvar" |> Str.regexp) id 0 then true else false
+  in
+  let check_unnes p =
+    match p |> snd with
+    | Language.This _ -> false
+    | Var (typ, id) -> check_anony_class typ || check_lambda id
+  in
+  List.fold_left
+    (fun check param -> if check_unnes param then true else check)
+    false fparam
+
 let mapping_method_info method_info mmap =
   let method_name = get_method_name method_info in
   let return = get_return method_info in
@@ -334,10 +357,11 @@ let mapping_method_info method_info mmap =
     Str.string_match (".*access\\$.*" |> Str.regexp) method_name 0
     || Str.string_match (".*access_.*" |> Str.regexp) method_name 0
     || Str.string_match (".*\\.clone()$" |> Str.regexp) method_name 0
+    || is_unnes_method formal_params
   then mmap
   else MethodInfo.M.add method_name info mmap
 
-let mapping_summary method_summarys mmap =
+let mapping_summary method_summarys minfo mmap =
   let method_name = get_method_name method_summarys in
   let summarys =
     JsonUtil.member "summary" method_summarys
@@ -351,6 +375,7 @@ let mapping_summary method_summarys mmap =
     Str.string_match (".*access\\$.*" |> Str.regexp) method_name 0
     || Str.string_match (".*access_.*" |> Str.regexp) method_name 0
     || Str.string_match (".*\\.clone()$" |> Str.regexp) method_name 0
+    || MethodInfo.M.mem method_name minfo |> not
   then mmap
   else SummaryMap.M.add method_name summarys mmap
 
@@ -363,11 +388,11 @@ let from_method_json json =
   in
   Modeling.add_java_package_method method_info
 
-let from_summary_json json =
+let from_summary_json minfo json =
   let json = JsonUtil.to_list json in
   let summary_map =
     List.fold_left
-      (fun mmap method_summarys -> mapping_summary method_summarys mmap)
+      (fun mmap method_summarys -> mapping_summary method_summarys minfo mmap)
       SummaryMap.M.empty json
   in
   Modeling.add_java_package_summary summary_map

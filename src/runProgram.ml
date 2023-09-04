@@ -47,17 +47,17 @@ let input name =
   close_in chan;
   data
 
-let parse_summary filename =
+let parse_method_info filename =
   let json = Json.from_file filename in
   let filename = Filename.basename filename in
   output filename json;
   let data = input filename in
-  Summary.from_summary_json data
+  Summary.from_method_json data
 
-let parse_method_info filename =
+let parse_summary filename minfo =
   let filename = Filename.basename filename in
   let data = input filename in
-  Summary.from_method_json data
+  Summary.from_summary_json minfo data
 
 let parse_callgraph filename =
   let filename = Filename.basename filename in
@@ -328,8 +328,8 @@ let run program_dir =
   time := Unix.time ();
   let info = init program_dir in
   cp_test_file info.program_dir info.test_file;
-  let summary = parse_summary info.summary_file in
   let method_info = parse_method_info info.summary_file in
+  let summary = parse_summary info.summary_file method_info in
   let callgraph = parse_callgraph info.summary_file in
   let setter_map = get_setter summary method_info in
   let class_info = parse_class_info info.inheritance_file in
