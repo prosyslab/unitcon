@@ -340,7 +340,12 @@ module AST = struct
     | Skip -> 0
     | Stmt -> 1
 
-  and count_arg = function Arg a -> List.length a + 1 | _ -> 0
+  and count_arg = function
+    | Arg a ->
+        if List.length a > 3 then
+          List.length a + ((List.length a - 3) * 100) + 1
+        else List.length a + 1
+    | _ -> 0
 
   and count_func func typ =
     match func with

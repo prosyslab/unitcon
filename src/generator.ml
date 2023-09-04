@@ -1673,7 +1673,7 @@ let rec unroll ~assign_ground p summary cg m_info c_info s_map e_info =
            []
   | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
       let lst = get_void_func x m_info c_info s_map in
-      if lst = [] then [ AST.Skip ]
+      if lst = [] then []
       else
         List.fold_left
           (fun lst (f, arg) -> AST.fcall_in_void_rule p f (AST.Arg arg) :: lst)
@@ -1822,7 +1822,6 @@ let priority_q queue =
     (fun p1 p2 ->
       let s1 = get_cost p1 in
       let s2 = get_cost p2 in
-      (* compare ((s1 |> fst) + (s1 |> snd)) ((s2 |> fst) + (s2 |> snd)) *)
       if compare (s1 |> fst) (s2 |> fst) <> 0 then
         compare (s1 |> fst) (s2 |> fst)
       else compare (s1 |> snd) (s2 |> snd))
