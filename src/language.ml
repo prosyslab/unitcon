@@ -248,7 +248,7 @@ module AST = struct
     summary : summary;
   }
 
-  type func_type = FA | FV
+  type id_type = LVAR | RECV
 
   type arg = Param of var list | Arg of var list
 
@@ -332,31 +332,24 @@ module AST = struct
     | Stmt -> 0
 
   let rec count_nt = function
-    | Const (x, exp) -> count_id x + count_exp exp
+    | Const (x, exp) -> count_id x LVAR + count_exp exp
     | Assign (x0, x1, func, arg) ->
-        count_id x0 + count_id x1 + count_func func FA + count_arg arg
-    | Void (x, func, arg) -> count_id x + count_func func FV + count_arg arg
+        count_id x0 LVAR + count_id x1 RECV + count_func func + count_arg arg
+    | Void (x, func, arg) -> count_id x RECV + count_func func + count_arg arg
     | Seq (s1, s2) -> count_nt s1 + count_nt s2
     | Skip -> 0
     | Stmt -> 1
 
   and count_arg = function
     | Arg a ->
-        if List.length a > 3 then
-          List.length a + ((List.length a - 3) * 100) + 1
-        else List.length a + 1
+        (3 |> float_of_int) ** (List.length a + 1 |> float_of_int)
+        |> int_of_float
     | _ -> 0
 
-  and count_func func typ =
-    match func with
-    | Func -> 1
-    | F f when typ = FA ->
-        if Str.string_match (".*\\.<init>" |> Str.regexp) f.method_name 0 then 0
-        else 200
-    | F _ when typ = FV -> 100
-    | _ -> 0
+  and count_func = function Func -> 1 | _ -> 0
 
-  and count_id = function Id -> 1 | _ -> 0
+  and count_id id typ =
+    match id with Id -> 1 | Variable _ when typ = RECV -> 3 | _ -> 0
 
   and count_exp = function Exp -> 1 | _ -> 0
 
