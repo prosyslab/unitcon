@@ -370,6 +370,11 @@ module AST = struct
     if Str.string_match (".*Array\\.set" |> Str.regexp) fname 0 then true
     else false
 
+  let is_file f =
+    let fname = (get_func f).method_name in
+    if Str.string_match ("File\\.<init>" |> Str.regexp) fname 0 then true
+    else false
+
   (* ************************************** *
      Checking for Synthesis Rules
    * ************************************** *)
@@ -887,7 +892,13 @@ module AST = struct
           Str.string_match
             (".*\\.<init>" |> Str.regexp)
             (get_func func).method_name 0
-        then id_code x0 ^ " = " ^ func_code func ^ arg_code func arg ^ ";\n"
+        then
+          let code =
+            id_code x0 ^ " = " ^ func_code func ^ arg_code func arg ^ ";\n"
+          in
+          if is_file func then
+            code ^ recv_name_code x0 func ^ "createNewFile();\n"
+          else code
         else
           id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
           ^ arg_code func arg ^ ";\n"

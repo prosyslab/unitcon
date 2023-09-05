@@ -1498,6 +1498,12 @@ let satisfied_c_list id t_summary summary summary_list =
             Str.string_match ("String\\.<init>" |> Str.regexp) constructor 0
             && "String.<init>(String)" <> constructor
           then list
+          else if
+            Str.string_match
+              ("FileInputStream\\.<init>" |> Str.regexp)
+              constructor 0
+            && "FileInputStream.<init>(File)" <> constructor
+          then list
           else (constructor, summary, import) :: list
         else list)
       [] summary_list

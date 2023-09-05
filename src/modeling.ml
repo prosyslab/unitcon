@@ -94,21 +94,21 @@ let file_postmem =
   |> Condition.M.add (Condition.RH_Symbol "v5")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
 
-let file_create_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+(* let file_create_var =
+     Condition.M.empty
+     |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
-let file_create_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
+   let file_create_premem =
+     let value_map = Condition.M.empty in
+     Condition.M.empty
+     |> Condition.M.add (Condition.RH_Symbol "v1")
+          (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
 
-let file_create_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
+   let file_create_postmem =
+     let value_map = Condition.M.empty in
+     Condition.M.empty
+     |> Condition.M.add (Condition.RH_Symbol "v1")
+          (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map) *)
 
 let image_var =
   Condition.M.empty
@@ -431,15 +431,15 @@ let file_summary =
       args = [];
     }
 
-let file_create_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (file_create_var, file_create_premem);
-      postcond = (file_create_var, file_create_postmem);
-      args = [];
-    }
+(* let file_create_summary =
+   Language.
+     {
+       relation = Relation.M.empty;
+       value = Value.M.empty;
+       precond = (file_create_var, file_create_premem);
+       postcond = (file_create_var, file_create_postmem);
+       args = [];
+     } *)
 
 let image_summary =
   Language.
@@ -582,16 +582,16 @@ let file_info =
       filename = "";
     }
 
-let file_create_info =
-  let this = ("java.io.File", Language.This (Object "File")) in
-  MethodInfo.
-    {
-      modifier = Language.Public;
-      is_static = false;
-      formal_params = [ this ];
-      return = "void";
-      filename = "";
-    }
+(* let file_create_info =
+   let this = ("java.io.File", Language.This (Object "File")) in
+   MethodInfo.
+     {
+       modifier = Language.Public;
+       is_static = false;
+       formal_params = [ this ];
+       return = "void";
+       filename = "";
+     } *)
 
 let image_info =
   let this =
@@ -901,7 +901,7 @@ let add_java_package_summary mmap =
   SummaryMap.M.add "Map.put(Object,Object)" [ map_put_summary ] mmap
   |> SummaryMap.M.add "ArrayList.<init>()" [ array_list_summary ]
   |> SummaryMap.M.add "File.<init>(String)" [ file_summary ]
-  |> SummaryMap.M.add "File.createNewFile()" [ file_create_summary ]
+  (* |> SummaryMap.M.add "File.createNewFile()" [ file_create_summary ] *)
   |> SummaryMap.M.add "BufferedImage.<init>(int,int,int)" [ image_summary ]
   |> SummaryMap.M.add "BufferedImage.createGraphics()" [ image_create_summary ]
   |> SummaryMap.M.add "Object.getClass()" [ class_get_summary ]
@@ -931,7 +931,7 @@ let add_java_package_method mmap =
   MethodInfo.M.add "Map.put(Object,Object)" map_put_info mmap
   |> MethodInfo.M.add "ArrayList.<init>()" array_list_info
   |> MethodInfo.M.add "File.<init>(String)" file_info
-  |> MethodInfo.M.add "File.createNewFile()" file_create_info
+  (* |> MethodInfo.M.add "File.createNewFile()" file_create_info *)
   |> MethodInfo.M.add "BufferedImage.<init>(int,int,int)" image_info
   |> MethodInfo.M.add "BufferedImage.createGraphics()" image_create_info
   |> MethodInfo.M.add "Object.getClass()" class_get_info
