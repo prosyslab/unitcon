@@ -880,19 +880,6 @@ let is_recursive_param parent_class method_name m_info =
       | _ -> check)
     false info.MethodInfo.formal_params
 
-(* let is_self_constructor c clist =
-   let c_name =
-     get_class_name ~infer:true c |> Str.global_replace Regexp.dollar "\\$"
-   in
-   let rec check lst =
-     match lst with
-     | hd :: _ when Str.string_match (c_name ^ "\\.<init>" |> Str.regexp) hd 0 ->
-         true
-     | _ :: tl -> check tl
-     | [] -> false
-   in
-   check clist *)
-
 let is_void_method m_name s_map =
   let c_name = get_class_name ~infer:true m_name in
   let slist = try SetterMap.M.find c_name s_map with _ -> [] in
@@ -1481,7 +1468,7 @@ let modify_summary id t_summary a_summary =
   in
   mk_new_summary (new_value_summary a_summary new_value) t_summary |> fst
 
-let satisfied_c_list id t_summary summary summary_list =
+let satisfied_c_list ~need id t_summary summary summary_list =
   if !Cmdline.basic_mode then
     List.fold_left
       (fun list (constructor, import) ->
@@ -1491,7 +1478,7 @@ let satisfied_c_list id t_summary summary summary_list =
     List.fold_left
       (fun list (constructor, import) ->
         let check, summary = satisfied_c t_summary id constructor summary in
-        if check then
+        if check || need then
           if is_array_init constructor then
             (constructor, modify_summary id t_summary summary, import) :: list
           else if
@@ -1540,19 +1527,17 @@ let get_c ret summary _ m_info c_info =
       |> List.filter (fun (c, _, _) ->
              is_recursive_param class_name c m_info |> not)
     in
-    (* let caller_filtering list =
-         List.filter
-           (fun (c, _, _) ->
-             is_self_constructor c
-               (try CG.pred cg c with Invalid_argument _ -> [])
-             |> not)
-           list
-       in *)
+    let remaining_constructor lst =
+      let satisfied =
+        satisfied_c_list ~need:false id (AST.get_v ret).summary summary lst
+      in
+      if lst <> [] && satisfied = [] then
+        satisfied_c_list ~need:true id (AST.get_v ret).summary summary lst
+      else satisfied
+    in
     let s_list =
       get_clist (package, class_name) m_info c_info
-      |> satisfied_c_list id (AST.get_v ret).summary summary
-      |> summary_filtering
-      (* |> caller_filtering *)
+      |> remaining_constructor |> summary_filtering
     in
     get_cfuncs s_list m_info
 
@@ -1569,7 +1554,7 @@ let get_ret_c ret summary m_info c_info s_map =
     in
     let s_list =
       get_ret_obj (package, class_name) m_info c_info s_map
-      |> satisfied_c_list id (AST.get_v ret).summary summary
+      |> satisfied_c_list ~need:false id (AST.get_v ret).summary summary
       |> summary_filtering
     in
     get_cfuncs s_list m_info
