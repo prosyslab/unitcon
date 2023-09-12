@@ -355,7 +355,7 @@ module AST = struct
     | _ when typ = FV -> 100
     | _ -> 0
 
-  and count_id = function Id -> 3 | _ -> 0
+  and count_id = function Id -> 1 | _ -> 0
 
   and count_exp = function Exp -> 1 | _ -> 0
 
