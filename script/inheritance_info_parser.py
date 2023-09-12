@@ -336,8 +336,9 @@ def get_nested_extends_interface_name(node, src):
 
 
 def one_file_inheritance_info(src, encoding):
-    f = open(src, 'r', encoding=encoding)
-    src_lines = f.readlines()
+    src_lines = []
+    with open(src, 'r', encoding=encoding) as f:
+        src_lines = f.readlines()
 
     def read_callable(byte_offset, point):
         (row, column) = point
