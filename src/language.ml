@@ -323,14 +323,6 @@ module AST = struct
     | Assign _ when ground p -> Skip
     | _ -> p
 
-  let rec count_s = function
-    | Const _ -> 1
-    | Assign _ -> 1
-    | Void _ -> 1
-    | Seq (s1, s2) -> count_s s1 + count_s s2
-    | Skip -> 0
-    | Stmt -> 0
-
   let rec count_nt = function
     | Const (x, exp) -> count_id x + count_exp exp
     | Assign (x0, x1, func, arg) ->
@@ -342,8 +334,8 @@ module AST = struct
 
   and count_arg = function
     | Arg a ->
-        let len = if List.length a < 2 then 1 else List.length a in
-        (3 |> float_of_int) ** (len |> float_of_int) |> int_of_float
+        (2 |> float_of_int) ** (List.length a + 1 |> float_of_int)
+        |> int_of_float
     | _ -> 0
 
   and count_func func typ =

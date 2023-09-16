@@ -43,8 +43,8 @@ let z3ctx =
 
 let solver = Z3.Solver.mk_solver z3ctx None
 
-(* # of non-terminals for p, # of statements for p *)
-let get_cost p = (AST.count_nt p, AST.count_s p)
+(* penalty for unsatisfied conditions, # of non-terminals for p *)
+let get_cost p = (p |> fst, AST.count_nt (p |> snd))
 
 let rec find_relation given_symbol relation =
   match Relation.M.find_opt given_symbol relation with
@@ -913,8 +913,8 @@ let default_value_list typ =
           AST.Primitive (Z (-1));
           AST.Primitive (Z 100);
           AST.Primitive (Z (-100));
-          AST.Primitive (Z 500);
-          AST.Primitive (Z (-500));
+          AST.Primitive (Z 1000);
+          AST.Primitive (Z (-1000));
         ]
     | Float | Double ->
         [
@@ -923,6 +923,8 @@ let default_value_list typ =
           AST.Primitive (R (-1.0));
           AST.Primitive (R 100.0);
           AST.Primitive (R (-100.0));
+          AST.Primitive (R 1000.0);
+          AST.Primitive (R (-1000.0));
         ]
     | Bool -> [ AST.Primitive (B false); AST.Primitive (B true) ]
     | Char -> [ AST.Primitive (C 'x') ]
@@ -933,155 +935,198 @@ let default_value_list typ =
 
 let not_found_value = function Value.Eq None -> true | _ -> false
 
+let calc_value_list typ org_list =
+  List.fold_left
+    (fun lst x -> (1000, x) :: lst)
+    org_list (default_value_list typ)
+
 let calc_value id = function
   | Value.Eq v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-          let z3exp = Z3.Boolean.mk_eq z3ctx var value in
-          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
+          let exp =
+            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
+            |> Z3.Boolean.mk_eq z3ctx var
+          in
+          calc_value_list Int
+            [ (0, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let value =
+          let exp =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            |> Z3.Boolean.mk_eq z3ctx var
           in
-          let z3exp = Z3.Boolean.mk_eq z3ctx var value in
-          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
-      | Bool b -> AST.Primitive (B b)
-      | Char c -> AST.Primitive (C c)
-      | String s -> AST.Primitive (S s)
-      | Null -> AST.Null
+          calc_value_list Float
+            [ (0, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
+      | Bool b -> calc_value_list Bool [ (0, AST.Primitive (B b)) ]
+      | Char c -> calc_value_list Char [ (0, AST.Primitive (C c)) ]
+      | String s -> calc_value_list String [ (0, AST.Primitive (S s)) ]
+      | Null -> [ (0, AST.Null) ]
       | _ -> failwith "not implemented eq")
   | Value.Neq v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-          let z3exp =
-            Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
+          let exp =
+            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
+            |> Z3.Boolean.mk_eq z3ctx var |> Z3.Boolean.mk_not z3ctx
           in
-          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
+          calc_value_list Int
+            [ (0, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let value =
+          let exp =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            |> Z3.Boolean.mk_eq z3ctx var |> Z3.Boolean.mk_not z3ctx
           in
-          let z3exp =
-            Z3.Boolean.mk_eq z3ctx var value |> Z3.Boolean.mk_not z3ctx
-          in
-          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
-      | Bool b -> AST.Primitive (B (b |> not))
-      | String s -> AST.Primitive (S ("not_" ^ s))
-      | Null -> AST.Primitive (S "not")
+          calc_value_list Float
+            [ (0, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
+      | Bool b -> calc_value_list Bool [ (0, AST.Primitive (B (b |> not))) ]
+      | String s ->
+          calc_value_list String [ (0, AST.Primitive (S ("not_" ^ s))) ]
+      | Null ->
+          (* Among the const, only the string can be defined as null *)
+          List.fold_left
+            (fun lst x ->
+              if x = AST.Null then (1000, x) :: lst else (0, x) :: lst)
+            []
+            (default_value_list String)
       | _ -> failwith "not implemented neq")
   | Value.Le v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-          let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
-          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
+          let exp =
+            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
+            |> Z3.Arithmetic.mk_le z3ctx var
+          in
+          calc_value_list Int
+            [ (0, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let value =
+          let exp =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            |> Z3.Arithmetic.mk_le z3ctx var
           in
-          let z3exp = Z3.Arithmetic.mk_le z3ctx var value in
-          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
+          calc_value_list Float
+            [ (0, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
       | _ -> failwith "not implemented le")
   | Value.Lt v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-          let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
-          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
+          let exp =
+            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
+            |> Z3.Arithmetic.mk_lt z3ctx var
+          in
+          calc_value_list Int
+            [ (0, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let value =
+          let exp =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            |> Z3.Arithmetic.mk_lt z3ctx var
           in
-          let z3exp = Z3.Arithmetic.mk_lt z3ctx var value in
-          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
+          calc_value_list Float
+            [ (0, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
       | _ -> failwith "not implemented lt")
   | Value.Ge v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-          let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
-          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
+          let exp =
+            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
+            |> Z3.Arithmetic.mk_ge z3ctx var
+          in
+          calc_value_list Int
+            [ (0, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let value =
+          let exp =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            |> Z3.Arithmetic.mk_ge z3ctx var
           in
-          let z3exp = Z3.Arithmetic.mk_ge z3ctx var value in
-          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
+          calc_value_list Float
+            [ (0, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
       | _ -> failwith "not implemented ge")
   | Value.Gt v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let value = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i in
-          let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
-          AST.Primitive (Z (calc_z3 var [ z3exp ] |> int_of_string))
+          let exp =
+            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
+            |> Z3.Arithmetic.mk_gt z3ctx var
+          in
+          calc_value_list Int
+            [ (0, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let value =
+          let exp =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
+            |> Z3.Arithmetic.mk_gt z3ctx var
           in
-          let z3exp = Z3.Arithmetic.mk_gt z3ctx var value in
-          AST.Primitive (R (calc_z3 var [ z3exp ] |> float_of_string))
+          [ (0, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
       | _ -> failwith "not implemented gt")
   | Value.Between (v1, v2) -> (
       match (v1, v2) with
       | Int i1, Int i2 | Long i1, Long i2 | Int i1, Long i2 | Long i1, Int i2 ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
-          let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
-          let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
-          let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
-          AST.Primitive (Z (calc_z3 var [ z3exp1; z3exp2 ] |> int_of_string))
+          let exp =
+            [
+              Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1
+              |> Z3.Arithmetic.mk_ge z3ctx var;
+              Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2
+              |> Z3.Arithmetic.mk_le z3ctx var;
+            ]
+          in
+          calc_value_list Int
+            [ (0, AST.Primitive (Z (calc_z3 var exp |> int_of_string))) ]
       | Float f1, Float f2
       | Double f1, Double f2
       | Float f1, Double f2
       | Double f1, Float f2 ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let value1 =
-            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
+          let exp =
+            [
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
+              |> Z3.Arithmetic.mk_ge z3ctx var;
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
+              |> Z3.Arithmetic.mk_le z3ctx var;
+            ]
           in
-          let value2 =
-            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
-          in
-          let z3exp1 = Z3.Arithmetic.mk_ge z3ctx var value1 in
-          let z3exp2 = Z3.Arithmetic.mk_le z3ctx var value2 in
-          AST.Primitive (R (calc_z3 var [ z3exp1; z3exp2 ] |> float_of_string))
+          calc_value_list Float
+            [ (0, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
       | _ -> failwith "not implemented between")
   | Value.Outside (v1, v2) -> (
       match (v1, v2) with
       | Int i1, Int i2 | Long i1, Long i2 | Int i1, Long i2 | Long i1, Int i2 ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let value1 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1 in
-          let value2 = Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2 in
-          let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
-          let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
-          AST.Primitive (Z (calc_z3 var [ z3exp1; z3exp2 ] |> int_of_string))
+          let exp =
+            [
+              Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1
+              |> Z3.Arithmetic.mk_lt z3ctx var;
+              Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2
+              |> Z3.Arithmetic.mk_gt z3ctx var;
+            ]
+          in
+          calc_value_list Int
+            [ (0, AST.Primitive (Z (calc_z3 var exp |> int_of_string))) ]
       | Float f1, Float f2
       | Double f1, Double f2
       | Float f1, Double f2
       | Double f1, Float f2 ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let value1 =
-            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
+          let exp =
+            [
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f1 |> string_of_float)
+              |> Z3.Arithmetic.mk_lt z3ctx var;
+              Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
+              |> Z3.Arithmetic.mk_gt z3ctx var;
+            ]
           in
-          let value2 =
-            Z3.Arithmetic.Real.mk_numeral_s z3ctx (f2 |> string_of_float)
-          in
-          let z3exp1 = Z3.Arithmetic.mk_lt z3ctx var value1 in
-          let z3exp2 = Z3.Arithmetic.mk_gt z3ctx var value2 in
-          AST.Primitive (R (calc_z3 var [ z3exp1; z3exp2 ] |> float_of_string))
+          calc_value_list Float
+            [ (0, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
       | _ -> failwith "not implemented outside")
 
 let get_value typ id summary =
@@ -1110,15 +1155,15 @@ let get_value typ id summary =
       mem target_variable
   in
   let values = summary.Language.value in
-  let default_values = default_value_list typ in
   let find_value =
     Value.M.fold
       (fun symbol value find_value ->
         if symbol = target_variable then value else find_value)
       values (Value.Eq None)
   in
-  if not_found_value find_value then default_values
-  else [ calc_value id find_value ]
+  if not_found_value find_value then
+    List.fold_left (fun lst x -> (0, x) :: lst) [] (default_value_list typ)
+  else calc_value id find_value
 
 let get_array_size array summary =
   let _, memory = summary.Language.precond in
@@ -1209,7 +1254,8 @@ let get_clist (class_package, class_name) m_info (c_info, ig) =
 
 let find_class_file =
   List.fold_left
-    (fun gvar_list const -> AST.GlobalConstant (const ^ ".class") :: gvar_list)
+    (fun gvar_list const ->
+      (0, AST.GlobalConstant (const ^ ".class")) :: gvar_list)
     []
     [ "unitcon_interface"; "unitcon_enum" ]
 
@@ -1217,18 +1263,18 @@ let find_enum_var_list c_name e_info =
   if EnumInfo.M.mem c_name e_info then
     List.fold_left
       (fun gvar_list const ->
-        AST.GlobalConstant (c_name ^ "." ^ const) :: gvar_list)
+        (0, AST.GlobalConstant (c_name ^ "." ^ const)) :: gvar_list)
       []
       (EnumInfo.M.find c_name e_info)
   else []
 
 let find_global_var_list c_name t_var mem summary m_info =
-  let all_var s_trace =
+  let all_var cost s_trace =
     Condition.M.fold
       (fun head _ gvar_list ->
         match head with
         | Condition.RH_Var var ->
-            AST.GlobalConstant (c_name ^ "." ^ var) :: gvar_list
+            (cost, AST.GlobalConstant (c_name ^ "." ^ var)) :: gvar_list
         | _ -> gvar_list)
       s_trace []
   in
@@ -1251,12 +1297,15 @@ let find_global_var_list c_name t_var mem summary m_info =
         | Some v ->
             (Condition.M.fold (fun _ s_trace list ->
                  match compare_var v s_trace with
-                 | Some gv -> AST.GlobalConstant gv :: list
+                 | Some gv -> (0, AST.GlobalConstant gv) :: list
                  | None -> list))
               mem list
+            |> (Condition.M.fold (fun _ s_trace list ->
+                    List.rev_append (all_var 1000 s_trace) list))
+                 init_mem
         | None ->
             (Condition.M.fold (fun _ s_trace list ->
-                 List.rev_append (all_var s_trace) list))
+                 List.rev_append (all_var 0 s_trace) list))
               init_mem list
       else list)
     summary []
@@ -1366,8 +1415,8 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
                && (FieldSet.S.subset var.field fields
                   || Str.string_match (".*Array\\.set" |> Str.regexp) s 0))
       in
-      List.map
-        (fun (s, _) ->
+      List.fold_left
+        (fun lst (s, _) ->
           let f_arg =
             mk_arg ~is_s:(is_s_method s m_info)
               (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary
@@ -1379,8 +1428,9 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
                 import = var.import;
                 summary = var.summary;
               },
-            f_arg ))
-        setter_list
+            f_arg )
+          :: lst)
+        [] setter_list
 
 let get_ret_obj (class_package, class_name) m_info (c_info, ig) s_map =
   let full_class_name =
@@ -1468,35 +1518,26 @@ let modify_summary id t_summary a_summary =
   in
   mk_new_summary (new_value_summary a_summary new_value) t_summary |> fst
 
-let satisfied_c_list ~need id t_summary summary summary_list =
+let satisfied_c_list id t_summary summary summary_list =
   if !Cmdline.basic_mode then
     List.fold_left
       (fun list (constructor, import) ->
-        (constructor, Language.empty_summary, import) :: list)
+        (0, constructor, Language.empty_summary, import) :: list)
       [] summary_list
   else
     List.fold_left
       (fun list (constructor, import) ->
         let check, summary = satisfied_c t_summary id constructor summary in
-        if check || need then
+        if check then
           if is_array_init constructor then
-            (constructor, modify_summary id t_summary summary, import) :: list
-          else if
-            Str.string_match ("String\\.<init>" |> Str.regexp) constructor 0
-            && "String.<init>(String)" <> constructor
-          then list
-          else if
-            Str.string_match
-              ("FileInputStream\\.<init>" |> Str.regexp)
-              constructor 0
-            && "FileInputStream.<init>(File)" <> constructor
-          then list
-          else (constructor, summary, import) :: list
-        else list)
+            (0, constructor, modify_summary id t_summary summary, import)
+            :: list
+          else (0, constructor, summary, import) :: list
+        else (1000, constructor, summary, import) :: list)
       [] summary_list
 
 let get_cfunc constructor m_info =
-  let c, s, i = constructor in
+  let cost, c, s, i = constructor in
   let t =
     if is_init_method c then
       c
@@ -1509,11 +1550,11 @@ let get_cfunc constructor m_info =
     mk_arg ~is_s:(is_s_method c m_info)
       (MethodInfo.M.find c m_info).MethodInfo.formal_params s
   in
-  (func, AST.Arg arg)
+  (cost, (func, AST.Arg arg))
 
 let get_cfuncs list m_info =
   List.fold_left
-    (fun lst (c, s, i) -> get_cfunc (c, s, i) m_info :: lst)
+    (fun lst (cost, c, s, i) -> get_cfunc (cost, c, s, i) m_info :: lst)
     [] list
 
 let get_c ret summary _ m_info c_info =
@@ -1523,21 +1564,16 @@ let get_c ret summary _ m_info c_info =
     let id = AST.get_vinfo ret |> snd in
     let package = (AST.get_v ret).import in
     let summary_filtering list =
-      List.filter (fun (c, _, _) -> is_public_or_default c m_info c_info) list
-      |> List.filter (fun (c, _, _) ->
+      List.filter
+        (fun (_, c, _, _) -> is_public_or_default c m_info c_info)
+        list
+      |> List.filter (fun (_, c, _, _) ->
              is_recursive_param class_name c m_info |> not)
-    in
-    let remaining_constructor lst =
-      let satisfied =
-        satisfied_c_list ~need:false id (AST.get_v ret).summary summary lst
-      in
-      if lst <> [] && satisfied = [] then
-        satisfied_c_list ~need:true id (AST.get_v ret).summary summary lst
-      else satisfied
     in
     let s_list =
       get_clist (package, class_name) m_info c_info
-      |> remaining_constructor |> summary_filtering
+      |> satisfied_c_list id (AST.get_v ret).summary summary
+      |> summary_filtering
     in
     get_cfuncs s_list m_info
 
@@ -1548,13 +1584,15 @@ let get_ret_c ret summary m_info c_info s_map =
     let id = AST.get_vinfo ret |> snd in
     let package = (AST.get_v ret).import in
     let summary_filtering list =
-      List.filter (fun (c, _, _) -> is_public_or_default c m_info c_info) list
-      |> List.filter (fun (c, _, _) ->
+      List.filter
+        (fun (_, c, _, _) -> is_public_or_default c m_info c_info)
+        list
+      |> List.filter (fun (_, c, _, _) ->
              is_recursive_param class_name c m_info |> not)
     in
     let s_list =
       get_ret_obj (package, class_name) m_info c_info s_map
-      |> satisfied_c_list ~need:false id (AST.get_v ret).summary summary
+      |> satisfied_c_list id (AST.get_v ret).summary summary
       |> summary_filtering
     in
     get_cfuncs s_list m_info
@@ -1613,39 +1651,45 @@ let get_arg_seq (args : AST.id list) =
              (List.fold_left (fun lst x -> AST.mk_assign_arg x arg :: lst) [] s))
     [ AST.Skip ] args
 
-let rec unroll ~assign_ground p summary cg m_info c_info s_map e_info =
+let rec unroll ~assign_ground (cost, p) summary cg m_info c_info s_map e_info =
   match p with
-  | _ when assign_ground -> unroll_void p
+  | _ when assign_ground -> unroll_void (cost, p)
   | AST.Seq (s1, s2) when AST.assign_ground s1 |> not ->
       let lst =
-        unroll ~assign_ground s1 summary cg m_info c_info s_map e_info
+        unroll ~assign_ground (cost, s1) summary cg m_info c_info s_map e_info
       in
-      List.fold_left (fun lst x -> AST.Seq (x, s2) :: lst) [] lst
+      List.fold_left
+        (fun lst x -> (x |> fst, AST.Seq (x |> snd, s2)) :: lst)
+        [] lst
   | Seq (s1, s2) when AST.assign_ground s2 |> not ->
       let lst =
-        unroll ~assign_ground s2 summary cg m_info c_info s_map e_info
+        unroll ~assign_ground (cost, s2) summary cg m_info c_info s_map e_info
       in
-      List.fold_left (fun lst x -> AST.Seq (s1, x) :: lst) [] lst
+      List.fold_left
+        (fun lst x -> (x |> fst, AST.Seq (s1, x |> snd)) :: lst)
+        [] lst
   | Const (x, _) when AST.const p ->
       let typ, id = AST.get_vinfo x in
       if is_primitive x then
         List.fold_left
-          (fun lst x1 -> AST.const_rule1 p x1 :: lst)
+          (fun lst x1 ->
+            (cost + (x1 |> fst), AST.const_rule1 p (x1 |> snd)) :: lst)
           []
           (get_value typ id (AST.get_v x).summary)
       else
         let r3 =
           List.fold_left
             (fun lst x1 ->
-              match x1 with
+              match x1 |> snd with
               | AST.Primitive _ -> lst
-              | _ -> AST.const_rule3 p :: lst)
+              | _ -> (cost + (x1 |> fst), AST.const_rule3 p) :: lst)
             []
             (get_value typ id (AST.get_v x).summary)
         in
         let r2 =
           List.fold_left
-            (fun lst x1 -> AST.const_rule2 p x1 :: lst)
+            (fun lst x1 ->
+              (cost + (x1 |> fst), AST.const_rule2 p (x1 |> snd)) :: lst)
             []
             (global_var_list
                (Language.get_class_name (AST.get_vinfo x |> fst))
@@ -1659,15 +1703,16 @@ let rec unroll ~assign_ground p summary cg m_info c_info s_map e_info =
         (get_c x0 summary cg m_info c_info)
         (get_ret_c x0 summary m_info c_info s_map)
       |> List.fold_left
-           (fun lst x ->
-             AST.fcall_in_assign_rule p field_map (x |> fst) (x |> snd) :: lst)
+           (fun lst (c, (f, arg)) ->
+             (cost + c, AST.fcall_in_assign_rule p field_map f arg) :: lst)
            []
   | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
       let lst = get_void_func x m_info c_info s_map in
       if lst = [] then []
       else
         List.fold_left
-          (fun lst (f, arg) -> AST.fcall_in_void_rule p f (AST.Arg arg) :: lst)
+          (fun lst (f, arg) ->
+            (cost, AST.fcall_in_void_rule p f (AST.Arg arg)) :: lst)
           [] lst
   | Assign (_, _, f, arg) when AST.recv_in_assign p ->
       if
@@ -1679,22 +1724,22 @@ let rec unroll ~assign_ground p summary cg m_info c_info s_map e_info =
         let r2 = AST.recv_in_assign_rule2_1 p recv f arg in
         let r3 = AST.recv_in_assign_rule3_1 p recv f arg in
         incr outer;
-        r2 :: [ r3 ])
+        (cost, r2) :: [ (cost, r3) ])
       else if cname_condition (AST.get_func f).method_name m_info then
-        [ get_cname f |> AST.recv_in_assign_rule1 p ]
+        [ (cost, get_cname f |> AST.recv_in_assign_rule1 p) ]
       else
         let r2 = AST.recv_in_assign_rule2 p "con_recv" !recv in
         let r3 = AST.recv_in_assign_rule3 p "con_recv" !recv in
         incr recv;
-        r2 :: [ r3 ]
+        (cost, r2) :: [ (cost, r3) ]
   | Void (_, f, _) when AST.recv_in_void p ->
       if cname_condition (AST.get_func f).method_name m_info then
-        [ get_cname f |> AST.recv_in_void_rule1 p ]
+        [ (cost, get_cname f |> AST.recv_in_void_rule1 p) ]
       else
         let r2 = AST.recv_in_void_rule2 p "con_recv" !recv in
         let r3 = AST.recv_in_void_rule3 p "con_recv" !recv in
         incr recv;
-        r2 :: [ r3 ]
+        (cost, r2) :: [ (cost, r3) ]
   | Assign (_, _, _, arg) when AST.arg_in_assign p ->
       let arg_seq =
         get_arg_seq
@@ -1704,7 +1749,8 @@ let rec unroll ~assign_ground p summary cg m_info c_info s_map e_info =
       in
       List.fold_left
         (fun lst x ->
-          AST.arg_in_assign_rule p x (AST.Param (arg |> AST.get_arg)) :: lst)
+          (cost, AST.arg_in_assign_rule p x (AST.Param (arg |> AST.get_arg)))
+          :: lst)
         [] arg_seq
   | Void (_, _, arg) when AST.arg_in_void p ->
       let arg_seq =
@@ -1715,14 +1761,17 @@ let rec unroll ~assign_ground p summary cg m_info c_info s_map e_info =
       in
       List.fold_left
         (fun lst x ->
-          AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)) :: lst)
+          (cost, AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)))
+          :: lst)
         [] arg_seq
-  | _ -> [ p ]
+  | _ -> [ (cost, p) ]
 
-and unroll_void p =
+and unroll_void (cost, p) =
   match p with
-  | _ when AST.ground p -> [ p ]
-  | AST.Seq _ when AST.void p -> AST.void_rule1 p :: AST.void_rule2 p
+  | _ when AST.ground p -> [ (cost, p) ]
+  | AST.Seq _ when AST.void p ->
+      (cost, AST.void_rule1 p)
+      :: List.fold_left (fun lst x -> (cost, x) :: lst) [] (AST.void_rule2 p)
   | Seq (s1, s2) ->
       let ns1, ns2 =
         match AST.last_code s1 with
@@ -1732,12 +1781,18 @@ and unroll_void p =
       in
       List.fold_left
         (fun l x ->
-          List.fold_left (fun l2 y -> AST.Seq (x, y) :: l2) l (unroll_void ns2))
-        [] (unroll_void ns1)
-  | _ -> [ p ]
+          List.fold_left
+            (fun l2 y ->
+              (cost + (x |> fst) + (y |> fst), AST.Seq (x |> snd, y |> snd))
+              :: l2)
+            l
+            (unroll_void (cost, ns2)))
+        []
+        (unroll_void (cost, ns1))
+  | _ -> [ (cost, p) ]
 
 (* find error entry *)
-let rec find_ee e_method e_summary cg summary call_prop_map m_info =
+let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
   let propagation caller_method caller_preconds call_prop =
     let new_value, new_mem, check_match =
       satisfy e_method e_summary call_prop m_info
@@ -1745,16 +1800,17 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info =
     if !Cmdline.basic_mode then
       ErrorEntrySet.union caller_preconds
         (find_ee caller_method Language.empty_summary cg summary call_prop_map
-           m_info)
+           m_info c_info)
     else if check_match then
       let new_call_prop =
         new_mem_summary (new_value_summary call_prop new_value) new_mem
       in
       ErrorEntrySet.union caller_preconds
-        (find_ee caller_method new_call_prop cg summary call_prop_map m_info)
+        (find_ee caller_method new_call_prop cg summary call_prop_map m_info
+           c_info)
     else caller_preconds
   in
-  if is_public e_method m_info then
+  if is_public_or_default e_method m_info c_info then
     ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty
   else
     let caller_list = CG.succ cg e_method in
@@ -1767,7 +1823,7 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info =
           | None ->
               (* It is possible without any specific conditions *)
               find_ee caller_method Language.empty_summary cg summary
-                call_prop_map m_info
+                call_prop_map m_info c_info
           | Some prop_list ->
               List.fold_left
                 (fun caller_preconds call_prop ->
@@ -1813,21 +1869,19 @@ let priority_q queue =
     (fun p1 p2 ->
       let s1 = get_cost p1 in
       let s2 = get_cost p2 in
-      if compare (s1 |> fst) (s2 |> fst) <> 0 then
-        compare (s1 |> fst) (s2 |> fst)
-      else compare (s1 |> snd) (s2 |> snd))
+      compare ((s1 |> fst) + (s1 |> snd)) ((s2 |> fst) + (s2 |> snd)))
     queue
 
 let rec mk_testcase queue summary cg m_info c_info s_map e_info =
-  let queue = priority_q queue in
+  let queue = if !Cmdline.basic_mode then queue else priority_q queue in
   match queue with
-  | p :: tl ->
+  | (cost, p) :: tl ->
       if AST.ground p then [ (pretty_format p, tl) ]
       else
         mk_testcase
           (List.rev_append
-             (unroll ~assign_ground:(AST.assign_ground p) p summary cg m_info
-                c_info s_map e_info
+             (unroll ~assign_ground:(AST.assign_ground p) (cost, p) summary cg
+                m_info c_info s_map e_info
              |> List.rev)
              tl)
           summary cg m_info c_info s_map e_info
@@ -1837,8 +1891,8 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
     (cg, summary, call_prop_map, m_info, c_info, s_map, e_info) =
   let apply_rule list =
     List.fold_left
-      (fun lst (func, arg) ->
-        AST.fcall_in_void_rule (AST.Void (Id, Func, Arg [])) func (AST.Arg arg)
+      (fun lst (f, arg) ->
+        (0, AST.fcall_in_void_rule (AST.Void (Id, Func, Arg [])) f (AST.Arg arg))
         :: lst)
       [] list
   in
@@ -1849,7 +1903,7 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
         (fun (ee, ee_s) init_list ->
           apply_rule (get_void_func AST.Id ~ee ~es:ee_s m_info c_info s_map)
           |> List.rev_append init_list)
-        (find_ee e_method error_summary cg summary call_prop_map m_info)
+        (find_ee e_method error_summary cg summary call_prop_map m_info c_info)
         [])
     else queue
   in
