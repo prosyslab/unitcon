@@ -334,7 +334,7 @@ module AST = struct
 
   and count_arg = function
     | Arg a ->
-        (3 |> float_of_int) ** (List.length a + 1 |> float_of_int)
+        (2 |> float_of_int) ** (List.length a + 1 |> float_of_int)
         |> int_of_float
     | _ -> 0
 
