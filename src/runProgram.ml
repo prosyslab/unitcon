@@ -263,7 +263,7 @@ let checking_bug_presence ic expected_bug =
   close_in ic;
   match string_of_expected_bug expected_bug with
   | TESTCASE when find "There are test failures" data ->
-      find "unitcon_test" data
+      find "unitcon_test" data && find "NullPointerException" data
   | TRACE s -> find s data && find "NullPointerException" data
   | _ -> false
 
@@ -322,8 +322,14 @@ let rec run_test ~is_start pkg info queue e_method_info p_info =
     "# of trial: " ^ (!trial |> string_of_int) |> print_endline;
     "duration: " ^ (Float.sub (Unix.time ()) !time |> string_of_float)
     |> print_endline;
-    close_in result_ic |> ignore;
-    tc)
+    if !Cmdline.until_time_out then (
+      tc |> fst |> print_endline;
+      tc |> snd |> print_endline;
+      close_in result_ic |> ignore;
+      run_test ~is_start:false pkg info tc_list e_method_info p_info)
+    else (
+      close_in result_ic |> ignore;
+      tc))
   else (
     close_in result_ic |> ignore;
     run_test ~is_start:false pkg info tc_list e_method_info p_info)

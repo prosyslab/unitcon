@@ -8,6 +8,8 @@ let basic_mode = ref false
 
 let time_out = ref (30 * 60)
 
+let until_time_out = ref false
+
 let mock = ref []
 
 let class_file = ref ""
@@ -24,6 +26,7 @@ let options =
     ("-print-callgraph", Arg.Set print_callgraph, "Print callgraph");
     ("-basic-mode", Arg.Set basic_mode, "Run basic mode (default: false)");
     ("-time-out", Arg.Set_int time_out, "Time out (default: 30m)");
+    ("-until-time-out", Arg.Set until_time_out, "Synthesis until time out (default: false)");
     ( "-mock",
       Arg.String (fun x -> mock := x :: !mock),
       "Using mock for test case generation" );
