@@ -332,19 +332,19 @@ module AST = struct
     | Skip -> 0
     | Stmt -> 1
 
-  and count_arg = function
+  and count_arg arg =
+    match arg with
     | Arg a ->
-        (2 |> float_of_int) ** (List.length a + 1 |> float_of_int)
-        |> int_of_float
+        (2 |> float_of_int) ** (List.length a |> float_of_int) |> int_of_float
     | _ -> 0
 
   and count_func func typ =
     match func with
+    | _ when typ = FV -> 100
     | Func -> 1
     | F f when typ = FA ->
         if Str.string_match (Str.regexp ".*\\.<init>") f.method_name 0 then 0
         else 200
-    | _ when typ = FV -> 100
     | _ -> 0
 
   and count_id = function Id -> 1 | _ -> 0

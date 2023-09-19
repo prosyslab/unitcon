@@ -12,6 +12,8 @@ module CG = Callgraph.G
 module IG = Inheritance.G
 module AST = Language.AST
 
+exception Not_found_setter
+
 module ImportSet = Set.Make (struct
   type t = string
 
@@ -845,30 +847,32 @@ let is_test_file file_name =
   Str.string_match (Str.regexp ".*/test/.*") file_name 0
 
 let is_public_or_default method_name m_info c_info =
-  let info = MethodInfo.M.find method_name m_info in
-  let is_test_file =
-    (* If this method is a method in the test file,
-       don't use it even if the modifier is public*)
-    is_test_file info.MethodInfo.filename
-  in
-  let package = get_package method_name m_info c_info in
-  let name =
-    try
-      Str.split Regexp.dot package
-      |> List.rev |> List.hd
-      |> Str.global_replace Regexp.dollar "\\$"
-    with _ -> ""
-  in
-  let s = name ^ "$" in
-  let package = Regexp.global_rm (Str.regexp s) package in
-  if Str.string_match (Str.regexp package) !pkg 0 then
-    match info.MethodInfo.modifier with
-    | Default | Protected | Public -> true
-    | _ -> false
-  else
-    match info.MethodInfo.modifier with
-    | Public when not is_test_file -> true
-    | _ -> false
+  match MethodInfo.M.find_opt method_name m_info with
+  | None -> false
+  | Some info -> (
+      let is_test_file =
+        (* If this method is a method in the test file,
+           don't use it even if the modifier is public*)
+        is_test_file info.MethodInfo.filename
+      in
+      let package = get_package method_name m_info c_info in
+      let name =
+        try
+          Str.split Regexp.dot package
+          |> List.rev |> List.hd
+          |> Str.global_replace Regexp.dollar "\\$"
+        with _ -> ""
+      in
+      let s = name ^ "$" in
+      let package = Regexp.global_rm (Str.regexp s) package in
+      if Str.string_match (Str.regexp package) !pkg 0 then
+        match info.MethodInfo.modifier with
+        | Default | Protected | Public -> true
+        | _ -> false
+      else
+        match info.MethodInfo.modifier with
+        | Public when not is_test_file -> true
+        | _ -> false)
 
 let is_recursive_param parent_class method_name m_info =
   let info = MethodInfo.M.find method_name m_info in
@@ -909,12 +913,12 @@ let default_value_list typ =
     | Language.Int | Long ->
         [
           AST.Primitive (Z 1);
-          AST.Primitive (Z 0);
-          AST.Primitive (Z (-1));
-          AST.Primitive (Z 100);
-          AST.Primitive (Z (-100));
-          AST.Primitive (Z 1000);
-          AST.Primitive (Z (-1000));
+          (* AST.Primitive (Z 0);
+             AST.Primitive (Z (-1)); *)
+          (* AST.Primitive (Z 100);
+             AST.Primitive (Z (-100));
+             AST.Primitive (Z 1000);
+             AST.Primitive (Z (-1000)); *)
         ]
     | Float | Double ->
         [
@@ -1708,7 +1712,7 @@ let rec unroll ~assign_ground (cost, p) summary cg m_info c_info s_map e_info =
            []
   | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
       let lst = get_void_func x m_info c_info s_map in
-      if lst = [] then []
+      if lst = [] then raise Not_found_setter
       else
         List.fold_left
           (fun lst (f, arg) ->
@@ -1869,7 +1873,9 @@ let priority_q queue =
     (fun p1 p2 ->
       let s1 = get_cost p1 in
       let s2 = get_cost p2 in
-      compare ((s1 |> fst) + (s1 |> snd)) ((s2 |> fst) + (s2 |> snd)))
+      if !Cmdline.sem_priority then compare (s1 |> fst) (s2 |> fst)
+      else if !Cmdline.syn_priority then compare (s1 |> snd) (s2 |> snd)
+      else compare ((s1 |> fst) + (s1 |> snd)) ((s2 |> fst) + (s2 |> snd)))
     queue
 
 let rec mk_testcase queue summary cg m_info c_info s_map e_info =
@@ -1878,13 +1884,15 @@ let rec mk_testcase queue summary cg m_info c_info s_map e_info =
   | (cost, p) :: tl ->
       if AST.ground p then [ (pretty_format p, tl) ]
       else
-        mk_testcase
-          (List.rev_append
-             (unroll ~assign_ground:(AST.assign_ground p) (cost, p) summary cg
-                m_info c_info s_map e_info
-             |> List.rev)
-             tl)
-          summary cg m_info c_info s_map e_info
+        let new_q =
+          match
+            unroll ~assign_ground:(AST.assign_ground p) (cost, p) summary cg
+              m_info c_info s_map e_info
+          with
+          | exception Not_found_setter -> tl
+          | x -> List.rev_append (x |> List.rev) tl
+        in
+        mk_testcase new_q summary cg m_info c_info s_map e_info
   | [] -> []
 
 let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
