@@ -1523,7 +1523,7 @@ let modify_summary id t_summary a_summary =
   mk_new_summary (new_value_summary a_summary new_value) t_summary |> fst
 
 let satisfied_c_list id t_summary summary summary_list =
-  if !Cmdline.basic_mode then
+  if !Cmdline.basic_mode || !Cmdline.syn_priority then
     List.fold_left
       (fun list (constructor, import) ->
         (0, constructor, Language.empty_summary, import) :: list)
@@ -1801,7 +1801,7 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
     let new_value, new_mem, check_match =
       satisfy e_method e_summary call_prop m_info
     in
-    if !Cmdline.basic_mode then
+    if !Cmdline.basic_mode || !Cmdline.syn_priority then
       ErrorEntrySet.union caller_preconds
         (find_ee caller_method Language.empty_summary cg summary call_prop_map
            m_info c_info)
