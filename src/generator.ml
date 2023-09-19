@@ -913,12 +913,12 @@ let default_value_list typ =
     | Language.Int | Long ->
         [
           AST.Primitive (Z 1);
-          (* AST.Primitive (Z 0);
-             AST.Primitive (Z (-1)); *)
-          (* AST.Primitive (Z 100);
-             AST.Primitive (Z (-100));
-             AST.Primitive (Z 1000);
-             AST.Primitive (Z (-1000)); *)
+          AST.Primitive (Z 0);
+          AST.Primitive (Z (-1));
+          AST.Primitive (Z 100);
+          AST.Primitive (Z (-100));
+          AST.Primitive (Z 1000);
+          AST.Primitive (Z (-1000));
         ]
     | Float | Double ->
         [
