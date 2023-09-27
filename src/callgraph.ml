@@ -46,7 +46,8 @@ let get_callee_method_name assoc =
   let method_name =
     JsonUtil.member "callee" assoc
     |> JsonUtil.to_list
-    |> List.map (fun callee -> callee |> JsonUtil.to_string |> split_name)
+    |> List.fold_left (fun l m -> (JsonUtil.to_string m |> split_name) :: l) []
+    |> List.rev
   in
   method_name
 

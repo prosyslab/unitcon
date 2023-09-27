@@ -228,7 +228,9 @@ let parse_condition condition =
     in
     (variables, memory)
 
-let parse_args args = List.map (fun arg -> JsonUtil.to_string arg) args
+let parse_args args =
+  List.fold_left (fun lst arg -> JsonUtil.to_string arg :: lst) [] args
+  |> List.rev
 
 let parse_callprop callprop =
   let relation =

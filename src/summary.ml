@@ -344,7 +344,8 @@ let mapping_method_info method_info mmap =
   let formal_params =
     JsonUtil.member "param" method_info
     |> JsonUtil.to_list
-    |> List.map (fun param -> JsonUtil.to_string param |> parse_param)
+    |> List.fold_left (fun l p -> (JsonUtil.to_string p |> parse_param) :: l) []
+    |> List.rev
   in
   let filename =
     JsonUtil.member "filename" method_info
@@ -366,7 +367,8 @@ let mapping_summary method_summarys minfo mmap =
   let summarys =
     JsonUtil.member "summary" method_summarys
     |> JsonUtil.to_list
-    |> List.map (fun summary -> parse_summary summary)
+    |> List.fold_left (fun lst summary -> parse_summary summary :: lst) []
+    |> List.rev
   in
   let summarys =
     if summarys = [] then [ Language.empty_summary ] else summarys

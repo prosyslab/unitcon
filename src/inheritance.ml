@@ -30,7 +30,8 @@ let get_super_classes_name assoc =
   let class_name =
     JsonUtil.member "super" assoc
     |> JsonUtil.to_list
-    |> List.map (fun super -> super |> JsonUtil.to_string)
+    |> List.fold_left (fun lst super -> (super |> JsonUtil.to_string) :: lst) []
+    |> List.rev
   in
   class_name
 
@@ -44,7 +45,9 @@ let transitive_closure vertex graph =
     | [] -> g
   in
   iter
-    (get_children vertex |> List.map (fun v -> get_children v) |> List.flatten)
+    (get_children vertex
+    |> List.fold_left (fun lst v -> get_children v :: lst) []
+    |> List.rev |> List.flatten)
     graph
 
 let missing_inheritance vertex graph =
@@ -116,8 +119,8 @@ let mapping_class_info assoc mmap =
   let typ =
     JsonUtil.member "type" assoc
     |> JsonUtil.to_list
-    |> List.map JsonUtil.to_string
-    |> parse_type
+    |> List.fold_left (fun lst x -> JsonUtil.to_string x :: lst) []
+    |> List.rev |> parse_type
   in
   ClassInfo.M.add class_name ClassInfo.{ class_type = typ } mmap
 

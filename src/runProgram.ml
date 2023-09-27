@@ -263,7 +263,7 @@ let checking_bug_presence ic expected_bug =
   close_in ic;
   match string_of_expected_bug expected_bug with
   | TESTCASE when find "There are test failures" data ->
-      find "unitcon_test" data && find "NullPointerException" data
+      find "unitcon_test" data
   | TRACE s -> find s data && find "NullPointerException" data
   | _ -> false
 
