@@ -17,12 +17,11 @@ source venv/bin/activate
 ```sh
 python3 script/inheritance_info_parser.py PATH/TO/SOURCE/DIR  [ utf-8 | iso-8859-1 ]
 python3 script/enum_parser.py PATH/TO/SOURCE/DIR  [ utf-8 | iso-8859-1 ]
-cp PATH/TO/SOURCE/DIR/hierarchy_info.json PATH/TO/SOURCE/DIR/infer-out/inheritance_info.json
-cp PATH/TO/SOURCE/DIR/hierarchy_info.json PATH/TO/SOURCE/DIR/infer-out/enum_info.json
-cp -r PATH/TO/SOURCE/DIR/infer-out unitcon/test
+mv PATH/TO/SOURCE/DIR/hierarchy_info.json PATH/TO/SOURCE/DIR/unitcon_properties/inheritance_info.json
+mv PATH/TO/SOURCE/DIR/hierarchy_info.json PATH/TO/SOURCE/DIR/unitcon_properties/enum_info.json
 ```
 
 ## Run
 ```sh
-./unitgen test
+./unitcon PATH/TO/SOURCE/DIR
 ```
