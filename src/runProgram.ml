@@ -22,15 +22,7 @@ type t = {
   expected_bug : string;
 }
 
-type build_type = Maven | Javac of string
-
-type expected_bug_type = TESTCASE | TRACE of string
-
-let get_pkg str =
-  str
-  |> Regexp.first_rm (".*/java/" |> Str.regexp)
-  |> Regexp.first_rm ("[a-zA-Z0-9]*\\.java$" |> Str.regexp)
-  |> Str.global_replace ("/" |> Str.regexp) "."
+type build_type = Compile | Test
 
 (* ************************************** *
    parse analyzer's output
@@ -104,50 +96,25 @@ let build_command_of_file file =
   s
 
 let test_command_of_file file =
-  if not (Sys.file_exists file) then ""
-  else
-    let ic = open_in file in
-    let s = really_input_string ic (in_channel_length ic) in
-    close_in ic;
-    s
-
-let test_file_of_file file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
   let ic = open_in file in
-  let s = input_line ic in
+  let s = really_input_string ic (in_channel_length ic) in
   close_in ic;
   s
-
-(* copy test file to unitcon folder *)
-let cp_test_file p_dir file =
-  let filename =
-    Filename.basename file |> Filename.concat con_path |> Filename.concat p_dir
-  in
-  if Sys.file_exists filename then ()
-  else
-    let ic = open_in file in
-    let oc = open_out filename in
-    output_string oc (really_input_string ic (in_channel_length ic));
-    close_in ic;
-    flush oc;
-    close_out oc
 
 let find word str =
   match Str.search_forward (word |> Str.regexp) str 0 with
   | exception Not_found -> false
   | _ -> true
 
-let build_type_of_string str =
-  if Str.string_match (".*mvn" |> Str.regexp) str 0 then Maven
-  else if Str.string_match ("^javac" |> Str.regexp) str 0 then Javac "compile"
-  else if Str.string_match ("^java" |> Str.regexp) str 0 then Javac "run"
+let build_type str =
+  if Str.string_match ("^javac" |> Str.regexp) str 0 then Compile
+  else if Str.string_match ("^java" |> Str.regexp) str 0 then Test
   else failwith "not supported build type"
 
 let string_of_expected_bug file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
-  match open_in file |> input_line with
-  | s when Str.string_match ("^test_case" |> Str.regexp) s 0 -> TESTCASE
-  | s -> TRACE (Str.global_replace Regexp.dollar "\\$" s)
+  open_in file |> input_line |> Str.global_replace Regexp.dollar "\\$"
 
 let simple_compiler program_dir build_command =
   let current_dir = Unix.getcwd () in
@@ -155,30 +122,16 @@ let simple_compiler program_dir build_command =
   let stdout, stdin, stderr = Unix.open_process_full build_command [| "" |] in
   Sys.chdir current_dir;
   close_out stdin;
-  match build_type_of_string build_command with
-  | Maven when Str.string_match (Str.regexp ".*Java-WebSocket") program_dir 0 ->
-      close_in stdout;
-      Event.always stderr |> Event.sync
-  | Maven ->
+  match build_type build_command with
+  | Compile ->
       close_in stderr;
       Event.always stdout |> Event.sync
-  | Javac typ ->
-      if typ = "compile" then (
-        close_in stderr;
-        Event.always stdout |> Event.sync)
-      else (
-        close_in stdout;
-        Event.always stderr |> Event.sync)
+  | Test ->
+      close_in stdout;
+      Event.always stderr |> Event.sync
 
 (* test: (string * string) *)
-let insert_test test_type test org_file new_file =
-  let modify_test_code test_type code =
-    match test_type with
-    | "JUnit" -> code
-    | "Not_JUnit" -> Regexp.first_rm (Str.regexp "@.*\\\n") code
-    | "Javac" -> Regexp.first_rm (Str.regexp "@.*\\\n.*{\\\n") code
-    | _ -> failwith "not supported"
-  in
+let insert_test test test_file =
   let need_default_class tc =
     match Str.search_forward ("unitcon_interface" |> Str.regexp) tc 0 with
     | exception _ -> (
@@ -193,57 +146,22 @@ let insert_test test_type test org_file new_file =
     | Some "unitcon_enum" -> "enum unitcon_enum {}\n"
     | _ -> ""
   in
-  let check_symbol = function
-    | "JUnit" -> ".*@Test"
-    | "Not_JUnit" -> ".*class"
-    | _ -> failwith "not supported"
-  in
-  let rec insert_maven test_type check_import check_test ic oc =
-    match input_line ic with
-    | s when Str.string_match Regexp.package s 0 && not check_import ->
-        output_string oc (s ^ "\n");
-        output_string oc ((test |> fst) ^ "\n");
-        insert_maven test_type true check_test ic oc
-    | s
-      when Str.string_match (Str.regexp (check_symbol test_type)) s 0
-           && not check_test ->
-        insert_default_class (test |> snd |> need_default_class)
-        |> output_string oc;
-        output_string oc ((test |> snd |> modify_test_code test_type) ^ "\n");
-        output_string oc (s ^ "\n");
-        insert_maven test_type check_import true ic oc
-    | s ->
-        output_string oc (s ^ "\n");
-        insert_maven test_type check_import check_test ic oc
-    | exception End_of_file ->
-        flush oc;
-        close_out oc
-  in
-  let insert_javac oc =
-    output_string oc
-      ((test |> fst) ^ "\n" ^ "public class Main {\n"
-     ^ "public static void main(String args[]) throws Exception {"
-      ^ (test |> snd |> modify_test_code test_type)
-      ^ "}\n");
+  let insert oc =
+    (test |> fst) ^ "\n" |> output_string oc;
+    insert_default_class (test |> snd |> need_default_class) |> output_string oc;
+    "public class UnitconTest {\n" ^ (test |> snd) ^ "}\n" |> output_string oc;
     flush oc;
     close_out oc
   in
-  let ic = open_in org_file in
-  let oc = open_out new_file in
-  match test_type with
-  | "Javac" -> insert_javac oc
-  | _ -> insert_maven test_type false false ic oc
+  let oc = open_out test_file in
+  insert oc
 
 (* new_tc: (string * string) *)
-let add_testcase new_tc cmd org_file file_in_program =
-  if Sys.file_exists file_in_program then Sys.remove file_in_program else ();
-  let ic = open_in org_file in
-  let org_data = really_input_string ic (in_channel_length ic) in
-  match build_type_of_string cmd with
-  | Maven when find "@Test" org_data ->
-      insert_test "JUnit" new_tc org_file file_in_program
-  | Maven -> insert_test "Not_JUnit" new_tc org_file file_in_program
-  | Javac _ -> insert_test "Javac" new_tc org_file file_in_program
+let add_testcase new_tc test_file =
+  if Sys.file_exists (Filename.remove_extension test_file ^ ".class") then
+    Sys.remove (Filename.remove_extension test_file ^ ".class")
+  else ();
+  insert_test new_tc test_file
 
 let my_really_read_string in_chan =
   let res = Buffer.create 1024 in
@@ -258,14 +176,11 @@ let my_really_read_string in_chan =
   loop ()
 
 let checking_bug_presence ic expected_bug =
-  (* print_endline "checking ..."; *)
+  print_endline "checking ...";
   let data = my_really_read_string ic in
   close_in ic;
-  match string_of_expected_bug expected_bug with
-  | TESTCASE when find "There are test failures" data ->
-      find "unitcon_test" data
-  | TRACE s -> find s data && find "NullPointerException" data
-  | _ -> false
+  let check_bug bug = find bug data && find "NullPointerException" data in
+  check_bug (string_of_expected_bug expected_bug)
 
 let init program_dir =
   let cons = Filename.concat in
@@ -282,9 +197,7 @@ let init program_dir =
     enum_file = cons con_path "enum_info.json" |> cons program_dir;
     build_command = cons con_path "build_command" |> cons program_dir;
     test_command = cons con_path "test_command" |> cons program_dir;
-    test_file =
-      test_file_of_file (cons con_path "test_file" |> cons program_dir)
-      |> cons program_dir;
+    test_file = cons program_dir "UnitconTest.java";
     expected_bug = cons con_path "expected_bug" |> cons program_dir;
   }
 
@@ -295,22 +208,13 @@ let make_testcase ~is_start queue e_method_info program_info =
 let build_program info tc =
   let build_cmd = build_command_of_file info.build_command in
   let test_cmd = test_command_of_file info.test_command in
-  add_testcase tc build_cmd
-    (Filename.basename info.test_file
-    |> Filename.concat con_path
-    |> Filename.concat info.program_dir)
-    info.test_file;
-  match test_cmd with
-  | "" ->
-      (* maven *)
-      simple_compiler info.program_dir build_cmd
-  | _ ->
-      (* javac *)
-      simple_compiler info.program_dir build_cmd |> close_in;
-      Unix.wait () |> ignore;
-      let x = simple_compiler info.program_dir test_cmd in
-      Unix.wait () |> ignore;
-      x
+  add_testcase tc info.test_file;
+  (* javac *)
+  simple_compiler info.program_dir build_cmd |> close_in;
+  Unix.wait () |> ignore;
+  let x = simple_compiler info.program_dir test_cmd in
+  Unix.wait () |> ignore;
+  x
 
 (* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start pkg info queue e_method_info p_info =
@@ -337,7 +241,6 @@ let rec run_test ~is_start pkg info queue e_method_info p_info =
 let run program_dir =
   time := Unix.time ();
   let info = init program_dir in
-  cp_test_file info.program_dir info.test_file;
   let method_info = parse_method_info info.summary_file in
   let summary = parse_summary info.summary_file method_info in
   let callgraph = parse_callgraph info.summary_file in
@@ -346,7 +249,7 @@ let run program_dir =
   let enum_info = parse_enum_info info.enum_file in
   let call_prop_map = parse_callprop info.call_prop_file in
   let error_method_info = parse_error_summary info.error_summary_file in
-  run_test ~is_start:true (get_pkg info.test_file) info [] error_method_info
+  run_test ~is_start:true "FIXME" info [] error_method_info
     ( callgraph,
       summary,
       call_prop_map,

@@ -1851,7 +1851,7 @@ let pretty_format p =
       (imports p ImportSet.empty)
       ""
   in
-  let start = "\n@Test\npublic void unitcon_test() throws Exception {\n" in
+  let start = "\npublic static void main(String args[]) throws Exception {\n" in
   let code = start ^ AST.code p ^ "}\n\n" in
   (import, code)
 
