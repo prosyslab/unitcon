@@ -1,0 +1,636 @@
+[
+  {
+    "class_and_interface": [
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.SteeringMethods",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.exception.MissingPacketException",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.VirtualFunctionBus",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.packets.sample.SamplePacket",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.packets.sample.ReadOnlySamplePacket",
+        "type": [
+          "interface"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.packets.car.CarPacket",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.packets.car.ReadOnlyCarPacket",
+        "type": [
+          "interface"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.packets.input.ReadOnlyInputPacket",
+        "type": [
+          "interface"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.packets.input.InputPacket",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.powertrain.ReadOnlyPowertrainPacket",
+        "type": [
+          "interface"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.powertrain.PowertrainPacket",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.AutomatedCar",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.sensors.UltrasonicSensor",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.input.InputHandler",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.IPowertrainSystem",
+        "type": [
+          "interface"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.ACC",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.LaneKeeping",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.CarSpecifications",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.SensorsVisualizer",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.SteeringSystem",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.Index",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.ParkingPilote",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.GearShift",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.GasBrake",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent",
+        "type": [
+          "abstract"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.PowertrainSystem",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.SteeringWheel",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.Driver",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.detector.classes.Triangle",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.detector.classes.Detector",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.detector.interfaces.ICamera",
+        "type": [
+          "interface"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.detector.interfaces.IRadarUltrasonic",
+        "type": [
+          "interface"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.visualization.CourseDisplay",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.visualization.GuiAdapter",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.visualization.Gui",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.visualization.ReferencePointStore",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.visualization.Dashboard",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.visualization.DrawUtils",
+        "type": [
+          "abstract"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.XmlToModelConverter",
+        "type": [
+          "abstract"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.Pedestrian",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.Crosswalk",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.Stationary",
+        "type": [
+          "abstract"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.ParkingSpot",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.Movable",
+        "type": [
+          "abstract"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.Tree",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.RoadSign",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.Road",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.Crossable",
+        "type": [
+          "abstract"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.Collidable",
+        "type": [
+          "abstract"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.World",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.interfaces.IWorld",
+        "type": [
+          "interface"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.interfaces.IWorldObject",
+        "type": [
+          "interface"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.WorldObject",
+        "type": [
+          "abstract"
+        ]
+      },
+      {
+        "name": "hu.oe.nik.szfmv.Main",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.common.ConfigProvider",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.common.Utils",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.VirtualFunctionBusTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.VirtualFunctionBusTest$SenderComponentMock",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.bus.VirtualFunctionBusTest$ReceiverComponentMock",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.sensors.UltrasonicSensorTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.steering.CarPositionTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.steering.CarHeadingTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.steering.SteerAngleTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.steering.WheelDisplacementTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.steering.WheelPositionTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.automatedcar.systemcomponents.PowertrainSystemTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.detector.DetectorTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.detector.TriangleTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.visualization.DashboardTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.visualization.DashboardTest$PowertrainPacketStub",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.visualization.DashboardTest$InputPacketStub",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.WorldTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.RoadTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.TreeTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.CrosswalkTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.PedestrianTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.RoadSignTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.environment.models.ParkingSpotTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.common.UtilsTest",
+        "type": []
+      },
+      {
+        "name": "hu.oe.nik.szfmv.common.ConfigProviderTest",
+        "type": []
+      }
+    ],
+    "extends_class": [
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.bus.exception.MissingPacketException",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.bus.exception.Exception"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.AutomatedCar",
+        "super": [
+          "hu.oe.nik.szfmv.environment.WorldObject"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.ACC",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.LaneKeeping",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.SensorsVisualizer",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.SteeringSystem",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.Index",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.ParkingPilote",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.GearShift",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.GasBrake",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.PowertrainSystem",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.SteeringWheel",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.Driver",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.visualization.CourseDisplay",
+        "super": [
+          "hu.oe.nik.szfmv.visualization.JPanel"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.visualization.GuiAdapter",
+        "super": [
+          "java.awt.event.WindowAdapter"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.visualization.Gui",
+        "super": [
+          "hu.oe.nik.szfmv.visualization.JFrame"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.visualization.Dashboard",
+        "super": [
+          "hu.oe.nik.szfmv.visualization.JPanel"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.models.Pedestrian",
+        "super": [
+          "hu.oe.nik.szfmv.environment.models.Movable"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.models.Crosswalk",
+        "super": [
+          "hu.oe.nik.szfmv.environment.models.Crossable"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.models.Stationary",
+        "super": [
+          "hu.oe.nik.szfmv.environment.models.Collidable"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.models.ParkingSpot",
+        "super": [
+          "hu.oe.nik.szfmv.environment.models.Crossable"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.models.Movable",
+        "super": [
+          "hu.oe.nik.szfmv.environment.models.Collidable"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.models.Tree",
+        "super": [
+          "hu.oe.nik.szfmv.environment.models.Stationary"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.models.RoadSign",
+        "super": [
+          "hu.oe.nik.szfmv.environment.models.Stationary"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.models.Road",
+        "super": [
+          "hu.oe.nik.szfmv.environment.models.Crossable"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.models.Crossable",
+        "super": [
+          "hu.oe.nik.szfmv.environment.WorldObject"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.models.Collidable",
+        "super": [
+          "hu.oe.nik.szfmv.environment.WorldObject"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.bus.VirtualFunctionBusTest$SenderComponentMock",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.bus.VirtualFunctionBusTest$ReceiverComponentMock",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.SystemComponent"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.steering.CarPositionTest",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.AutomatedCar"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.steering.CarHeadingTest",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.AutomatedCar"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.steering.SteerAngleTest",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.AutomatedCar"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.steering.WheelDisplacementTest",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.AutomatedCar"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.steering.WheelPositionTest",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.AutomatedCar"
+        ]
+      }
+    ],
+    "implements_interface": [
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.bus.packets.sample.SamplePacket",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.bus.packets.sample.ReadOnlySamplePacket"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.bus.packets.car.CarPacket",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.bus.packets.car.ReadOnlyCarPacket"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.bus.packets.input.InputPacket",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.bus.packets.input.ReadOnlyInputPacket"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.bus.powertrain.PowertrainPacket",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.bus.powertrain.ReadOnlyPowertrainPacket"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.input.InputHandler",
+        "super": [
+          "java.awt.event.KeyListener"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.automatedcar.systemcomponents.PowertrainSystem",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.systemcomponents.IPowertrainSystem"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.detector.classes.Detector",
+        "super": [
+          "hu.oe.nik.szfmv.detector.interfaces.ICamera",
+          "hu.oe.nik.szfmv.detector.interfaces.IRadarUltrasonic"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.World",
+        "super": [
+          "hu.oe.nik.szfmv.environment.interfaces.IWorld"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.environment.WorldObject",
+        "super": [
+          "hu.oe.nik.szfmv.environment.interfaces.IWorldObject"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.visualization.DashboardTest$PowertrainPacketStub",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.bus.powertrain.ReadOnlyPowertrainPacket"
+        ]
+      },
+      {
+        "child": "hu.oe.nik.szfmv.visualization.DashboardTest$InputPacketStub",
+        "super": [
+          "hu.oe.nik.szfmv.automatedcar.bus.packets.input.ReadOnlyInputPacket"
+        ]
+      }
+    ],
+    "extends_interface": []
+  }
+]

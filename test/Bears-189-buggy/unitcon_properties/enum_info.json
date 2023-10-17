@@ -1,0 +1,18 @@
+[
+  {
+    "enum": "GearEnum",
+    "const": "P"
+  },
+  {
+    "enum": "GearEnum",
+    "const": "R"
+  },
+  {
+    "enum": "GearEnum",
+    "const": "N"
+  },
+  {
+    "enum": "GearEnum",
+    "const": "D"
+  }
+]
