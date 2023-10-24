@@ -869,7 +869,7 @@ module AST = struct
   let exp_code exp x =
     match exp with
     | Primitive p -> primitive_code p x
-    | GlobalConstant g -> g ^ ";\n"
+    | GlobalConstant g -> (g |> Str.global_replace Regexp.dollar ".") ^ ";\n"
     | Null -> "null;\n"
     | Exp -> "Exp;\n"
 
