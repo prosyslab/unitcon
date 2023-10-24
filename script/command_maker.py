@@ -70,9 +70,8 @@ def execute_build_cmd(project_dir):
                                   "unitcon_build_command")
     assert os.path.isfile(build_cmd_file), f"Failed to build {project_dir}"
     with open(build_cmd_file, "r") as f:
-        subprocess.run([cmd for cmd in f.readlines()],
-                       cwd=project_dir,
-                       shell=True)
+        for cmd in f.readlines():
+            subprocess.run(cmd, cwd=project_dir, shell=True)
 
 
 def main():
