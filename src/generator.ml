@@ -1827,20 +1827,26 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
 let pretty_format p =
   let i_format i = Str.replace_first Regexp.dollar "." i in
   let rec imports s set =
+    let add_import import set =
+      (if is_nested_class import then
+       ImportSet.add (Str.replace_first (Str.regexp "\\$.*$") "" import) set
+      else set)
+      |> ImportSet.add import
+    in
     match s with
     | AST.Seq (s1, s2) -> imports s1 set |> imports s2
-    | Const (x, _) -> ImportSet.add (AST.get_v x).import set
+    | Const (x, _) -> add_import (AST.get_v x).import set
     | Assign (x0, _, f, arg) ->
         List.fold_left
-          (fun s (a : AST.var) -> ImportSet.add a.import s)
+          (fun s (a : AST.var) -> add_import a.import s)
           set (arg |> AST.get_param)
-        |> ImportSet.add (AST.get_v x0).import
-        |> ImportSet.add (AST.get_func f).import
+        |> add_import (AST.get_v x0).import
+        |> add_import (AST.get_func f).import
     | Void (_, f, arg) ->
         List.fold_left
-          (fun s (a : AST.var) -> ImportSet.add a.import s)
+          (fun s (a : AST.var) -> add_import a.import s)
           set (arg |> AST.get_param)
-        |> ImportSet.add (AST.get_func f).import
+        |> add_import (AST.get_func f).import
     | _ -> set
   in
   let import =
