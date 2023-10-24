@@ -16,13 +16,13 @@ type t = {
   call_prop_file : string;
   inheritance_file : string;
   enum_file : string;
-  build_command : string;
+  compile_command : string;
   test_command : string;
   test_file : string;
   expected_bug : string;
 }
 
-type build_type = Compile | Test
+type run_type = Compile | Test
 
 (* ************************************** *
    parse analyzer's output
@@ -85,10 +85,10 @@ let parse_enum_info filename =
   else Json.from_file filename |> Enum.of_json
 
 (* ************************************** *
-   build program
+   run program
  * ************************************** *)
 
-let build_command_of_file file =
+let compile_command_of_file file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
   let ic = open_in file in
   let s = really_input_string ic (in_channel_length ic) in
@@ -107,7 +107,7 @@ let find word str =
   | exception Not_found -> false
   | _ -> true
 
-let build_type str =
+let run_type str =
   if Str.string_match ("^javac" |> Str.regexp) str 0 then Compile
   else if Str.string_match ("^java" |> Str.regexp) str 0 then Test
   else failwith "not supported build type"
@@ -116,13 +116,13 @@ let string_of_expected_bug file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
   open_in file |> input_line |> Str.global_replace Regexp.dollar "\\$"
 
-let simple_compiler program_dir build_command =
+let simple_compiler program_dir compile_command =
   let current_dir = Unix.getcwd () in
   Sys.chdir program_dir;
-  let stdout, stdin, stderr = Unix.open_process_full build_command [| "" |] in
+  let stdout, stdin, stderr = Unix.open_process_full compile_command [| "" |] in
   Sys.chdir current_dir;
   close_out stdin;
-  match build_type build_command with
+  match run_type compile_command with
   | Compile ->
       close_in stderr;
       Event.always stdout |> Event.sync
@@ -176,7 +176,7 @@ let my_really_read_string in_chan =
   loop ()
 
 let checking_bug_presence ic expected_bug =
-  print_endline "checking ...";
+  (* print_endline "checking ..."; *)
   let data = my_really_read_string ic in
   close_in ic;
   let check_bug bug = find bug data && find "NullPointerException" data in
@@ -195,7 +195,7 @@ let init program_dir =
     call_prop_file = cons con_path "call_proposition" |> cons program_dir;
     inheritance_file = cons con_path "inheritance_info.json" |> cons program_dir;
     enum_file = cons con_path "enum_info.json" |> cons program_dir;
-    build_command = cons con_path "build_command" |> cons program_dir;
+    compile_command = cons con_path "compile_command" |> cons program_dir;
     test_command = cons con_path "test_command" |> cons program_dir;
     test_file = cons program_dir "UnitconTest.java";
     expected_bug = cons con_path "expected_bug" |> cons program_dir;
@@ -206,11 +206,11 @@ let make_testcase ~is_start queue e_method_info program_info =
   Generator.mk_testcases ~is_start queue e_method_info program_info
 
 let build_program info tc =
-  let build_cmd = build_command_of_file info.build_command in
+  let compile_cmd = compile_command_of_file info.compile_command in
   let test_cmd = test_command_of_file info.test_command in
   add_testcase tc info.test_file;
   (* javac *)
-  simple_compiler info.program_dir build_cmd |> close_in;
+  simple_compiler info.program_dir compile_cmd |> close_in;
   Unix.wait () |> ignore;
   let x = simple_compiler info.program_dir test_cmd in
   Unix.wait () |> ignore;
