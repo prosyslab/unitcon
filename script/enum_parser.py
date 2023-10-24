@@ -16,6 +16,11 @@ extract_class_name_query = J_LANGUAGE.query("""
   name: (identifier) @class-name)
 """)
 
+extract_interface_name_query = J_LANGUAGE.query("""
+(interface_declaration
+  (identifier) @interface-name)
+""")
+
 extract_enum_query = J_LANGUAGE.query("""
 (class_declaration
   name: (identifier) @class-name)*
@@ -54,6 +59,12 @@ def get_parent_class_name(node, src, name):
         parent_name = list(
             filter(lambda x: x[1] == 'class-name',
                    [i for i in extract_class_name_query.captures(parent)]))
+        if not parent_name:
+            parent_name = list(
+                filter(
+                    lambda x: x[1] == 'interface-name',
+                    [i
+                     for i in extract_interface_name_query.captures(parent)]))
         parent_name = get_text(parent_name[0], src)
         return get_parent_class_name(parent, src, parent_name + '$' + name)
 
