@@ -779,7 +779,15 @@ let is_private m_name m_info =
 let is_public m_name m_info =
   match MethodInfo.M.find_opt m_name m_info with
   | None -> false
-  | Some m -> ( match m.MethodInfo.modifier with Public -> true | _ -> false)
+  | Some info -> (
+      let is_test_file file_name =
+        (* If this method is a method in the test file,
+           don't use it even if the modifier is public*)
+        Str.string_match (Str.regexp ".*/test/.*") file_name 0
+      in
+      match info.MethodInfo.modifier with
+      | Public when is_test_file info.MethodInfo.filename |> not -> true
+      | _ -> false)
 
 let is_init_method method_name =
   Str.string_match (".*\\.<init>" |> Str.regexp) method_name 0
@@ -840,37 +848,6 @@ let get_import t_method (c_info, _) =
       c_info ""
   in
   full_class_name
-
-let is_test_file file_name =
-  Str.string_match (Str.regexp ".*/test/.*") file_name 0
-
-let is_public_or_default method_name m_info c_info =
-  match MethodInfo.M.find_opt method_name m_info with
-  | None -> false
-  | Some info -> (
-      let is_test_file =
-        (* If this method is a method in the test file,
-           don't use it even if the modifier is public*)
-        is_test_file info.MethodInfo.filename
-      in
-      let package = get_package method_name m_info c_info in
-      let name =
-        try
-          Str.split Regexp.dot package
-          |> List.rev |> List.hd
-          |> Str.global_replace Regexp.dollar "\\$"
-        with _ -> ""
-      in
-      let s = name ^ "$" in
-      let package = Regexp.global_rm (Str.regexp s) package in
-      if Str.string_match (Str.regexp package) !pkg 0 then
-        match info.MethodInfo.modifier with
-        | Default | Protected | Public -> true
-        | _ -> false
-      else
-        match info.MethodInfo.modifier with
-        | Public when not is_test_file -> true
-        | _ -> false)
 
 let is_recursive_param parent_class method_name m_info =
   let info = MethodInfo.M.find method_name m_info in
@@ -1215,14 +1192,10 @@ let match_constructor_name class_name method_name =
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
 let match_return_object class_name method_name m_info =
-  let class_name =
-    Str.split Regexp.dot class_name
-    |> List.rev |> List.hd
-    |> Str.global_replace Regexp.dollar "\\$"
-  in
+  let class_name = Str.split Regexp.dot class_name |> List.rev |> List.hd in
   let info = MethodInfo.M.find method_name m_info in
   let return = info.MethodInfo.return in
-  Str.string_match (Str.regexp class_name) return 0
+  String.equal class_name return
 
 let get_clist (class_package, class_name) m_info (c_info, ig) =
   let full_class_name =
@@ -1557,9 +1530,7 @@ let get_c ret summary _ m_info c_info =
     let id = AST.get_vinfo ret |> snd in
     let package = (AST.get_v ret).import in
     let summary_filtering list =
-      List.filter
-        (fun (_, c, _, _) -> is_public_or_default c m_info c_info)
-        list
+      List.filter (fun (_, c, _, _) -> is_public c m_info) list
       |> List.filter (fun (_, c, _, _) ->
              is_recursive_param class_name c m_info |> not)
     in
@@ -1577,9 +1548,7 @@ let get_ret_c ret summary m_info c_info s_map =
     let id = AST.get_vinfo ret |> snd in
     let package = (AST.get_v ret).import in
     let summary_filtering list =
-      List.filter
-        (fun (_, c, _, _) -> is_public_or_default c m_info c_info)
-        list
+      List.filter (fun (_, c, _, _) -> is_public c m_info) list
       |> List.filter (fun (_, c, _, _) ->
              is_recursive_param class_name c m_info |> not)
     in
@@ -1803,7 +1772,7 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
            c_info)
     else caller_preconds
   in
-  if is_public_or_default e_method m_info c_info then
+  if is_public e_method m_info then
     ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty
   else
     let caller_list = CG.succ cg e_method in
