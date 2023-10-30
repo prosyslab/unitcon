@@ -268,6 +268,14 @@ module AST = struct
     | Skip
     | Stmt
 
+  let empty_var =
+    {
+      import = "";
+      variable = (This None, None);
+      field = FieldSet.S.empty;
+      summary = empty_summary;
+    }
+
   (* id -> var*)
   let rec get_v id =
     match id with Variable v -> v | _ -> failwith "get_v: not supported"

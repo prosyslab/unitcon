@@ -14,6 +14,21 @@ module AST = Language.AST
 
 exception Not_found_setter
 
+module VarSet = Set.Make (struct
+  type t = Language.variable
+
+  let compare = compare
+end)
+
+(* Set of VarSet *)
+module VarSets = Set.Make (VarSet)
+
+module VarListSet = Set.Make (struct
+  type t = AST.var list
+
+  let compare = compare
+end)
+
 module ImportSet = Set.Make (struct
   type t = string
 
@@ -1108,7 +1123,7 @@ let calc_value id = function
             [ (0, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
       | _ -> failwith "not implemented outside")
 
-let get_value typ id summary =
+let find_target_value id summary =
   let variables, mem = summary.Language.precond in
   let target_variable =
     Condition.M.fold
@@ -1134,12 +1149,13 @@ let get_value typ id summary =
       mem target_variable
   in
   let values = summary.Language.value in
-  let find_value =
-    Value.M.fold
-      (fun symbol value find_value ->
-        if symbol = target_variable then value else find_value)
-      values (Value.Eq None)
-  in
+  Value.M.fold
+    (fun symbol value find_value ->
+      if symbol = target_variable then value else find_value)
+    values (Value.Eq None)
+
+let get_value typ id summary =
+  let find_value = find_target_value id summary in
   if not_found_value find_value then
     List.fold_left (fun lst x -> (0, x) :: lst) [] (default_value_list typ)
   else calc_value id find_value
@@ -1150,6 +1166,53 @@ let get_array_size array summary =
   match Condition.M.find_opt (array_symbol |> mk_symbol) memory with
   | Some x -> Condition.M.fold (fun _ _ size -> size + 1) x 0
   | None -> 1
+
+let get_same_type_param params =
+  let get_type p = match p with Language.Var (t, _) -> t | _ -> None in
+  List.fold_left
+    (fun sets p ->
+      let new_set =
+        List.fold_left
+          (fun set op_p ->
+            if get_type p = get_type op_p && get_type p <> Language.None then
+              VarSet.add op_p set
+            else set)
+          (VarSet.empty |> VarSet.add p)
+          params
+      in
+      VarSets.add new_set sets)
+    VarSets.empty params
+
+let get_same_precond_param summary param_sets =
+  VarSets.fold
+    (fun set sets ->
+      let filter_singleton set =
+        if VarSet.cardinal set < 2 then VarSet.empty else set
+      in
+      let get_p_value p s =
+        match p with
+        | Language.Var (_, id) -> find_target_value id s
+        | _ -> failwith "Fail: find the target value"
+      in
+      let new_set =
+        VarSet.fold
+          (fun p new_set ->
+            let v = get_p_value p summary in
+            VarSet.fold
+              (fun op_p new_set ->
+                if v = get_p_value op_p summary then VarSet.add op_p new_set
+                else new_set)
+              set (VarSet.add p new_set))
+          set VarSet.empty
+        |> filter_singleton
+      in
+      VarSets.add new_set sets)
+    param_sets VarSets.empty
+  |> VarSets.filter (fun x -> VarSet.is_empty x |> not)
+
+let get_same_params_set summary params =
+  let new_p = List.fold_left (fun p (_, v) -> v :: p) [] params |> List.rev in
+  get_same_type_param new_p |> get_same_precond_param summary
 
 let satisfied_c m_summary id candidate_constructor summary =
   let c_summarys = SummaryMap.M.find candidate_constructor summary in
@@ -1311,24 +1374,67 @@ let global_var_list class_name t_summary summary m_info e_info =
       in
       find_global_var_list class_name target_variable mem summary m_info
 
+let mk_params_list summary params_set org_param =
+  let fst_param set = VarSet.elements set |> List.hd in
+  let find_same_param target =
+    let t = target.AST.variable |> fst in
+    VarSets.fold
+      (fun set find ->
+        let fst_p = fst_param set in
+        VarSet.fold (fun p f -> if t = p then fst_p else f) set find)
+      params_set t
+  in
+  let org_params_list =
+    List.fold_left
+      (fun params (i, v) ->
+        match v with
+        | Language.Var (typ, _) when typ = Language.None -> params
+        | _ ->
+            incr new_var;
+            AST.
+              {
+                import = i;
+                variable = (v, !new_var |> mk_some);
+                field = FieldSet.S.empty;
+                summary;
+              }
+            :: params)
+      [] org_param
+    |> List.rev
+  in
+  let find_org_param p =
+    List.fold_left
+      (fun param real_arg ->
+        if p = (real_arg.AST.variable |> fst) then real_arg else param)
+      AST.empty_var org_params_list
+  in
+  let rec mk_params org_params params_list =
+    match org_params with
+    | hd :: tl ->
+        let same_param = find_same_param hd |> find_org_param in
+        (if params_list = [] then mk_params tl [ [ hd ] ]
+        else if hd = same_param then
+          (* not found the same parameter *)
+          List.fold_left
+            (fun acc list -> List.cons (hd :: list) acc)
+            [] params_list
+        else
+          List.fold_left
+            (fun acc list ->
+              List.cons (same_param :: list) acc |> List.cons (hd :: list))
+            [] params_list)
+        |> mk_params tl
+    | _ -> params_list
+  in
+  (org_params_list |> List.rev) :: mk_params org_params_list []
+
 let mk_arg ~is_s param s =
   let param = if is_s then param else param |> List.tl in
+  let same_params_set = get_same_params_set s param in
+  let params_list = mk_params_list s same_params_set param in
   List.fold_left
-    (fun params (i, v) ->
-      match v with
-      | Language.Var (typ, _) when typ = Language.None -> params
-      | _ ->
-          incr new_var;
-          AST.
-            {
-              import = i;
-              variable = (v, !new_var |> mk_some);
-              field = FieldSet.S.empty;
-              summary = s;
-            }
-          :: params)
-    [] param
-  |> List.rev
+    (fun arg_set lst -> VarListSet.add (lst |> List.rev) arg_set)
+    VarListSet.empty params_list
 
 let get_field_map ret s_map =
   let c_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
@@ -1339,7 +1445,7 @@ let get_field_map ret s_map =
 
 let error_entry_func ee es m_info c_info =
   let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
-  let f_arg = mk_arg ~is_s:(is_s_method ee m_info) param es in
+  let f_arg_list = mk_arg ~is_s:(is_s_method ee m_info) param es in
   let import = get_package ee m_info c_info in
   let typ_list =
     if is_private_class import c_info then
@@ -1349,15 +1455,18 @@ let error_entry_func ee es m_info c_info =
   in
   List.fold_left
     (fun lst x ->
-      ( AST.F
-          {
-            typ = x |> Str.split Regexp.dot |> List.rev |> List.hd;
-            method_name = ee;
-            import = x;
-            summary = es;
-          },
-        f_arg )
-      :: lst)
+      VarListSet.fold
+        (fun f_arg acc ->
+          ( AST.F
+              {
+                typ = x |> Str.split Regexp.dot |> List.rev |> List.hd;
+                method_name = ee;
+                import = x;
+                summary = es;
+              },
+            f_arg )
+          :: acc)
+        f_arg_list lst)
     [] typ_list
 
 (* id is receiver variable *)
@@ -1383,19 +1492,22 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
       in
       List.fold_left
         (fun lst (s, _) ->
-          let f_arg =
+          let f_arg_list =
             mk_arg ~is_s:(is_s_method s m_info)
               (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary
           in
-          ( AST.F
-              {
-                typ = name;
-                method_name = s;
-                import = var.import;
-                summary = var.summary;
-              },
-            f_arg )
-          :: lst)
+          VarListSet.fold
+            (fun f_arg acc ->
+              ( AST.F
+                  {
+                    typ = name;
+                    method_name = s;
+                    import = var.import;
+                    summary = var.summary;
+                  },
+                f_arg )
+              :: acc)
+            f_arg_list lst)
         [] setter_list
 
 let get_ret_obj (class_package, class_name) m_info (c_info, ig) s_map =
@@ -1512,15 +1624,18 @@ let get_cfunc constructor m_info =
     else c |> Str.split Regexp.dot |> List.hd
   in
   let func = AST.F { typ = t; method_name = c; import = i; summary = s } in
-  let arg =
+  let arg_list =
     mk_arg ~is_s:(is_s_method c m_info)
       (MethodInfo.M.find c m_info).MethodInfo.formal_params s
   in
-  (cost, (func, AST.Arg arg))
+  VarListSet.fold
+    (fun arg cfuncs -> (cost, (func, AST.Arg arg)) :: cfuncs)
+    arg_list []
 
 let get_cfuncs list m_info =
   List.fold_left
-    (fun lst (cost, c, s, i) -> get_cfunc (cost, c, s, i) m_info :: lst)
+    (fun lst (cost, c, s, i) ->
+      List.rev_append (get_cfunc (cost, c, s, i) m_info) lst)
     [] list
 
 let get_c ret summary _ m_info c_info =
