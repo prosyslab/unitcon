@@ -331,6 +331,13 @@ module AST = struct
     | Assign _ when ground p -> Skip
     | _ -> p
 
+  let rec count_dist_arg arg =
+    match arg with
+    | hd :: tl ->
+        count_dist_arg tl
+        + List.fold_left (fun cnt x -> if hd = x then 0 else cnt) 1 tl
+    | _ -> 1
+
   let rec count_nt = function
     | Const (x, exp) -> count_id x + count_exp exp
     | Assign (x0, x1, func, arg) ->
@@ -343,7 +350,8 @@ module AST = struct
   and count_arg arg =
     match arg with
     | Arg a ->
-        (2 |> float_of_int) ** (List.length a |> float_of_int) |> int_of_float
+        (2 |> float_of_int) ** (count_dist_arg a |> float_of_int)
+        |> int_of_float
     | _ -> 0
 
   and count_func func typ =

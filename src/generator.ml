@@ -1412,21 +1412,21 @@ let mk_params_list summary params_set org_param =
     match org_params with
     | hd :: tl ->
         let same_param = find_same_param hd |> find_org_param in
-        (if params_list = [] then mk_params tl [ [ hd ] ]
-        else if hd = same_param then
-          (* not found the same parameter *)
-          List.fold_left
-            (fun acc list -> List.cons (hd :: list) acc)
-            [] params_list
-        else
-          List.fold_left
-            (fun acc list ->
-              List.cons (same_param :: list) acc |> List.cons (hd :: list))
-            [] params_list)
+        (if params_list = [] then [ [ hd ] ]
+         else if hd = same_param then
+           (* not found the same parameter *)
+           List.fold_left
+             (fun acc list -> List.cons (hd :: list) acc)
+             [] params_list
+         else
+           List.fold_left
+             (fun acc list ->
+               List.cons (same_param :: list) acc |> List.cons (hd :: list))
+             [] params_list)
         |> mk_params tl
     | _ -> params_list
   in
-  (org_params_list |> List.rev) :: mk_params org_params_list []
+  mk_params org_params_list []
 
 let mk_arg ~is_s param s =
   let param = if is_s then param else param |> List.tl in
@@ -1455,18 +1455,15 @@ let error_entry_func ee es m_info c_info =
   in
   List.fold_left
     (fun lst x ->
-      VarListSet.fold
-        (fun f_arg acc ->
-          ( AST.F
-              {
-                typ = x |> Str.split Regexp.dot |> List.rev |> List.hd;
-                method_name = ee;
-                import = x;
-                summary = es;
-              },
-            f_arg )
-          :: acc)
-        f_arg_list lst)
+      let typ = x |> Str.split Regexp.dot |> List.rev |> List.hd in
+      if VarListSet.cardinal f_arg_list = 0 then
+        (AST.F { typ; method_name = ee; import = x; summary = es }, []) :: lst
+      else
+        VarListSet.fold
+          (fun f_arg acc ->
+            (AST.F { typ; method_name = ee; import = x; summary = es }, f_arg)
+            :: acc)
+          f_arg_list lst)
     [] typ_list
 
 (* id is receiver variable *)
@@ -1496,18 +1493,18 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
             mk_arg ~is_s:(is_s_method s m_info)
               (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary
           in
-          VarListSet.fold
-            (fun f_arg acc ->
-              ( AST.F
-                  {
-                    typ = name;
-                    method_name = s;
-                    import = var.import;
-                    summary = var.summary;
-                  },
-                f_arg )
-              :: acc)
-            f_arg_list lst)
+          let f =
+            AST.F
+              {
+                typ = name;
+                method_name = s;
+                import = var.import;
+                summary = var.summary;
+              }
+          in
+          if VarListSet.cardinal f_arg_list = 0 then (f, []) :: lst
+          else
+            VarListSet.fold (fun f_arg acc -> (f, f_arg) :: acc) f_arg_list lst)
         [] setter_list
 
 let get_ret_obj (class_package, class_name) m_info (c_info, ig) s_map =
@@ -1628,9 +1625,11 @@ let get_cfunc constructor m_info =
     mk_arg ~is_s:(is_s_method c m_info)
       (MethodInfo.M.find c m_info).MethodInfo.formal_params s
   in
-  VarListSet.fold
-    (fun arg cfuncs -> (cost, (func, AST.Arg arg)) :: cfuncs)
-    arg_list []
+  if VarListSet.cardinal arg_list = 0 then [ (cost, (func, AST.Arg [])) ]
+  else
+    VarListSet.fold
+      (fun arg cfuncs -> (cost, (func, AST.Arg arg)) :: cfuncs)
+      arg_list []
 
 let get_cfuncs list m_info =
   List.fold_left
@@ -1716,16 +1715,22 @@ let cname_condition m_name m_info =
 let get_cname f = AST.ClassName (AST.get_func f).AST.typ
 
 let get_arg_seq (args : AST.id list) =
+  let already_arg = ref [] in
   List.fold_left
     (fun s arg ->
-      let x =
-        List.fold_left (fun lst x -> AST.mk_const_arg x arg :: lst) [] s
-      in
-      if is_primitive arg then x
-      else
-        x
-        |> List.rev_append
-             (List.fold_left (fun lst x -> AST.mk_assign_arg x arg :: lst) [] s))
+      if List.mem arg !already_arg then s
+      else (
+        already_arg := arg :: !already_arg;
+        let x =
+          List.fold_left (fun lst x -> AST.mk_const_arg x arg :: lst) [] s
+        in
+        if is_primitive arg then x
+        else
+          x
+          |> List.rev_append
+               (List.fold_left
+                  (fun lst x -> AST.mk_assign_arg x arg :: lst)
+                  [] s)))
     [ AST.Skip ] args
 
 let rec unroll ~assign_ground (cost, p) summary cg m_info c_info s_map e_info =
@@ -1913,8 +1918,8 @@ let pretty_format p =
   let rec imports s set =
     let add_import import set =
       (if is_nested_class import then
-       ImportSet.add (Str.replace_first (Str.regexp "\\$.*$") "" import) set
-      else set)
+         ImportSet.add (Str.replace_first (Str.regexp "\\$.*$") "" import) set
+       else set)
       |> ImportSet.add import
     in
     match s with
