@@ -1,8 +1,7 @@
 from tree_sitter import Language, Parser
-import os, sys, subprocess, pathlib
-import re, shutil
+import os, pathlib
+import re, json
 import argparse
-import json
 
 Language.build_library('build/languages.so', ['./tree-sitter-java'])
 

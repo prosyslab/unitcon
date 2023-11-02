@@ -1,8 +1,7 @@
 from tree_sitter import Language, Parser
-import os
-import sys
-import json
-import re
+import os, pathlib
+import re, json
+import argparse
 
 Language.build_library('build/languages.so', ['./tree-sitter-java'])
 
@@ -99,33 +98,37 @@ def one_file_enum_info(src, encoding):
     get_enum(tree.root_node, src_lines)
 
 
-def all_file_enum_info(dirname, encoding):
-    filenames = os.listdir(dirname)
-    for filename in filenames:
-        full_filename = os.path.join(dirname, filename)
-        if os.path.isdir(full_filename):
-            all_file_enum_info(full_filename, encoding)
-        else:
-            ext = os.path.splitext(full_filename)[-1]
-            if ext == '.java':
-                one_file_enum_info(full_filename, encoding)
+def all_files_enum_info(project_dir, encoding):
+    for dirpath, dirnames, filenames in os.walk(project_dir):
+        for filename in filenames:
+            if filename.endswith(".java"):
+                one_file_enum_info(os.path.join(dirpath, filename), encoding)
 
 
-if len(sys.argv) != 3:
-    print("Usage: directory_path encoding")
-    sys.exit()
+def mk_json_file(project_dir):
+    prop_dir = os.path.join(project_dir, "unitcon_properties")
+    if not os.path.isdir(prop_dir):
+        os.makedirs(prop_dir)
+    with open(os.path.join(prop_dir, "enum_info.json"), 'w',
+              encoding='utf-8') as json_file:
+        json.dump(enum_list, json_file, indent=2)
 
-enum_info = []
-dir_path = sys.argv[1]
-encoding = sys.argv[2]
 
-all_file_enum_info(dir_path, encoding)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "project",
+        type=pathlib.Path,
+        default=None,
+        help='Project directory where need to create build command files')
+    parser.add_argument("--encoding",
+                        type=str,
+                        default="utf-8",
+                        help='Encoding type of project')
+    args = parser.parse_args()
+    all_files_enum_info(args.project, args.encoding)
+    mk_json_file(args.project)
 
-name = ''
-if dir_path[-1] == '/':
-    name = 'enum_info.json'
-else:
-    name = '/enum_info.json'
 
-with open(dir_path + name, 'w', encoding='utf-8') as json_file:
-    json.dump(enum_list, json_file, indent=2)
+if __name__ == "__main__":
+    main()
