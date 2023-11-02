@@ -310,7 +310,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double eq_f, Float le_f ->
               if eq_f <= le_f then (caller_prop.Language.value, true)
               else (caller_prop.Language.value, false)
-          | _ -> failwith "not allowed type in eq, le")
+          | _ -> (Language.Value.M.empty, false))
       | Eq eq_v, Lt lt_v | Lt lt_v, Eq eq_v -> (
           match (eq_v, lt_v) with
           | Int eq_i, Int lt_i
@@ -325,7 +325,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double eq_f, Float lt_f ->
               if eq_f < lt_f then (caller_prop.Language.value, true)
               else (caller_prop.Language.value, false)
-          | _ -> failwith "not allowed type in eq, lt")
+          | _ -> (Language.Value.M.empty, false))
       | Eq eq_v, Ge ge_v | Ge ge_v, Eq eq_v -> (
           match (eq_v, ge_v) with
           | Int eq_i, Int ge_i
@@ -340,7 +340,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double eq_f, Float ge_f ->
               if eq_f >= ge_f then (caller_prop.Language.value, true)
               else (caller_prop.Language.value, false)
-          | _ -> failwith "not allowed type in eq, ge")
+          | _ -> (Language.Value.M.empty, false))
       | Eq eq_v, Gt gt_v | Gt gt_v, Eq eq_v -> (
           match (eq_v, gt_v) with
           | Int eq_i, Int gt_i
@@ -355,7 +355,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double eq_f, Float gt_f ->
               if eq_f > gt_f then (caller_prop.Language.value, true)
               else (caller_prop.Language.value, false)
-          | _ -> failwith "not allowed type in eq, gt")
+          | _ -> (Language.Value.M.empty, false))
       | Eq eq_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Eq eq_v -> (
           match (eq_v, btw_min, btw_max) with
@@ -381,7 +381,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
               if eq_f >= btw_min_f && eq_f <= btw_max_f then
                 (caller_prop.Language.value, true)
               else (caller_prop.Language.value, false)
-          | _ -> failwith "not allowed type in eq, between")
+          | _ -> (Language.Value.M.empty, false))
       | Eq eq_v, Outside (out_min, out_max)
       | Outside (out_min, out_max), Eq eq_v -> (
           match (eq_v, out_min, out_max) with
@@ -407,7 +407,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
               if eq_f < o_min_f && eq_f > o_max_f then
                 (caller_prop.Language.value, true)
               else (caller_prop.Language.value, false)
-          | _ -> failwith "not allowed type in eq, outside")
+          | _ -> (Language.Value.M.empty, false))
       | Le le_v, Ge ge_v | Ge ge_v, Le le_v -> (
           match (le_v, ge_v) with
           | Int le_i, Int ge_i
@@ -422,7 +422,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double le_f, Float ge_f ->
               if le_f >= ge_f then (caller_prop.Language.value, true)
               else (caller_prop.Language.value, false)
-          | _ -> failwith "not allowed type in le, ge")
+          | _ -> (Language.Value.M.empty, false))
       | Le l_v, Gt g_v
       | Lt l_v, Ge g_v
       | Lt l_v, Gt g_v
@@ -442,7 +442,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double l_f, Float g_f ->
               if l_f > g_f then (caller_prop.Language.value, true)
               else (caller_prop.Language.value, false)
-          | _ -> failwith "not allowed type in le, ge")
+          | _ -> (Language.Value.M.empty, false))
       | Le le_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Le le_v -> (
           match (le_v, btw_min, btw_max) with
@@ -466,7 +466,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double le_f, Float btw_min_f, Double _ ->
               if le_f < btw_min_f then (caller_prop.Language.value, false)
               else (caller_prop.Language.value, true)
-          | _ -> failwith "not allowed type in le, between")
+          | _ -> (Language.Value.M.empty, false))
       | Lt lt_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Lt lt_v -> (
           match (lt_v, btw_min, btw_max) with
@@ -490,7 +490,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double lt_f, Float btw_min_f, Double _ ->
               if lt_f <= btw_min_f then (caller_prop.Language.value, false)
               else (caller_prop.Language.value, true)
-          | _ -> failwith "not allowed type in lt, between")
+          | _ -> (Language.Value.M.empty, false))
       | Ge ge_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Ge ge_v -> (
           match (ge_v, btw_min, btw_max) with
@@ -514,7 +514,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double ge_f, Double _, Float btw_max_f ->
               if ge_f > btw_max_f then (caller_prop.Language.value, false)
               else (caller_prop.Language.value, true)
-          | _ -> failwith "not allowed type in ge, between")
+          | _ -> (Language.Value.M.empty, false))
       | Gt gt_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Gt gt_v -> (
           match (gt_v, btw_min, btw_max) with
@@ -538,7 +538,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double gt_f, Double _, Float btw_max_f ->
               if gt_f >= btw_max_f then (caller_prop.Language.value, false)
               else (caller_prop.Language.value, true)
-          | _ -> failwith "not allowed type in gt, between")
+          | _ -> (Language.Value.M.empty, false))
       | Between (caller_min, caller_max), Between (callee_min, callee_max) -> (
           match (caller_min, caller_max, callee_min, callee_max) with
           | Int r_min_i, Int r_max_i, Int e_min_i, Int e_max_i
@@ -579,7 +579,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
               if r_max_f < e_min_f || e_max_f < r_min_f then
                 (caller_prop.Language.value, false)
               else (caller_prop.Language.value, true)
-          | _ -> failwith "not allowed type in between, between")
+          | _ -> (Language.Value.M.empty, false))
       | Between (btw_min, btw_max), Outside (out_min, out_max)
       | Outside (out_min, out_max), Between (btw_min, btw_max) -> (
           match (btw_min, btw_max, out_min, out_max) with
@@ -622,7 +622,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
               if btw_min_f <= o_min_f && btw_max_f >= o_max_f then
                 (caller_prop.Language.value, false)
               else (caller_prop.Language.value, true)
-          | _ -> failwith "not allowed type in between, outside")
+          | _ -> (Language.Value.M.empty, false))
       | _, Outside _
       | Outside _, _
       | Lt _, Le _
@@ -1892,26 +1892,26 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
            c_info)
     else caller_preconds
   in
-  if is_public e_method m_info then
-    ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty
-  else
-    let caller_list = CG.succ cg e_method in
-    List.fold_left
-      (fun set caller_method ->
-        (match
-           CallPropMap.M.find_opt (caller_method, e_method) call_prop_map
-         with
-        | None ->
-            (* It is possible without any specific conditions *)
-            find_ee caller_method Language.empty_summary cg summary
-              call_prop_map m_info c_info
-        | Some prop_list ->
-            List.fold_left
-              (fun caller_preconds call_prop ->
-                propagation caller_method caller_preconds call_prop)
-              ErrorEntrySet.empty prop_list)
-        |> ErrorEntrySet.union set)
-      ErrorEntrySet.empty caller_list
+  let ee_set =
+    if is_public e_method m_info then
+      ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty
+    else ErrorEntrySet.empty
+  in
+  let caller_list = CG.succ cg e_method in
+  List.fold_left
+    (fun set caller_method ->
+      (match CallPropMap.M.find_opt (caller_method, e_method) call_prop_map with
+      | None ->
+          (* It is possible without any specific conditions *)
+          find_ee caller_method Language.empty_summary cg summary call_prop_map
+            m_info c_info
+      | Some prop_list ->
+          List.fold_left
+            (fun caller_preconds call_prop ->
+              propagation caller_method caller_preconds call_prop)
+            ErrorEntrySet.empty prop_list)
+      |> ErrorEntrySet.union set)
+    ee_set caller_list
 
 let pretty_format p =
   let i_format i = Str.replace_first Regexp.dollar "." i in
