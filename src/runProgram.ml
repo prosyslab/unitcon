@@ -16,6 +16,7 @@ type t = {
   call_prop_file : string;
   inheritance_file : string;
   enum_file : string;
+  extra_callee_file : string;
   compile_command : string;
   test_command : string;
   test_file : string;
@@ -83,6 +84,10 @@ let parse_class_info filename =
 let parse_enum_info filename =
   if not (Sys.file_exists filename) then EnumInfo.M.empty
   else Json.from_file filename |> Enum.of_json
+
+let parse_extra_callee filename minfo callgraph =
+  if not (Sys.file_exists filename) then callgraph
+  else Json.from_file filename |> Callgraph.of_extra_json minfo callgraph
 
 (* ************************************** *
    run program
@@ -195,6 +200,7 @@ let init program_dir =
     call_prop_file = cons con_path "call_proposition" |> cons program_dir;
     inheritance_file = cons con_path "inheritance_info.json" |> cons program_dir;
     enum_file = cons con_path "enum_info.json" |> cons program_dir;
+    extra_callee_file = cons con_path "extra_callee.json" |> cons program_dir;
     compile_command = cons con_path "compile_command" |> cons program_dir;
     test_command = cons con_path "test_command" |> cons program_dir;
     test_file = cons program_dir "UnitconTest.java";
@@ -243,7 +249,10 @@ let run program_dir =
   let info = init program_dir in
   let method_info = parse_method_info info.summary_file in
   let summary = parse_summary info.summary_file method_info in
-  let callgraph = parse_callgraph info.summary_file in
+  let callgraph =
+    parse_callgraph info.summary_file
+    |> parse_extra_callee info.extra_callee_file method_info
+  in
   let setter_map = get_setter summary method_info in
   let class_info = parse_class_info info.inheritance_file in
   let enum_info = parse_enum_info info.enum_file in
