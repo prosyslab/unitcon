@@ -15,10 +15,9 @@ source venv/bin/activate
 
 ## Prerequisites
 ```sh
-python3 script/inheritance_info_parser.py PATH/TO/SOURCE/DIR  [ utf-8 | iso-8859-1 ]
-python3 script/enum_parser.py PATH/TO/SOURCE/DIR  [ utf-8 | iso-8859-1 ]
-mv PATH/TO/SOURCE/DIR/hierarchy_info.json PATH/TO/SOURCE/DIR/unitcon_properties/inheritance_info.json
-mv PATH/TO/SOURCE/DIR/hierarchy_info.json PATH/TO/SOURCE/DIR/unitcon_properties/enum_info.json
+python3 script/inheritance_info_parser.py PATH/TO/SOURCE/DIR --encoding [ utf-8 | iso-8859-1 ]
+python3 script/enum_parser.py PATH/TO/SOURCE/DIR --encoding  [ utf-8 | iso-8859-1 ]
+python3 script/callee_collector.py PATH/TO/SOURCE/DIR --encoding  [ utf-8 | iso-8859-1 ]
 ```
 
 ## Run
