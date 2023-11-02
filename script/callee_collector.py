@@ -40,7 +40,35 @@ extract_catch_block_query = J_LANGUAGE.query("""
 )
 """)
 
-append_callee = []
+extra_callee = []
+
+
+def remove_generic(name):
+    rename = name
+    index_stack = []
+    for i in range(len(name)):
+        if name[i] == '<':
+            index_stack.append(i)
+        elif name[i] == '>':
+            prev_brk = index_stack.pop()
+            add_space = ' ' * (i + 1 - prev_brk)
+            rename = rename[0:prev_brk] + add_space + rename[i + 1:]
+    return rename
+
+
+def remove_parentheses(name):
+    rename = name
+    index_stack = []
+    for i in range(1, len(name)):
+        if name[i] == '(':
+            index_stack.append(i)
+        elif name[i] == ')':
+            if index_stack == []:
+                continue
+            prev_brk = index_stack.pop()
+            add_space = ' ' * (i + 1 - prev_brk)
+            rename = rename[0:prev_brk] + add_space + rename[i + 1:]
+    return rename
 
 
 def get_text(node, src):
@@ -68,9 +96,12 @@ def get_callee_name(node, src, callee_list):
         if i[1] == 'callee-name':
             callee_name = text
         elif i[1] == 'callee-arg':
-            num_of_arg = len(text.split(','))
             if callee_name == '':
                 continue
+            text = re.sub("[();]", "", remove_parentheses(text)).strip()
+            num_of_arg = len(text.split(','))
+            if text == "":
+                num_of_arg = 0
             callee_list.append({
                 'callee': callee_name,
                 'num_of_arg': num_of_arg
@@ -100,7 +131,8 @@ def get_method_name(node, src, class_name):
             method_name = text
         elif i[1] == 'method-param':
             param_type_list = [
-                p.strip().split(' ')[0] for p in text.split(',')
+                p.strip().split(' ')[0]
+                for p in remove_generic(text).split(',')
             ]
             param_types = ','.join(param_type_list)
             if not param_types.startswith('('):
@@ -111,7 +143,7 @@ def get_method_name(node, src, class_name):
             callee_list = get_catch_block(i[0], src)
             if method_name == "" or param_types == "" or not callee_list:
                 continue
-            append_callee.append({
+            extra_callee.append({
                 'caller': class_name + '.' + method_name + param_types,
                 'callee': callee_list
             })
@@ -169,6 +201,16 @@ def all_files_collector(project_dir, encoding):
                 one_file_collector(os.path.join(dirpath, filename), encoding)
 
 
+def mk_json_file(project_dir):
+    prop_dir = os.path.join(project_dir, "unitcon_properties")
+    if not os.path.isdir(prop_dir):
+        os.makedirs(prop_dir)
+    with open(os.path.join(prop_dir, "extra_callee.json"),
+              'w',
+              encoding='utf-8') as json_file:
+        json.dump(extra_callee, json_file, indent=2)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -182,10 +224,7 @@ def main():
                         help='Encoding type of project')
     args = parser.parse_args()
     all_files_collector(args.project, args.encoding)
-    with open(os.path.join(args.project, "append_callee.json"),
-              'w',
-              encoding='utf-8') as json_file:
-        json.dump(append_callee, json_file, indent=2)
+    mk_json_file(args.project)
 
 
 if __name__ == "__main__":
