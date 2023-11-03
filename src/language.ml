@@ -336,7 +336,7 @@ module AST = struct
     | hd :: tl ->
         count_dist_arg tl
         + List.fold_left (fun cnt x -> if hd = x then 0 else cnt) 1 tl
-    | _ -> 1
+    | _ -> 0
 
   let rec count_nt = function
     | Const (x, exp) -> count_id x + count_exp exp
@@ -366,6 +366,20 @@ module AST = struct
   and count_id = function Id -> 1 | _ -> 0
 
   and count_exp = function Exp -> 1 | _ -> 0
+
+  let rec count_t = function
+    | Const (x, exp) -> count_tid x + count_texp exp
+    | Assign (x0, x1, _, arg) -> count_tid x0 + count_tid x1 + count_param arg
+    | Void (x, _, arg) -> count_tid x + count_param arg
+    | Seq (s1, s2) -> count_t s1 + count_t s2
+    | Skip -> 0
+    | Stmt -> 0
+
+  and count_param arg = match arg with Param p -> p |> List.length | _ -> 0
+
+  and count_tid = function Id -> 0 | _ -> 1
+
+  and count_texp = function Exp -> 0 | _ -> 1
 
   let is_array f =
     let fname = (get_func f).method_name in

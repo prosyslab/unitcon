@@ -61,7 +61,7 @@ let z3ctx =
 let solver = Z3.Solver.mk_solver z3ctx None
 
 (* penalty for unsatisfied conditions, # of non-terminals for p *)
-let get_cost p = (p |> fst, AST.count_nt (p |> snd))
+let get_cost p = (p |> fst, AST.count_nt (p |> snd), AST.count_t (p |> snd))
 
 let mk_some x = Some x
 
@@ -1873,29 +1873,44 @@ and unroll_void (cost, p) =
         (unroll_void (cost, ns1))
   | _ -> [ (cost, p) ]
 
+let check_overload prev_ee current_ee =
+  let prev =
+    if prev_ee = "" then ""
+    else
+      Str.split Regexp.dot prev_ee
+      |> List.rev |> List.hd
+      |> Str.split (Str.regexp "(")
+      |> List.hd
+  in
+  if
+    prev = "" || Str.string_match (".*" ^ prev ^ "(" |> Str.regexp) current_ee 0
+  then true
+  else false
+
 (* find error entry *)
-let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
-  let propagation caller_method caller_preconds call_prop =
+let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
+    m_info c_info =
+  let propagation ?(prev_ee = "") caller_method caller_preconds call_prop =
     let new_value, new_mem, check_match =
       satisfy e_method e_summary call_prop m_info
     in
     if !Cmdline.basic_mode || !Cmdline.syn_priority then
       ErrorEntrySet.union caller_preconds
-        (find_ee caller_method Language.empty_summary cg summary call_prop_map
-           m_info c_info)
+        (find_ee ~prev_ee caller_method Language.empty_summary cg summary
+           call_prop_map m_info c_info)
     else if check_match then
       let new_call_prop =
         new_mem_summary (new_value_summary call_prop new_value) new_mem
       in
       ErrorEntrySet.union caller_preconds
-        (find_ee caller_method new_call_prop cg summary call_prop_map m_info
-           c_info)
+        (find_ee ~prev_ee caller_method new_call_prop cg summary call_prop_map
+           m_info c_info)
     else caller_preconds
   in
-  let ee_set =
-    if is_public e_method m_info then
-      ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty
-    else ErrorEntrySet.empty
+  let new_prev_ee, ee_set =
+    if is_public e_method m_info && check_overload prev_ee e_method then
+      (e_method, ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty)
+    else (prev_ee, ErrorEntrySet.empty)
   in
   let caller_list = CG.succ cg e_method in
   List.fold_left
@@ -1903,12 +1918,13 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
       (match CallPropMap.M.find_opt (caller_method, e_method) call_prop_map with
       | None ->
           (* It is possible without any specific conditions *)
-          find_ee caller_method Language.empty_summary cg summary call_prop_map
-            m_info c_info
+          find_ee ~prev_ee:new_prev_ee caller_method Language.empty_summary cg
+            summary call_prop_map m_info c_info
       | Some prop_list ->
           List.fold_left
             (fun caller_preconds call_prop ->
-              propagation caller_method caller_preconds call_prop)
+              propagation ~prev_ee:new_prev_ee caller_method caller_preconds
+                call_prop)
             ErrorEntrySet.empty prop_list)
       |> ErrorEntrySet.union set)
     ee_set caller_list
@@ -1953,11 +1969,13 @@ let pretty_format p =
 let priority_q queue =
   List.sort
     (fun p1 p2 ->
-      let s1 = get_cost p1 in
-      let s2 = get_cost p2 in
-      if !Cmdline.sem_priority then compare (s1 |> fst) (s2 |> fst)
-      else if !Cmdline.syn_priority then compare (s1 |> snd) (s2 |> snd)
-      else compare ((s1 |> fst) + (s1 |> snd)) ((s2 |> fst) + (s2 |> snd)))
+      let sem1, nt1, t1 = get_cost p1 in
+      let sem2, nt2, t2 = get_cost p2 in
+      if !Cmdline.sem_priority then compare sem1 sem2
+      else if !Cmdline.syn_priority then compare nt1 nt2
+      else if compare (sem1 + nt1) (sem2 + nt2) <> 0 then
+        compare (sem1 + nt1) (sem2 + nt2)
+      else compare t1 t2)
     queue
 
 let rec mk_testcase queue summary cg m_info c_info s_map e_info =
