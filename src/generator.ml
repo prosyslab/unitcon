@@ -1877,14 +1877,12 @@ let check_overload prev_ee current_ee =
   let prev =
     if prev_ee = "" then ""
     else
-      Str.split Regexp.dot prev_ee
-      |> List.rev |> List.hd
-      |> Str.split (Str.regexp "(")
+      Str.split (Str.regexp "(") prev_ee
       |> List.hd
+      |> Str.global_replace Regexp.dollar "\\$"
   in
-  if
-    prev = "" || Str.string_match (".*" ^ prev ^ "(" |> Str.regexp) current_ee 0
-  then true
+  if prev = "" || Str.string_match (prev ^ "(" |> Str.regexp) current_ee 0 then
+    true
   else false
 
 (* find error entry *)
@@ -1907,27 +1905,34 @@ let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
            m_info c_info)
     else caller_preconds
   in
-  let new_prev_ee, ee_set =
-    if is_public e_method m_info && check_overload prev_ee e_method then
-      (e_method, ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty)
-    else (prev_ee, ErrorEntrySet.empty)
-  in
-  let caller_list = CG.succ cg e_method in
-  List.fold_left
-    (fun set caller_method ->
-      (match CallPropMap.M.find_opt (caller_method, e_method) call_prop_map with
-      | None ->
-          (* It is possible without any specific conditions *)
-          find_ee ~prev_ee:new_prev_ee caller_method Language.empty_summary cg
-            summary call_prop_map m_info c_info
-      | Some prop_list ->
-          List.fold_left
-            (fun caller_preconds call_prop ->
-              propagation ~prev_ee:new_prev_ee caller_method caller_preconds
-                call_prop)
-            ErrorEntrySet.empty prop_list)
-      |> ErrorEntrySet.union set)
-    ee_set caller_list
+  if prev_ee <> "" && check_overload prev_ee e_method |> not then
+    ErrorEntrySet.empty
+  else
+    let new_prev_ee, ee_set =
+      if is_public e_method m_info && check_overload prev_ee e_method then
+        (e_method, ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty)
+      else (prev_ee, ErrorEntrySet.empty)
+    in
+    let caller_list =
+      CG.succ cg e_method |> List.filter (fun x -> x <> e_method)
+    in
+    List.fold_left
+      (fun set caller_method ->
+        (match
+           CallPropMap.M.find_opt (caller_method, e_method) call_prop_map
+         with
+        | None ->
+            (* It is possible without any specific conditions *)
+            find_ee ~prev_ee:new_prev_ee caller_method Language.empty_summary cg
+              summary call_prop_map m_info c_info
+        | Some prop_list ->
+            List.fold_left
+              (fun caller_preconds call_prop ->
+                propagation ~prev_ee:new_prev_ee caller_method caller_preconds
+                  call_prop)
+              ErrorEntrySet.empty prop_list)
+        |> ErrorEntrySet.union set)
+      ee_set caller_list
 
 let pretty_format p =
   let i_format i = Str.replace_first Regexp.dollar "." i in
