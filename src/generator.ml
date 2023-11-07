@@ -1914,7 +1914,8 @@ let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
       else (prev_ee, ErrorEntrySet.empty)
     in
     let caller_list =
-      CG.succ cg e_method |> List.filter (fun x -> x <> e_method)
+      try CG.succ cg e_method |> List.filter (fun x -> x <> e_method)
+      with Invalid_argument _ -> []
     in
     List.fold_left
       (fun set caller_method ->
