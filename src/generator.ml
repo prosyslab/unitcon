@@ -1928,9 +1928,10 @@ let rec all_unroll p summary cg m_info c_info s_map e_info stmt_map =
 
 let rec change_stmt p s new_s =
   match p with
+  | _ when p = s -> new_s
+  | AST.Seq _ when p = s -> new_s
   | AST.Seq (s1, s2) when s1 = s -> AST.Seq (new_s, s2)
   | AST.Seq (s1, s2) when s2 = s -> AST.Seq (s1, new_s)
-  | AST.Seq _ when p = s -> new_s
   | AST.Seq (s1, s2) -> AST.Seq (change_stmt s1 s new_s, change_stmt s2 s new_s)
   | _ -> p
 
@@ -1944,21 +1945,16 @@ let rec return_stmts p =
   | _ -> [ p ]
 
 let combinate p stmt_map =
-  let rec combinate_stmt s tc_list new_s_list =
-    match tc_list with
-    | org_tc :: tl ->
-        let new_list =
-          List.fold_left
-            (fun lst new_s -> change_stmt org_tc s new_s :: lst)
-            [] new_s_list
-        in
-        List.rev_append new_list (combinate_stmt s tl new_s_list)
-    | _ -> []
+  let combinate_stmt p s new_s_list =
+    List.fold_left (fun lst new_s -> change_stmt p s new_s :: lst) [] new_s_list
   in
   return_stmts p
   |> List.fold_left
-       (fun lst s -> combinate_stmt s lst (StmtMap.M.find s stmt_map))
-       [ p ]
+       (fun lst s ->
+         match StmtMap.M.find_opt s stmt_map with
+         | Some map -> List.rev_append (combinate_stmt p s map) lst
+         | _ -> lst)
+       []
 
 let check_overload prev_ee current_ee =
   let prev =
@@ -2071,17 +2067,16 @@ let pretty_format p =
        else compare t1 t2)
      queue *)
 
-let rec mk_testcase queue summary cg m_info c_info s_map e_info =
+let rec mk_testcase summary cg m_info c_info s_map e_info queue =
   (* let queue = if !Cmdline.basic_mode then queue else priority_q queue in *)
   match queue with
   | p :: tl ->
       if AST.ground p then [ (pretty_format p, tl) ]
       else
-        let stmt_map =
-          all_unroll p summary cg m_info c_info s_map e_info StmtMap.M.empty
-        in
-        let new_q = combinate p stmt_map |> List.rev_append (tl |> List.rev) in
-        mk_testcase new_q summary cg m_info c_info s_map e_info
+        all_unroll p summary cg m_info c_info s_map e_info StmtMap.M.empty
+        |> combinate p
+        |> List.rev_append (tl |> List.rev)
+        |> mk_testcase summary cg m_info c_info s_map e_info
   | [] -> []
 
 let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
@@ -2104,5 +2099,5 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
         [])
     else queue
   in
-  let result = mk_testcase init summary cg m_info c_info s_map e_info in
+  let result = mk_testcase summary cg m_info c_info s_map e_info init in
   if result = [] then (("", ""), []) else List.hd result
