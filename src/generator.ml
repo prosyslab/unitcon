@@ -41,6 +41,16 @@ module ErrorEntrySet = Set.Make (struct
   let compare = compare
 end)
 
+module StmtMap = struct
+  module M = Map.Make (struct
+    type t = AST.t
+
+    let compare = compare
+  end)
+
+  type t = AST.t list M.t
+end
+
 let outer = ref 0
 
 let recv = ref 0
@@ -61,7 +71,7 @@ let z3ctx =
 let solver = Z3.Solver.mk_solver z3ctx None
 
 (* penalty for unsatisfied conditions, # of non-terminals for p *)
-let get_cost p = (p |> fst, AST.count_nt (p |> snd), AST.count_t (p |> snd))
+(* let get_cost p = (p |> fst, AST.count_nt (p |> snd), AST.count_t (p |> snd)) *)
 
 let mk_some x = Some x
 
@@ -1733,29 +1743,13 @@ let get_arg_seq (args : AST.id list) =
                   [] s)))
     [ AST.Skip ] args
 
-let rec unroll ~assign_ground (cost, p) summary cg m_info c_info s_map e_info =
+let const_unroll p summary m_info e_info =
   match p with
-  | _ when assign_ground -> unroll_void (cost, p)
-  | AST.Seq (s1, s2) when AST.assign_ground s1 |> not ->
-      let lst =
-        unroll ~assign_ground (cost, s1) summary cg m_info c_info s_map e_info
-      in
-      List.fold_left
-        (fun lst x -> (x |> fst, AST.Seq (x |> snd, s2)) :: lst)
-        [] lst
-  | Seq (s1, s2) when AST.assign_ground s2 |> not ->
-      let lst =
-        unroll ~assign_ground (cost, s2) summary cg m_info c_info s_map e_info
-      in
-      List.fold_left
-        (fun lst x -> (x |> fst, AST.Seq (s1, x |> snd)) :: lst)
-        [] lst
-  | Const (x, _) when AST.const p ->
+  | AST.Const (x, _) when AST.const p ->
       let typ, id = AST.get_vinfo x in
       if is_primitive x then
         List.fold_left
-          (fun lst x1 ->
-            (cost + (x1 |> fst), AST.const_rule1 p (x1 |> snd)) :: lst)
+          (fun lst x1 -> AST.const_rule1 p (x1 |> snd) :: lst)
           []
           (get_value typ id (AST.get_v x).summary)
       else
@@ -1764,14 +1758,13 @@ let rec unroll ~assign_ground (cost, p) summary cg m_info c_info s_map e_info =
             (fun lst x1 ->
               match x1 |> snd with
               | AST.Primitive _ -> lst
-              | _ -> (cost + (x1 |> fst), AST.const_rule3 p) :: lst)
+              | _ -> AST.const_rule3 p :: lst)
             []
             (get_value typ id (AST.get_v x).summary)
         in
         let r2 =
           List.fold_left
-            (fun lst x1 ->
-              (cost + (x1 |> fst), AST.const_rule2 p (x1 |> snd)) :: lst)
+            (fun lst x1 -> AST.const_rule2 p (x1 |> snd) :: lst)
             []
             (global_var_list
                (Language.get_class_name (AST.get_vinfo x |> fst))
@@ -1779,24 +1772,24 @@ let rec unroll ~assign_ground (cost, p) summary cg m_info c_info s_map e_info =
         in
         if is_receiver (AST.get_vinfo x |> snd) then r2
         else List.rev_append r3 r2
-  | Assign (x0, _, _, _) when AST.fcall_in_assign p ->
+  | _ -> failwith "Fail: const_unroll"
+
+let fcall_in_assign_unroll p summary cg m_info c_info s_map =
+  match p with
+  | AST.Assign (x0, _, _, _) when AST.fcall_in_assign p ->
       let field_map = get_field_map x0 s_map in
       List.rev_append
         (get_c x0 summary cg m_info c_info)
         (get_ret_c x0 summary m_info c_info s_map)
       |> List.fold_left
-           (fun lst (c, (f, arg)) ->
-             (cost + c, AST.fcall_in_assign_rule p field_map f arg) :: lst)
+           (fun lst (_, (f, arg)) ->
+             AST.fcall_in_assign_rule p field_map f arg :: lst)
            []
-  | Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
-      let lst = get_void_func x m_info c_info s_map in
-      if lst = [] then raise Not_found_setter
-      else
-        List.fold_left
-          (fun lst (f, arg) ->
-            (cost, AST.fcall_in_void_rule p f (AST.Arg arg)) :: lst)
-          [] lst
-  | Assign (_, _, f, arg) when AST.recv_in_assign p ->
+  | _ -> failwith "Fail: fcall_in_assign_unroll"
+
+let recv_in_assign_unroll p m_info c_info =
+  match p with
+  | AST.Assign (_, _, f, arg) when AST.recv_in_assign p ->
       if
         is_nested_class (AST.get_func f).import
         && is_s_class (AST.get_func f).import c_info |> not
@@ -1806,72 +1799,166 @@ let rec unroll ~assign_ground (cost, p) summary cg m_info c_info s_map e_info =
         let r2 = AST.recv_in_assign_rule2_1 p recv f arg in
         let r3 = AST.recv_in_assign_rule3_1 p recv f arg in
         incr outer;
-        (cost, r2) :: [ (cost, r3) ])
+        r2 :: [ r3 ])
       else if cname_condition (AST.get_func f).method_name m_info then
-        [ (cost, get_cname f |> AST.recv_in_assign_rule1 p) ]
+        [ get_cname f |> AST.recv_in_assign_rule1 p ]
       else
         let r2 = AST.recv_in_assign_rule2 p "con_recv" !recv in
         let r3 = AST.recv_in_assign_rule3 p "con_recv" !recv in
         incr recv;
-        (cost, r2) :: [ (cost, r3) ]
-  | Void (_, f, _) when AST.recv_in_void p ->
+        r2 :: [ r3 ]
+  | _ -> failwith "Fail: recv_in_assign_unroll"
+
+let rec arg_in_assign_unroll p =
+  match p with
+  | AST.Assign (_, _, _, arg) when AST.arg_in_assign p ->
+      get_arg_seq
+        (List.fold_left
+           (fun lst x -> AST.Variable x :: lst)
+           [] (arg |> AST.get_arg))
+      |> List.fold_left
+           (fun lst x ->
+             AST.arg_in_assign_rule p x (AST.Param (arg |> AST.get_arg)) :: lst)
+           []
+  | Seq (s1, s2) when AST.arg_in_assign s2 ->
+      arg_in_assign_unroll s2
+      |> List.fold_left (fun lst x -> AST.Seq (s1, x) :: lst) []
+  | _ -> failwith "Fail: arg_in_assign_unroll"
+
+let void_unroll p =
+  match p with
+  | AST.Seq _ when AST.void p ->
+      AST.void_rule1 p
+      :: List.fold_left (fun lst x -> x :: lst) [] (AST.void_rule2 p)
+  | _ -> failwith "Fail: void_unroll"
+
+let fcall_in_void_unroll p m_info c_info s_map =
+  match p with
+  | AST.Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
+      let lst = get_void_func x m_info c_info s_map in
+      if lst = [] then raise Not_found_setter
+      else
+        List.fold_left
+          (fun lst (f, arg) -> AST.fcall_in_void_rule p f (AST.Arg arg) :: lst)
+          [] lst
+  | _ -> failwith "Fail: fcall_in_void_unroll"
+
+let recv_in_void_unroll p m_info =
+  match p with
+  | AST.Void (_, f, _) when AST.recv_in_void p ->
       if cname_condition (AST.get_func f).method_name m_info then
-        [ (cost, get_cname f |> AST.recv_in_void_rule1 p) ]
+        [ get_cname f |> AST.recv_in_void_rule1 p ]
       else
         let r2 = AST.recv_in_void_rule2 p "con_recv" !recv in
         let r3 = AST.recv_in_void_rule3 p "con_recv" !recv in
         incr recv;
-        (cost, r2) :: [ (cost, r3) ]
-  | Assign (_, _, _, arg) when AST.arg_in_assign p ->
-      let arg_seq =
-        get_arg_seq
-          (List.fold_left
-             (fun lst x -> AST.Variable x :: lst)
-             [] (arg |> AST.get_arg))
-      in
-      List.fold_left
-        (fun lst x ->
-          (cost, AST.arg_in_assign_rule p x (AST.Param (arg |> AST.get_arg)))
-          :: lst)
-        [] arg_seq
-  | Void (_, _, arg) when AST.arg_in_void p ->
-      let arg_seq =
-        get_arg_seq
-          (List.fold_left
-             (fun lst x -> AST.Variable x :: lst)
-             [] (arg |> AST.get_arg))
-      in
-      List.fold_left
-        (fun lst x ->
-          (cost, AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)))
-          :: lst)
-        [] arg_seq
-  | _ -> [ (cost, p) ]
+        r2 :: [ r3 ]
+  | _ -> failwith "Fail: recv_in_void_unroll"
 
-and unroll_void (cost, p) =
+let rec arg_in_void_unroll p =
   match p with
-  | _ when AST.ground p -> [ (cost, p) ]
-  | AST.Seq _ when AST.void p ->
-      (cost, AST.void_rule1 p)
-      :: List.fold_left (fun lst x -> (cost, x) :: lst) [] (AST.void_rule2 p)
-  | Seq (s1, s2) ->
-      let ns1, ns2 =
-        match AST.last_code s1 with
-        | AST.Assign _ when AST.is_stmt s2 ->
-            (AST.modify_last_assign s1, AST.Seq (AST.last_code s1, s2))
-        | _ -> (s1, s2)
+  | AST.Void (_, _, arg) when AST.arg_in_void p ->
+      let arg_seq =
+        get_arg_seq
+          (List.fold_left
+             (fun lst x -> AST.Variable x :: lst)
+             [] (arg |> AST.get_arg))
       in
       List.fold_left
-        (fun l x ->
+        (fun lst x ->
+          AST.arg_in_void_rule p x (AST.Param (arg |> AST.get_arg)) :: lst)
+        [] arg_seq
+  | Seq (s1, s2) when AST.arg_in_void s2 ->
+      arg_in_void_unroll s2
+      |> List.fold_left (fun lst x -> AST.Seq (s1, x) :: lst) []
+  | _ -> failwith "Fail: arg_in_void_unroll"
+
+let one_unroll p summary cg m_info c_info s_map e_info =
+  match p with
+  | AST.Seq _ when AST.void p -> void_unroll p
+  | Const _ when AST.const p -> const_unroll p summary m_info e_info
+  | Assign _ when AST.fcall_in_assign p ->
+      (* fcall_in_assign --> recv_in_assign --> arg_in_assign *)
+      fcall_in_assign_unroll p summary cg m_info c_info s_map
+      |> List.fold_left
+           (fun acc_lst x ->
+             recv_in_assign_unroll x m_info c_info |> List.rev_append acc_lst)
+           []
+      |> List.fold_left
+           (fun acc_lst x -> arg_in_assign_unroll x |> List.rev_append acc_lst)
+           []
+  | Void _ when AST.fcall1_in_void p ->
+      (* fcall1_in_void --> recv_in_void --> arg_in_void *)
+      fcall_in_void_unroll p m_info c_info s_map
+      |> List.fold_left
+           (fun acc_lst x ->
+             recv_in_void_unroll x m_info |> List.rev_append acc_lst)
+           []
+      |> List.fold_left
+           (fun acc_lst x -> arg_in_void_unroll x |> List.rev_append acc_lst)
+           []
+  | Void _ when AST.fcall2_in_void p ->
+      (* fcall2_in_void --> arg_in_void *)
+      fcall_in_void_unroll p m_info c_info s_map
+      |> List.fold_left
+           (fun acc_lst x -> arg_in_void_unroll x |> List.rev_append acc_lst)
+           []
+  | Void _ when AST.recv_in_void p ->
+      (* unroll error entry *)
+      recv_in_void_unroll p m_info
+      |> List.fold_left
+           (fun acc_lst x -> arg_in_void_unroll x |> List.rev_append acc_lst)
+           []
+  | _ -> failwith "Fail: one_unroll"
+
+let rec all_unroll p summary cg m_info c_info s_map e_info stmt_map =
+  match p with
+  | _ when AST.assign_ground p -> StmtMap.M.add p [] stmt_map
+  | AST.Seq _ when AST.void p ->
+      StmtMap.M.add p
+        (one_unroll p summary cg m_info c_info s_map e_info)
+        stmt_map
+  | AST.Seq (s1, s2) ->
+      all_unroll s1 summary cg m_info c_info s_map e_info stmt_map
+      |> all_unroll s2 summary cg m_info c_info s_map e_info
+  | _ ->
+      StmtMap.M.add p
+        (one_unroll p summary cg m_info c_info s_map e_info)
+        stmt_map
+
+let rec change_stmt p s new_s =
+  match p with
+  | AST.Seq (s1, s2) when s1 = s -> AST.Seq (new_s, s2)
+  | AST.Seq (s1, s2) when s2 = s -> AST.Seq (s1, new_s)
+  | AST.Seq _ when p = s -> new_s
+  | AST.Seq (s1, s2) -> AST.Seq (change_stmt s1 s new_s, change_stmt s2 s new_s)
+  | _ -> p
+
+let rec return_stmts p =
+  match p with
+  | AST.Seq _ when AST.void p -> [ p ]
+  | AST.Seq (s1, s2) when AST.ground s1 -> return_stmts s2
+  | AST.Seq (s1, s2) when AST.ground s2 -> return_stmts s1
+  | AST.Seq (s1, s2) -> List.rev_append (return_stmts s1) (return_stmts s2)
+  | _ when AST.ground p -> []
+  | _ -> [ p ]
+
+let combinate p stmt_map =
+  let rec combinate_stmt s tc_list new_s_list =
+    match tc_list with
+    | org_tc :: tl ->
+        let new_list =
           List.fold_left
-            (fun l2 y ->
-              (cost + (x |> fst) + (y |> fst), AST.Seq (x |> snd, y |> snd))
-              :: l2)
-            l
-            (unroll_void (cost, ns2)))
-        []
-        (unroll_void (cost, ns1))
-  | _ -> [ (cost, p) ]
+            (fun lst new_s -> change_stmt org_tc s new_s :: lst)
+            [] new_s_list
+        in
+        List.rev_append new_list (combinate_stmt s tl new_s_list)
+    | _ -> []
+  in
+  return_stmts p
+  |> List.fold_left
+       (fun lst s -> combinate_stmt s lst (StmtMap.M.find s stmt_map))
+       [ p ]
 
 let check_overload prev_ee current_ee =
   let prev =
@@ -1972,32 +2059,28 @@ let pretty_format p =
   let code = start ^ AST.code p ^ "}\n\n" in
   (import, code)
 
-let priority_q queue =
-  List.sort
-    (fun p1 p2 ->
-      let sem1, nt1, t1 = get_cost p1 in
-      let sem2, nt2, t2 = get_cost p2 in
-      if !Cmdline.sem_priority then compare sem1 sem2
-      else if !Cmdline.syn_priority then compare nt1 nt2
-      else if compare (sem1 + nt1) (sem2 + nt2) <> 0 then
-        compare (sem1 + nt1) (sem2 + nt2)
-      else compare t1 t2)
-    queue
+(* let priority_q queue =
+   List.sort
+     (fun p1 p2 ->
+       let sem1, nt1, t1 = get_cost p1 in
+       let sem2, nt2, t2 = get_cost p2 in
+       if !Cmdline.sem_priority then compare sem1 sem2
+       else if !Cmdline.syn_priority then compare nt1 nt2
+       else if compare (sem1 + nt1) (sem2 + nt2) <> 0 then
+         compare (sem1 + nt1) (sem2 + nt2)
+       else compare t1 t2)
+     queue *)
 
 let rec mk_testcase queue summary cg m_info c_info s_map e_info =
-  let queue = if !Cmdline.basic_mode then queue else priority_q queue in
+  (* let queue = if !Cmdline.basic_mode then queue else priority_q queue in *)
   match queue with
-  | (cost, p) :: tl ->
+  | p :: tl ->
       if AST.ground p then [ (pretty_format p, tl) ]
       else
-        let new_q =
-          match
-            unroll ~assign_ground:(AST.assign_ground p) (cost, p) summary cg
-              m_info c_info s_map e_info
-          with
-          | exception Not_found_setter -> tl
-          | x -> List.rev_append (x |> List.rev) tl
+        let stmt_map =
+          all_unroll p summary cg m_info c_info s_map e_info StmtMap.M.empty
         in
+        let new_q = combinate p stmt_map |> List.rev_append (tl |> List.rev) in
         mk_testcase new_q summary cg m_info c_info s_map e_info
   | [] -> []
 
@@ -2006,7 +2089,7 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
   let apply_rule list =
     List.fold_left
       (fun lst (f, arg) ->
-        (0, AST.fcall_in_void_rule (AST.Void (Id, Func, Arg [])) f (AST.Arg arg))
+        AST.fcall_in_void_rule (AST.Void (Id, Func, Arg [])) f (AST.Arg arg)
         :: lst)
       [] list
   in

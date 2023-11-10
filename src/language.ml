@@ -441,7 +441,7 @@ module AST = struct
     | Void (x, func, arg) -> is_id x && is_func func && is_arg arg
     | _ -> false
 
-  (* 7. ID.F(ID) *)
+  (* 7. x.F(ID) *)
   let fcall2_in_void = function
     | Void (x, func, arg) -> is_id x |> not && is_func func && is_arg arg
     | _ -> false
