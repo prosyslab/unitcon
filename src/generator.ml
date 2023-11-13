@@ -1882,33 +1882,37 @@ let one_unroll p summary cg m_info c_info s_map e_info =
       fcall_in_assign_unroll p summary cg m_info c_info s_map
       |> List.fold_left
            (fun acc_lst x ->
-             recv_in_assign_unroll x m_info c_info |> List.rev_append acc_lst)
+             List.rev_append (recv_in_assign_unroll x m_info c_info) acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x -> arg_in_assign_unroll x |> List.rev_append acc_lst)
+           (fun acc_lst x -> List.rev_append (arg_in_assign_unroll x) acc_lst)
            []
+      |> List.rev
   | Void _ when AST.fcall1_in_void p ->
       (* fcall1_in_void --> recv_in_void --> arg_in_void *)
       fcall_in_void_unroll p m_info c_info s_map
       |> List.fold_left
            (fun acc_lst x ->
-             recv_in_void_unroll x m_info |> List.rev_append acc_lst)
+             List.rev_append (recv_in_void_unroll x m_info) acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> List.rev_append acc_lst)
+           (fun acc_lst x -> List.rev_append (arg_in_void_unroll x) acc_lst)
            []
+      |> List.rev
   | Void _ when AST.fcall2_in_void p ->
       (* fcall2_in_void --> arg_in_void *)
       fcall_in_void_unroll p m_info c_info s_map
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> List.rev_append acc_lst)
+           (fun acc_lst x -> List.rev_append (arg_in_void_unroll x) acc_lst)
            []
+      |> List.rev
   | Void _ when AST.recv_in_void p ->
       (* unroll error entry *)
       recv_in_void_unroll p m_info
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> List.rev_append acc_lst)
+           (fun acc_lst x -> List.rev_append (arg_in_void_unroll x) acc_lst)
            []
+      |> List.rev
   | _ -> failwith "Fail: one_unroll"
 
 let rec all_unroll p summary cg m_info c_info s_map e_info stmt_map =
@@ -1940,7 +1944,8 @@ let rec return_stmts p =
   | AST.Seq _ when AST.void p -> [ p ]
   | AST.Seq (s1, s2) when AST.ground s1 -> return_stmts s2
   | AST.Seq (s1, s2) when AST.ground s2 -> return_stmts s1
-  | AST.Seq (s1, s2) -> List.rev_append (return_stmts s1) (return_stmts s2)
+  | AST.Seq (s1, s2) ->
+      List.rev_append (return_stmts s1 |> List.rev) (return_stmts s2)
   | _ when AST.ground p -> []
   | _ -> [ p ]
 
@@ -1955,6 +1960,7 @@ let combinate p stmt_map =
          | Some map -> List.rev_append (combinate_stmt p s map) lst
          | _ -> lst)
        []
+  |> List.rev
 
 let check_overload prev_ee current_ee =
   let prev =
