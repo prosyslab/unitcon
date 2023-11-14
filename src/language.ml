@@ -248,8 +248,6 @@ module AST = struct
     summary : summary;
   }
 
-  type func_type = FA | FV
-
   type arg = Param of var list | Arg of var list
 
   type func = F of f | Func
@@ -341,27 +339,15 @@ module AST = struct
   let rec count_nt = function
     | Const (x, exp) -> count_id x + count_exp exp
     | Assign (x0, x1, func, arg) ->
-        count_id x0 + count_id x1 + count_func func FA + count_arg arg
-    | Void (x, func, arg) -> count_id x + count_func func FV + count_arg arg
+        count_id x0 + count_id x1 + count_func func + count_arg arg
+    | Void (x, func, arg) -> count_id x + count_func func + count_arg arg
     | Seq (s1, s2) -> count_nt s1 + count_nt s2
     | Skip -> 0
     | Stmt -> 1
 
-  and count_arg arg =
-    match arg with
-    | Arg a ->
-        (2 |> float_of_int) ** (count_dist_arg a |> float_of_int)
-        |> int_of_float
-    | _ -> 0
+  and count_arg = function Arg a -> count_dist_arg a | _ -> 0
 
-  and count_func func typ =
-    match func with
-    | _ when typ = FV -> 100
-    | Func -> 1
-    | F f when typ = FA ->
-        if Str.string_match (Str.regexp ".*\\.<init>") f.method_name 0 then 0
-        else 200
-    | _ -> 0
+  and count_func = function Func -> 1 | _ -> 0
 
   and count_id = function Id -> 1 | _ -> 0
 

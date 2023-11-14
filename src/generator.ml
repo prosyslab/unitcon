@@ -1915,25 +1915,53 @@ let one_unroll p summary cg m_info c_info s_map e_info =
       |> List.rev
   | _ -> failwith "Fail: one_unroll"
 
-let rec all_unroll p summary cg m_info c_info s_map e_info stmt_map =
+let rec all_unroll ?(assign_ground = false) p summary cg m_info c_info s_map
+    e_info stmt_map =
   match p with
-  | _ when AST.assign_ground p -> StmtMap.M.add p [] stmt_map
-  | AST.Seq _ when AST.void p ->
-      StmtMap.M.add p
-        (one_unroll p summary cg m_info c_info s_map e_info)
+  | _ when AST.ground p -> stmt_map
+  | _ when assign_ground ->
+      all_unroll_void p summary cg m_info c_info s_map e_info stmt_map
+  | AST.Seq (s1, s2) when s2 = AST.Stmt ->
+      all_unroll ~assign_ground s1 summary cg m_info c_info s_map e_info
         stmt_map
   | AST.Seq (s1, s2) ->
-      all_unroll s1 summary cg m_info c_info s_map e_info stmt_map
-      |> all_unroll s2 summary cg m_info c_info s_map e_info
+      all_unroll ~assign_ground s1 summary cg m_info c_info s_map e_info
+        stmt_map
+      |> all_unroll ~assign_ground s2 summary cg m_info c_info s_map e_info
   | _ ->
       StmtMap.M.add p
         (one_unroll p summary cg m_info c_info s_map e_info)
         stmt_map
 
+and all_unroll_void p summary cg m_info c_info s_map e_info stmt_map =
+  match p with
+  | _ when AST.ground p -> stmt_map
+  | AST.Seq _ when AST.void p ->
+      StmtMap.M.add p
+        (one_unroll p summary cg m_info c_info s_map e_info)
+        stmt_map
+  | Seq (s1, s2) -> (
+      match AST.last_code s1 with
+      | AST.Assign _ when AST.is_stmt s2 ->
+          let new_void =
+            one_unroll
+              (AST.Seq (AST.last_code s1, s2))
+              summary cg m_info c_info s_map e_info
+            |> List.fold_left
+                 (fun lst void ->
+                   AST.Seq (AST.modify_last_assign s1, void) :: lst)
+                 []
+            |> List.rev
+          in
+          StmtMap.M.add p new_void stmt_map
+      | _ ->
+          all_unroll_void s1 summary cg m_info c_info s_map e_info stmt_map
+          |> all_unroll_void s2 summary cg m_info c_info s_map e_info)
+  | _ -> failwith "Fail: all_unroll_void"
+
 let rec change_stmt p s new_s =
   match p with
   | _ when p = s -> new_s
-  | AST.Seq _ when p = s -> new_s
   | AST.Seq (s1, s2) when s1 = s -> AST.Seq (new_s, s2)
   | AST.Seq (s1, s2) when s2 = s -> AST.Seq (s1, new_s)
   | AST.Seq (s1, s2) -> AST.Seq (change_stmt s1 s new_s, change_stmt s2 s new_s)
@@ -1941,11 +1969,8 @@ let rec change_stmt p s new_s =
 
 let rec return_stmts p =
   match p with
-  | AST.Seq _ when AST.void p -> [ p ]
-  | AST.Seq (s1, s2) when AST.ground s1 -> return_stmts s2
-  | AST.Seq (s1, s2) when AST.ground s2 -> return_stmts s1
   | AST.Seq (s1, s2) ->
-      List.rev_append (return_stmts s1 |> List.rev) (return_stmts s2)
+      p :: List.rev_append (return_stmts s1 |> List.rev) (return_stmts s2)
   | _ when AST.ground p -> []
   | _ -> [ p ]
 
@@ -1957,9 +1982,15 @@ let combinate p stmt_map =
   |> List.fold_left
        (fun lst s ->
          match StmtMap.M.find_opt s stmt_map with
-         | Some map -> List.rev_append (combinate_stmt p s map) lst
+         | Some new_s_list when new_s_list = [] ->
+             (* Because these will be never grounded, remove all *)
+             []
+         | Some new_s_list ->
+             List.fold_left
+               (fun l _p -> List.rev_append (combinate_stmt _p s new_s_list) l)
+               [] lst
          | _ -> lst)
-       []
+       [ p ]
   |> List.rev
 
 let check_overload prev_ee current_ee =
@@ -2079,7 +2110,8 @@ let rec mk_testcase summary cg m_info c_info s_map e_info queue =
   | p :: tl ->
       if AST.ground p then [ (pretty_format p, tl) ]
       else
-        all_unroll p summary cg m_info c_info s_map e_info StmtMap.M.empty
+        all_unroll ~assign_ground:(AST.assign_ground p) p summary cg m_info
+          c_info s_map e_info StmtMap.M.empty
         |> combinate p
         |> List.rev_append (tl |> List.rev)
         |> mk_testcase summary cg m_info c_info s_map e_info
