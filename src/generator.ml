@@ -51,6 +51,13 @@ module StmtMap = struct
   type t = AST.t list M.t
 end
 
+type partial_tc = {
+  unroll : int;
+  prev_nt_cost : int;
+  nt_cost : int;
+  tc : AST.t;
+}
+
 let outer = ref 0
 
 let recv = ref 0
@@ -71,7 +78,17 @@ let z3ctx =
 let solver = Z3.Solver.mk_solver z3ctx None
 
 (* penalty for unsatisfied conditions, # of non-terminals for p *)
-(* let get_cost p = (p |> fst, AST.count_nt (p |> snd), AST.count_t (p |> snd)) *)
+let get_cost p = if p.unroll > 2 then p.nt_cost else 0
+
+let mk_cost prev_p curr_tc =
+  {
+    unroll = prev_p.unroll + 1;
+    prev_nt_cost = AST.count_nt prev_p.tc;
+    nt_cost = AST.count_nt curr_tc;
+    tc = curr_tc;
+  }
+
+let empty_p = { unroll = 0; prev_nt_cost = 0; nt_cost = 0; tc = AST.Skip }
 
 let mk_some x = Some x
 
@@ -2092,27 +2109,19 @@ let pretty_format p =
   let code = start ^ AST.code p ^ "}\n\n" in
   (import, code)
 
-(* let priority_q queue =
-   List.sort
-     (fun p1 p2 ->
-       let sem1, nt1, t1 = get_cost p1 in
-       let sem2, nt2, t2 = get_cost p2 in
-       if !Cmdline.sem_priority then compare sem1 sem2
-       else if !Cmdline.syn_priority then compare nt1 nt2
-       else if compare (sem1 + nt1) (sem2 + nt2) <> 0 then
-         compare (sem1 + nt1) (sem2 + nt2)
-       else compare t1 t2)
-     queue *)
+let priority_q queue =
+  List.sort (fun p1 p2 -> compare (get_cost p1) (get_cost p2)) queue
 
 let rec mk_testcase summary cg m_info c_info s_map e_info queue =
-  (* let queue = if !Cmdline.basic_mode then queue else priority_q queue in *)
+  let queue = if !Cmdline.basic_mode then queue else priority_q queue in
   match queue with
   | p :: tl ->
-      if AST.ground p then [ (pretty_format p, tl) ]
+      if AST.ground p.tc then [ (pretty_format p.tc, tl) ]
       else
-        all_unroll ~assign_ground:(AST.assign_ground p) p summary cg m_info
-          c_info s_map e_info StmtMap.M.empty
-        |> combinate p
+        all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc summary cg
+          m_info c_info s_map e_info StmtMap.M.empty
+        |> combinate p.tc
+        |> List.fold_left (fun lst new_tc -> mk_cost p new_tc :: lst) []
         |> List.rev_append (tl |> List.rev)
         |> mk_testcase summary cg m_info c_info s_map e_info
   | [] -> []
@@ -2132,6 +2141,7 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
       ErrorEntrySet.fold
         (fun (ee, ee_s) init_list ->
           apply_rule (get_void_func AST.Id ~ee ~es:ee_s m_info c_info s_map)
+          |> List.fold_left (fun lst new_tc -> mk_cost empty_p new_tc :: lst) []
           |> List.rev_append init_list)
         (find_ee e_method error_summary cg summary call_prop_map m_info c_info)
         [])
