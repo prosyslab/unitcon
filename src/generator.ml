@@ -51,12 +51,7 @@ module StmtMap = struct
   type t = AST.t list M.t
 end
 
-type partial_tc = {
-  unroll : int;
-  prev_nt_cost : int;
-  nt_cost : int;
-  tc : AST.t;
-}
+type partial_tc = { unroll : int; nt_cost : int; t_cost : int; tc : AST.t }
 
 let outer = ref 0
 
@@ -78,17 +73,17 @@ let z3ctx =
 let solver = Z3.Solver.mk_solver z3ctx None
 
 (* penalty for unsatisfied conditions, # of non-terminals for p *)
-let get_cost p = if p.unroll > 2 then p.nt_cost else 0
+let get_cost p = if p.unroll > 2 then (p.nt_cost, p.t_cost) else (0, 0)
 
 let mk_cost prev_p curr_tc =
   {
     unroll = prev_p.unroll + 1;
-    prev_nt_cost = AST.count_nt prev_p.tc;
     nt_cost = AST.count_nt curr_tc;
+    t_cost = AST.count_t curr_tc;
     tc = curr_tc;
   }
 
-let empty_p = { unroll = 0; prev_nt_cost = 0; nt_cost = 0; tc = AST.Skip }
+let empty_p = { unroll = 0; nt_cost = 0; t_cost = 0; tc = AST.Skip }
 
 let mk_some x = Some x
 
@@ -2110,7 +2105,13 @@ let pretty_format p =
   (import, code)
 
 let priority_q queue =
-  List.sort (fun p1 p2 -> compare (get_cost p1) (get_cost p2)) queue
+  List.stable_sort
+    (fun p1 p2 ->
+      let nt1, t1 = get_cost p1 in
+      let nt2, t2 = get_cost p2 in
+      if compare (nt1 + t1) (nt2 + t2) <> 0 then compare (nt1 + t1) (nt2 + t2)
+      else compare nt1 nt2)
+    queue
 
 let rec mk_testcase summary cg m_info c_info s_map e_info queue =
   let queue = if !Cmdline.basic_mode then queue else priority_q queue in
@@ -2118,11 +2119,15 @@ let rec mk_testcase summary cg m_info c_info s_map e_info queue =
   | p :: tl ->
       if AST.ground p.tc then [ (pretty_format p.tc, tl) ]
       else
-        all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc summary cg
-          m_info c_info s_map e_info StmtMap.M.empty
-        |> combinate p.tc
-        |> List.fold_left (fun lst new_tc -> mk_cost p new_tc :: lst) []
-        |> List.rev_append (tl |> List.rev)
+        (match
+           all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc summary cg
+             m_info c_info s_map e_info StmtMap.M.empty
+         with
+        | exception Not_found_setter -> tl
+        | x ->
+            combinate p.tc x
+            |> List.fold_left (fun lst new_tc -> mk_cost p new_tc :: lst) []
+            |> List.rev_append (tl |> List.rev))
         |> mk_testcase summary cg m_info c_info s_map e_info
   | [] -> []
 

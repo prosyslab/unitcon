@@ -343,7 +343,7 @@ module AST = struct
     | Void (x, func, arg) -> count_id x + count_func func + count_arg arg
     | Seq (s1, s2) -> count_nt s1 + count_nt s2
     | Skip -> 0
-    | Stmt -> 1
+    | Stmt -> 0
 
   and count_arg = function Arg a -> count_dist_arg a | _ -> 0
 
@@ -355,13 +355,11 @@ module AST = struct
 
   let rec count_t = function
     | Const (x, exp) -> count_tid x + count_texp exp
-    | Assign (x0, x1, _, arg) -> count_tid x0 + count_tid x1 + count_param arg
-    | Void (x, _, arg) -> count_tid x + count_param arg
+    | Assign (x0, x1, _, _) -> count_tid x0 + count_tid x1
+    | Void (x, _, _) -> count_tid x
     | Seq (s1, s2) -> count_t s1 + count_t s2
     | Skip -> 0
     | Stmt -> 0
-
-  and count_param arg = match arg with Param p -> p |> List.length | _ -> 0
 
   and count_tid = function Id -> 0 | _ -> 1
 
