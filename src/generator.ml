@@ -1981,16 +1981,25 @@ let rec change_stmt p s new_s =
 
 let rec return_stmts p =
   match p with
-  | AST.Seq (s1, s2) ->
-      p :: List.rev_append (return_stmts s1 |> List.rev) (return_stmts s2)
+  | AST.Seq (s1, s2) -> p :: List.rev_append (return_stmts s1) (return_stmts s2)
   | _ when AST.ground p -> []
   | _ -> [ p ]
+
+let sort_stmts map stmts =
+  List.sort
+    (fun s1 s2 ->
+      match (StmtMap.M.find_opt s1 map, StmtMap.M.find_opt s2 map) with
+      | Some l1, Some l2 -> compare (l1 |> List.length) (l2 |> List.length)
+      | Some _, None -> 1
+      | None, Some _ -> -1
+      | None, None -> 0)
+    stmts
 
 let combinate p stmt_map =
   let combinate_stmt p s new_s_list =
     List.fold_left (fun lst new_s -> change_stmt p s new_s :: lst) [] new_s_list
   in
-  return_stmts p
+  return_stmts p |> sort_stmts stmt_map
   |> List.fold_left
        (fun lst s ->
          match StmtMap.M.find_opt s stmt_map with
