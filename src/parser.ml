@@ -1,462 +1,265 @@
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
+module Relation = Language.Relation
+module Value = Language.Value
+module Condition = Language.Condition
 
-type call_prop = {
-  caller : string;
-  callee : string;
-  boitv : string;
-  citv : string;
-  precond : string;
-  postcond : string;
-  arg : string list;
-}
+let mk_rh_type v =
+  let check_symbol v = Str.string_match Regexp.symbol v 0 in
+  let check_index v = Str.string_match Regexp.index v 0 in
+  let check_any_value v = Str.string_match Regexp.any v 0 in
+  if check_symbol v then Condition.RH_Symbol v
+  else if check_index v then
+    Condition.RH_Index
+      (v |> Regexp.first_rm Regexp.open_bk |> Regexp.first_rm Regexp.end_bk)
+  else if check_any_value v then Condition.RH_Any
+  else Condition.RH_Var v
 
-type err_prop = {
-  method_name : string;
-  boitv : string;
-  citv : string;
-  precond : string;
-  postcond : string;
-}
-
-let empty_call_prop =
-  {
-    caller = "";
-    callee = "";
-    boitv = "";
-    citv = "";
-    precond = "";
-    postcond = "";
-    arg = [];
-  }
-
-let empty_err_prop =
-  { method_name = ""; boitv = ""; citv = ""; precond = ""; postcond = "" }
-
-let is_start = ref false
-
-let is_boitv = ref false
-
-let is_citv = ref false
-
-let is_precond = ref false
-
-let is_postcond = ref false
-
-let call_prop_list = ref []
-
-let err_prop_list = ref []
-
-let output name data =
-  let dirname = !Cmdline.out_dir ^ "/marshal" in
-  if not (Sys.file_exists dirname) then Unix.mkdir dirname 0o755;
-  let chan = open_out (dirname ^ "/" ^ name ^ ".json") in
-  Marshal.to_channel chan data [];
-  close_out chan
-
-let input name =
-  let dirname = !Cmdline.out_dir ^ "/marshal" in
-  if not (Sys.file_exists dirname) then failwith (dirname ^ " not found");
-  let chan = open_in (dirname ^ "/" ^ name) in
-  let data = Marshal.from_channel chan in
-  close_in chan;
-  data
-
-let caller_call_prop str prop =
-  let name = String.split_on_char ':' str |> List.tl |> List.hd in
-  {
-    caller = name |> Regexp.rm_space;
-    callee = prop.callee;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = prop.postcond;
-    arg = prop.arg;
-  }
-
-let callee_call_prop str prop =
-  let name = String.split_on_char ':' str |> List.tl |> List.hd in
-  {
-    caller = prop.caller;
-    callee = name |> Regexp.rm_space;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = prop.postcond;
-    arg = prop.arg;
-  }
-
-let boitv_call_prop str prop =
-  let lst = String.split_on_char ':' str |> List.tl in
-  let boitv =
-    if List.hd lst |> Regexp.rm_space = "BoItv" then
-      List.tl lst |> List.hd |> Regexp.rm_space
-    else List.hd lst |> Regexp.rm_space
+let parse_param param =
+  let v_and_t = String.split_on_char ':' param in
+  let rec get_type t =
+    match t with
+    | "int" | "signed short" -> ("", Language.Int)
+    | "long" -> ("", Language.Long)
+    | "float" -> ("", Language.Float)
+    | "double" -> ("", Language.Double)
+    | "_Bool" | "boolean" -> ("", Language.Bool)
+    | "unsigned short" | "signed char" | "unsigned char" -> ("", Language.Char)
+    | "java.lang.String*" -> ("java.lang.String", Language.String)
+    | "" -> ("", Language.None)
+    | _ when Str.string_match Regexp.array t 0 ->
+        let _, typ = t |> Regexp.first_rm Regexp.rm_array |> get_type in
+        ("", Language.Array typ)
+    | _ ->
+        let import = Regexp.global_rm (Str.regexp "\\*.*$") t in
+        let class_name = String.split_on_char '.' t |> List.rev |> List.hd in
+        let class_name = Regexp.first_rm Regexp.any class_name in
+        (import, Language.Object class_name)
   in
-  {
-    caller = prop.caller;
-    callee = prop.callee;
-    boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = prop.postcond;
-    arg = prop.arg;
-  }
+  if List.length v_and_t = 1 then ("", Language.Var (None, ""))
+  else
+    let mk_variable var typ =
+      if var = "this" then
+        let import, typ = get_type typ in
+        (import, Language.This typ)
+      else
+        let import, typ = get_type typ in
+        (import, Language.Var (typ, var))
+    in
+    let var = List.hd v_and_t in
+    let typ = List.tl v_and_t |> List.hd in
+    mk_variable var typ
 
-let citv_call_prop str prop =
-  let citv = String.split_on_char ':' str |> List.tl |> List.hd in
-  {
-    caller = prop.caller;
-    callee = prop.callee;
-    boitv = prop.boitv;
-    citv = citv |> Regexp.rm_space;
-    precond = prop.precond;
-    postcond = prop.postcond;
-    arg = prop.arg;
-  }
+let parse_boitv boitv =
+  let relation_list = Regexp.remove_bk boitv |> Str.split Regexp.bm in
+  if relation_list = [] then Relation.M.empty
+  else
+    List.fold_left
+      (fun mmap relation ->
+        let relation = Str.split Regexp.arrow relation in
+        let check_relation head tail =
+          match int_of_string_opt tail with
+          | Some _ -> false
+          | None -> if head = tail then false else true
+        in
+        let head = List.hd relation |> Regexp.rm_space in
+        let value_list =
+          List.tl relation |> List.hd |> String.split_on_char ' '
+        in
+        List.fold_left
+          (fun mmap tail ->
+            let tail =
+              Regexp.first_rm Regexp.max tail
+              |> Regexp.first_rm Regexp.min
+              |> Regexp.global_rm Regexp.bk2
+              |> Regexp.rm_space
+            in
+            if check_relation head tail then Relation.M.add head tail mmap
+            else mmap)
+          mmap value_list)
+      Relation.M.empty relation_list
 
-let pre_call_prop str prop =
-  let pre = String.split_on_char ':' str |> List.tl |> List.hd in
-  {
-    caller = prop.caller;
-    callee = prop.callee;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = pre |> Regexp.rm_space;
-    postcond = prop.postcond;
-    arg = prop.arg;
-  }
+let parse_citv citv =
+  let value_list = Regexp.remove_bk citv |> Str.split Regexp.bm in
+  if value_list = [] then Value.M.empty
+  else
+    List.fold_left
+      (fun mmap mapping_value ->
+        let mapping_value = Str.split Regexp.arrow mapping_value in
+        let head = List.hd mapping_value |> Regexp.rm_space in
+        let tail = List.tl mapping_value |> List.hd |> Regexp.rm_space in
+        if Value.is_eq tail then
+          let value = Regexp.first_rm Regexp.eq tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Eq (Int v)) mmap
+          | None ->
+              if value = "null" then Value.M.add head (Value.Eq Null) mmap
+              else Value.M.add head (Value.Eq (String value)) mmap
+        else if Value.is_neq tail then
+          let value = Regexp.first_rm Regexp.neq tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Neq (Int v)) mmap
+          | None ->
+              if value = "null" then Value.M.add head (Value.Neq Null) mmap
+              else Value.M.add head (Value.Neq (String value)) mmap
+        else if Value.is_ge tail then
+          let value = Regexp.first_rm Regexp.ge tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Ge (Int v)) mmap
+          | None -> Value.M.add head (Value.Ge MinusInf) mmap
+        else if Value.is_gt tail then
+          let value = Regexp.first_rm Regexp.gt tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Gt (Int v)) mmap
+          | None -> Value.M.add head (Value.Gt MinusInf) mmap
+        else if Value.is_le tail then
+          let value = Regexp.first_rm Regexp.le tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Le (Int v)) mmap
+          | None -> Value.M.add head (Value.Le PlusInf) mmap
+        else if Value.is_lt tail then
+          let value = Regexp.first_rm Regexp.lt tail in
+          match int_of_string_opt value with
+          | Some v -> Value.M.add head (Value.Lt (Int v)) mmap
+          | None -> Value.M.add head (Value.Lt PlusInf) mmap
+        else if Value.is_between tail then
+          let values =
+            Regexp.first_rm Regexp.in_n tail
+            |> Regexp.first_rm Regexp.in_bk
+            |> Regexp.first_rm Regexp.end_bk
+            |> String.split_on_char ' '
+          in
+          if List.length values = 1 then
+            Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap
+          else
+            let min_value = List.hd values in
+            let max_value = List.tl values |> List.hd in
+            match int_of_string_opt min_value with
+            | Some v1 -> (
+                match int_of_string_opt max_value with
+                | Some v2 ->
+                    Value.M.add head (Value.Between (Int v1, Int v2)) mmap
+                | None ->
+                    if max_value = "null" then
+                      Value.M.add head (Value.Between (Int v1, Int 0)) mmap
+                    else Value.M.add head (Value.Between (Int v1, PlusInf)) mmap
+                )
+            | None -> (
+                match int_of_string_opt max_value with
+                | Some v2 ->
+                    if min_value = "null" then
+                      Value.M.add head (Value.Between (Int 0, Int v2)) mmap
+                    else
+                      Value.M.add head (Value.Between (MinusInf, Int v2)) mmap
+                | None ->
+                    if min_value = "null" then
+                      Value.M.add head (Value.Between (Int 0, PlusInf)) mmap
+                    else if max_value = "null" then
+                      Value.M.add head (Value.Between (MinusInf, Int 0)) mmap
+                    else
+                      Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap)
+        else if Value.is_outside tail then
+          let values =
+            Regexp.first_rm Regexp.ots tail
+            |> Regexp.first_rm Regexp.end_bk
+            |> String.split_on_char ' '
+          in
+          let min_value = List.hd values in
+          let max_value = List.tl values |> List.hd in
+          match int_of_string_opt min_value with
+          | Some v1 -> (
+              match int_of_string_opt max_value with
+              | Some v2 ->
+                  Value.M.add head (Value.Outside (Int v1, Int v2)) mmap
+              | None ->
+                  if max_value = "null" then
+                    Value.M.add head (Value.Outside (Int v1, Int 0)) mmap
+                  else Value.M.add head (Value.Outside (Int v1, PlusInf)) mmap)
+          | None -> (
+              match int_of_string_opt max_value with
+              | Some v2 ->
+                  if min_value = "null" then
+                    Value.M.add head (Value.Outside (Int 0, Int v2)) mmap
+                  else Value.M.add head (Value.Outside (MinusInf, Int v2)) mmap
+              | None ->
+                  if min_value = "null" then
+                    Value.M.add head (Value.Outside (Int 0, PlusInf)) mmap
+                  else if max_value = "null" then
+                    Value.M.add head (Value.Outside (MinusInf, Int 0)) mmap
+                  else Value.M.add head (Value.Outside (MinusInf, PlusInf)) mmap
+              )
+        else failwith "parse_citv error")
+      Value.M.empty value_list
 
-let post_call_prop str prop =
-  let post = String.split_on_char ':' str |> List.tl |> List.hd in
-  {
-    caller = prop.caller;
-    callee = prop.callee;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = post |> Regexp.rm_space;
-    arg = prop.arg;
-  }
+let parse_var var =
+  if var = "[{ }]" then Condition.M.empty
+  else
+    let var_list =
+      var |> Regexp.global_rm Regexp.remain_symbol |> String.split_on_char ','
+    in
+    List.fold_left
+      (fun mmap var ->
+        let i_and_s = String.split_on_char '=' var in
+        let id = List.hd i_and_s |> Regexp.rm_space in
+        if String.length id = 0 then mmap
+        else if List.tl i_and_s = [] then mmap
+        else
+          let symbol = List.tl i_and_s |> List.hd |> Regexp.rm_space in
+          Condition.M.add (symbol |> mk_rh_type) (Condition.RH_Var id) mmap)
+      Condition.M.empty var_list
 
-let arg_call_prop str prop =
-  let args =
-    String.split_on_char ':' str |> List.tl |> List.hd |> Regexp.rm_space
-  in
-  let arg_list = Str.split Regexp.space2 args in
-  let arg_list =
-    List.fold_left (fun list arg -> Regexp.rm_space arg :: list) [] arg_list
-    |> List.rev
-  in
-  {
-    caller = prop.caller;
-    callee = prop.callee;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = prop.postcond;
-    arg = arg_list;
-  }
+let parse_mem mem =
+  if mem = "[{ }]" then Condition.M.empty
+  else
+    let mem =
+      mem
+      |> Regexp.global_rm Regexp.remain_symbol2
+      |> Regexp.global_rm Regexp.o_bk
+      |> Regexp.rm_space |> Str.split Regexp.c_bk
+    in
+    let rec mk_ref_map ref_trace mmap =
+      match ref_trace with
+      | hd :: tl -> (
+          if hd |> Regexp.rm_space = "" then mmap
+          else
+            let ref = Str.split (Str.regexp "->") hd in
+            try
+              let field = List.hd ref |> Regexp.rm_space |> mk_rh_type in
+              let value =
+                List.tl ref |> List.hd |> Regexp.rm_space |> mk_rh_type
+              in
+              Condition.M.add field value mmap |> mk_ref_map tl
+            with _ -> mk_ref_map tl mmap)
+      | [] -> mmap
+    in
+    List.fold_left
+      (fun mmap ref ->
+        let ref_trace =
+          Regexp.global_rm Regexp.start_bm ref
+          |> Regexp.rm_space |> Str.split Regexp.bm
+        in
+        if ref_trace = [] || Str.string_match Regexp.ref (List.hd ref_trace) 0
+        then mmap
+        else
+          let head =
+            List.hd ref_trace |> Str.split Regexp.arrow |> List.hd
+            |> Regexp.rm_space
+          in
+          let partial_tl =
+            List.hd ref_trace
+            |> Regexp.global_rm ("^" ^ head ^ "[ \t\r\n]+->" |> Str.regexp)
+            |> Regexp.rm_space
+          in
+          let trace = List.tl ref_trace |> List.cons partial_tl in
+          let trace = mk_ref_map trace Condition.M.empty in
+          Condition.M.add (head |> mk_rh_type) trace mmap)
+      Condition.M.empty mem
 
-let append_boitv_call_prop str prop =
-  let next_boitv = Regexp.rm_space str in
-  {
-    caller = prop.caller;
-    callee = prop.callee;
-    boitv = prop.boitv ^ next_boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = prop.postcond;
-    arg = prop.arg;
-  }
-
-let append_citv_call_prop str prop =
-  let next_citv = Regexp.rm_space str in
-  {
-    caller = prop.caller;
-    callee = prop.callee;
-    boitv = prop.boitv;
-    citv = prop.citv ^ next_citv;
-    precond = prop.precond;
-    postcond = prop.postcond;
-    arg = prop.arg;
-  }
-
-let append_pre_call_prop str prop =
-  let next_precond = Regexp.rm_space str in
-  {
-    caller = prop.caller;
-    callee = prop.callee;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = prop.precond ^ next_precond;
-    postcond = prop.postcond;
-    arg = prop.arg;
-  }
-
-let append_post_call_prop str prop =
-  let next_postcond = Regexp.rm_space str in
-  {
-    caller = prop.caller;
-    callee = prop.callee;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = prop.postcond ^ next_postcond;
-    arg = prop.arg;
-  }
-
-let method_name_err_prop str prop =
-  let name = String.split_on_char ':' str |> List.rev |> List.hd in
-  {
-    method_name = name |> Regexp.rm_space;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = prop.postcond;
-  }
-
-let boitv_err_prop str prop =
-  let boitv = String.split_on_char ':' str |> List.rev |> List.hd in
-  {
-    method_name = prop.method_name;
-    boitv = boitv |> Regexp.rm_space;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = prop.postcond;
-  }
-
-let citv_err_prop str prop =
-  let citv = String.split_on_char ':' str |> List.rev |> List.hd in
-  {
-    method_name = prop.method_name;
-    boitv = prop.boitv;
-    citv = citv |> Regexp.rm_space;
-    precond = prop.precond;
-    postcond = prop.postcond;
-  }
-
-let pre_err_prop str prop =
-  let pre = String.split_on_char ':' str |> List.rev |> List.hd in
-  {
-    method_name = prop.method_name;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = pre |> Regexp.rm_space;
-    postcond = prop.postcond;
-  }
-
-let post_err_prop str prop =
-  let post = String.split_on_char ':' str |> List.rev |> List.hd in
-  {
-    method_name = prop.method_name;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = post |> Regexp.rm_space;
-  }
-
-let append_boitv_err_prop str prop =
-  let next_boitv = Regexp.rm_space str in
-  {
-    method_name = prop.method_name;
-    boitv = prop.boitv ^ next_boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = prop.postcond;
-  }
-
-let append_citv_err_prop str prop =
-  let next_citv = Regexp.rm_space str in
-  {
-    method_name = prop.method_name;
-    boitv = prop.boitv;
-    citv = prop.citv ^ next_citv;
-    precond = prop.precond;
-    postcond = prop.postcond;
-  }
-
-let append_pre_err_prop str prop =
-  let next_precond = Regexp.rm_space str in
-  {
-    method_name = prop.method_name;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = prop.precond ^ next_precond;
-    postcond = prop.postcond;
-  }
-
-let append_post_err_prop str prop =
-  let next_postcond = Regexp.rm_space str in
-  {
-    method_name = prop.method_name;
-    boitv = prop.boitv;
-    citv = prop.citv;
-    precond = prop.precond;
-    postcond = prop.postcond ^ next_postcond;
-  }
-
-let rec parse_call_prop_dict data call_prop =
-  match input_line data with
-  | s ->
-      let str = s |> Regexp.rm_space in
-      if str = "{start" then (
-        is_start := true;
-        parse_call_prop_dict data empty_call_prop)
-      else if str = "end}" then (
-        is_start := false;
-        is_boitv := false;
-        is_citv := false;
-        is_precond := false;
-        is_postcond := false;
-        call_prop_list := call_prop :: !call_prop_list)
-      else if Str.string_match Regexp.caller str 0 then
-        parse_call_prop_dict data (caller_call_prop str call_prop)
-      else if Str.string_match Regexp.callee str 0 then
-        parse_call_prop_dict data (callee_call_prop str call_prop)
-      else if Str.string_match Regexp.boitv str 0 then (
-        is_boitv := true;
-        parse_call_prop_dict data (boitv_call_prop str call_prop))
-      else if Str.string_match Regexp.citv str 0 then (
-        is_citv := true;
-        is_boitv := false;
-        parse_call_prop_dict data (citv_call_prop str call_prop))
-      else if Str.string_match Regexp.precond str 0 then (
-        is_precond := true;
-        is_citv := false;
-        parse_call_prop_dict data (pre_call_prop str call_prop))
-      else if Str.string_match Regexp.postcond str 0 then (
-        is_postcond := true;
-        is_precond := false;
-        parse_call_prop_dict data (post_call_prop str call_prop))
-      else if Str.string_match Regexp.fparam str 0 then
-        parse_call_prop_dict data (arg_call_prop str call_prop)
-      else if !is_boitv then
-        parse_call_prop_dict data (append_boitv_call_prop str call_prop)
-      else if !is_citv then
-        parse_call_prop_dict data (append_citv_call_prop str call_prop)
-      else if !is_precond then
-        parse_call_prop_dict data (append_pre_call_prop str call_prop)
-      else if !is_postcond then
-        parse_call_prop_dict data (append_post_call_prop str call_prop)
-      else parse_call_prop_dict data call_prop
-  | exception End_of_file -> raise End_of_file
-
-let rec parse_err_prop_dict data err_prop =
-  match input_line data with
-  | s ->
-      let str = s |> Regexp.rm_space in
-      if str = "{start" then (
-        is_start := true;
-        parse_err_prop_dict data empty_err_prop)
-      else if str = "end}" then (
-        is_start := false;
-        is_boitv := false;
-        is_citv := false;
-        is_precond := false;
-        is_postcond := false;
-        err_prop_list := err_prop :: !err_prop_list)
-      else if Str.string_match Regexp.procname str 0 then
-        parse_err_prop_dict data (method_name_err_prop str err_prop)
-      else if Str.string_match Regexp.boitv str 0 then (
-        is_boitv := true;
-        parse_err_prop_dict data (boitv_err_prop str err_prop))
-      else if Str.string_match Regexp.citv str 0 then (
-        is_citv := true;
-        is_boitv := false;
-        parse_err_prop_dict data (citv_err_prop str err_prop))
-      else if Str.string_match Regexp.precond str 0 then (
-        is_precond := true;
-        is_citv := false;
-        parse_err_prop_dict data (pre_err_prop str err_prop))
-      else if Str.string_match Regexp.postcond str 0 then (
-        is_postcond := true;
-        is_precond := false;
-        parse_err_prop_dict data (post_err_prop str err_prop))
-      else if !is_boitv then
-        parse_err_prop_dict data (append_boitv_err_prop str err_prop)
-      else if !is_citv then
-        parse_err_prop_dict data (append_citv_err_prop str err_prop)
-      else if !is_precond then
-        parse_err_prop_dict data (append_pre_err_prop str err_prop)
-      else if !is_postcond then
-        parse_err_prop_dict data (append_post_err_prop str err_prop)
-      else parse_err_prop_dict data err_prop
-  | exception End_of_file -> raise End_of_file
-
-let rec parse_call_prop_dict_all data =
-  match parse_call_prop_dict data empty_call_prop with
-  | exception End_of_file -> ()
-  | _ -> parse_call_prop_dict_all data
-
-let rec parse_err_prop_dict_all data =
-  match parse_err_prop_dict data empty_err_prop with
-  | exception End_of_file -> ()
-  | _ -> parse_err_prop_dict_all data
-
-let to_call_prop_json data =
-  let mk_assoc elem =
-    `Assoc
-      [
-        ("Caller", `String elem.caller);
-        ("Callee", `String elem.callee);
-        ("BoItv", `String elem.boitv);
-        ("CItv", `String elem.citv);
-        ("Precond", `String elem.precond);
-        ("Postcond", `String elem.postcond);
-        ( "Arg",
-          `List
-            (List.fold_left (fun list x -> `String x :: list) [] elem.arg
-            |> List.rev) );
-      ]
-  in
-  parse_call_prop_dict_all data;
-  let json =
-    `List
-      (List.fold_left
-         (fun list elem -> mk_assoc elem :: list)
-         [] !call_prop_list
-      |> List.rev)
-  in
-  json
-
-let to_err_prop_json data =
-  let mk_assoc elem =
-    `Assoc
-      [
-        ("method", `String elem.method_name);
-        ("BoItv", `String elem.boitv);
-        ("CItv", `String elem.citv);
-        ("Precond", `String elem.precond);
-        ("Postcond", `String elem.postcond);
-      ]
-  in
-  parse_err_prop_dict_all data;
-  let json =
-    `List
-      (List.fold_left (fun list elem -> mk_assoc elem :: list) [] !err_prop_list
-      |> List.rev)
-  in
-  json
-
-let parse_callprop filename =
-  let name = Str.split (Str.regexp "/") filename |> List.rev |> List.hd in
-  let data = open_in filename in
-  is_start := false;
-  is_boitv := false;
-  is_citv := false;
-  is_precond := false;
-  is_postcond := false;
-  let json = to_call_prop_json data in
-  output name json
-
-let parse_errprop filename =
-  let name = Str.split (Str.regexp "/") filename |> List.rev |> List.hd in
-  let data = open_in filename in
-  is_start := false;
-  is_boitv := false;
-  is_citv := false;
-  is_precond := false;
-  is_postcond := false;
-  let json = to_err_prop_json data in
-  output name json
+let parse_args args =
+  let arg_list = Str.split Regexp.space args in
+  List.fold_left
+    (fun lst arg ->
+      let a = Regexp.rm_space arg in
+      if a = "" then lst else a :: lst)
+    [] arg_list
+  |> List.rev

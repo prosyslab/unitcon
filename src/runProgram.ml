@@ -29,53 +29,45 @@ type run_type = Compile | Test
    parse analyzer's output
  * ************************************** *)
 
-let output name data =
-  let dirname = !Cmdline.out_dir ^ "/marshal" in
-  if not (Sys.file_exists dirname) then failwith (dirname ^ " not found");
-  let chan = open_out (dirname ^ "/" ^ name) in
-  Marshal.to_channel chan data [];
-  close_out chan
-
 let input name =
-  let dirname = !Cmdline.out_dir ^ "/marshal" in
-  if not (Sys.file_exists dirname) then failwith (dirname ^ " not found");
-  let chan = open_in (dirname ^ "/" ^ name) in
+  let chan = open_in name in
   let data = Marshal.from_channel chan in
   close_in chan;
   data
 
 let parse_method_info filename =
-  let json = Json.from_file filename in
-  let filename = Filename.basename filename in
-  output filename json;
-  let data = input filename in
-  Summary.from_method_json data
+  if not (Sys.file_exists filename) then failwith (filename ^ " not found");
+  let json = input filename in
+  Summary.from_method_json json
 
 let parse_summary filename minfo =
-  let filename = Filename.basename filename in
-  let data = input filename in
-  Summary.from_summary_json minfo data
+  let json = input filename in
+  Summary.from_summary_json minfo json
 
 let parse_callgraph filename =
-  let filename = Filename.basename filename in
   let data = input filename in
   Callgraph.of_json data
 
 let get_setter summary m_info = Setter.from_summary_map summary m_info
 
 let parse_error_summary filename =
-  Parser.parse_errprop filename;
-  let filename = Filename.basename filename in
-  let data = input (filename ^ ".json") in
-  ErrorSummary.from_error_summary_json data
+  if not (Sys.file_exists filename) then failwith (filename ^ " not found");
+  let json = Json.from_file filename in
+  ErrorSummary.from_error_summary_json json
 
 let parse_callprop filename =
-  Parser.parse_callprop filename;
-  let filename = Filename.basename filename in
-  let data = input (filename ^ ".json") in
-  CallProposition.from_callprop_json data
+  if not (Sys.file_exists filename) then failwith (filename ^ " not found");
+  let data = Json.lineseq_from_file filename in
+  let json =
+    `List
+      (Seq.fold_left
+         (fun lst assoc -> match assoc with `Json j -> j :: lst | _ -> lst)
+         [] data)
+  in
+  CallProposition.from_callprop_json json
 
 let parse_class_info filename =
+  if not (Sys.file_exists filename) then failwith (filename ^ " not found");
   let json = Json.from_file filename in
   let elem = JsonUtil.to_list json |> List.hd in
   let info = Inheritance.of_json elem in
@@ -196,8 +188,8 @@ let init program_dir =
   {
     program_dir;
     summary_file = cons con_path "summary.json" |> cons program_dir;
-    error_summary_file = cons con_path "error_summarys" |> cons program_dir;
-    call_prop_file = cons con_path "call_proposition" |> cons program_dir;
+    error_summary_file = cons con_path "error_summarys.json" |> cons program_dir;
+    call_prop_file = cons con_path "call_proposition.json" |> cons program_dir;
     inheritance_file = cons con_path "inheritance_info.json" |> cons program_dir;
     enum_file = cons con_path "enum_info.json" |> cons program_dir;
     extra_callee_file = cons con_path "extra_callee.json" |> cons program_dir;
