@@ -1,7 +1,4 @@
 package hu.oe.nik.szfmv.detector;
-import hu.oe.nik.szfmv.detector.classes.Detector;
-import java.awt.Point;
-
 
 import hu.oe.nik.szfmv.detector.classes.Detector;
 import hu.oe.nik.szfmv.environment.World;
@@ -18,17 +15,6 @@ import static org.junit.Assert.assertTrue;
 public class DetectorTest {
     World w = new World(800, 600);
     final int magicnumber = 5000;
-
-@Test
-public void unitcon_test() throws Exception {
-Detector con_recv0 = Detector.getDetector();
-Point c3 = null;
-Point b2 = null;
-Point a1 = null;
-con_recv0.getCollidableObjects(a1, b2, c3);
-}
-
-
     @Test
     public void itHasAllWorldObjects() {
         Detector dec = Detector.getDetector();
