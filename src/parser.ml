@@ -195,7 +195,11 @@ let parse_var var =
   if var = "[{ }]" then Condition.M.empty
   else
     let var_list =
-      var |> Regexp.global_rm Regexp.remain_symbol |> String.split_on_char ','
+      var
+      |> Regexp.global_rm Regexp.open_bk
+      |> Regexp.global_rm Regexp.end_bk
+      |> Regexp.global_rm Regexp.remain_symbol
+      |> String.split_on_char ','
     in
     List.fold_left
       (fun mmap var ->
@@ -214,6 +218,8 @@ let parse_mem mem =
     let mem =
       mem
       |> Regexp.global_rm Regexp.remain_symbol2
+      |> Regexp.global_rm Regexp.open_bk
+      |> Regexp.global_rm Regexp.end_bk
       |> Regexp.global_rm Regexp.o_bk
       |> Regexp.rm_space |> Str.split Regexp.c_bk
     in
