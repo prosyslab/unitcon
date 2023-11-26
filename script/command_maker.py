@@ -8,6 +8,44 @@ manifest_file_name = "Manifest"
 dependency_jar = "with_dependency.jar"
 test_file_name = "UnitconTest"
 
+def make_java_files(project_dir):
+    java_files = os.path.join(project_dir, "java_files")
+    unitcon_files = os.path.join(project_dir, "unitcon_files")
+    if os.path.isfile(java_files):
+        lines = []
+        with open (java_files, 'r') as f:
+            lines = f.readlines()
+        with open(unitcon_files, 'w') as f:
+            for line in lines:
+                if "Main.java" in line:
+                    f.write(line.replace("Main.java", "UnitconTest.java"))
+                else:
+                    f.write(line)
+
+def copy_build_cmd(project_dir):
+    file_path = os.path.join(project_dir, "unitcon_properties")
+    lines = []
+    with open (os.path.join(file_path, "build_command"), 'r') as f:
+        lines = f.readlines()
+    with open(os.path.join(file_path, "compile_command"), 'w') as f:
+        for line in lines:
+            if "@java_files" in line:
+                f.write(line.replace("@java_files", "@unitcon_files"))
+            else:
+                f.write(line)
+
+def modify_test_cmd(project_dir):
+    file_path = os.path.join(project_dir, "unitcon_properties")
+    lines = []
+    with open (os.path.join(file_path, "test_command"), 'r') as f:
+        lines = f.readlines()
+    with open(os.path.join(file_path, "test_command"), 'w') as f:
+        for line in lines:
+            if "Main" in line:
+                f.write(line.replace("Main", "UnitconTest"))
+            else:
+                f.write(line)
+
 
 def make_dependency_jar(project_dir, classpaths):
     manifest_file = os.path.join(project_dir, manifest_file_name)
@@ -81,9 +119,21 @@ def main():
         type=pathlib.Path,
         default=None,
         help='Project directory where need to create build command files')
+    parser.add_argument(
+        "build_type",
+        type=str,
+        default=None,
+        help='maven or javac')
     args = parser.parse_args()
-    execute_build_cmd(args.project)
-    make_build_command(args.project)
+    
+    if args.build_type == "maven":
+        execute_build_cmd(args.project)
+        make_build_command(args.project)
+    elif args.build_type == "javac":
+        path = os.path.join(args.project)
+        make_java_files(path)
+        copy_build_cmd(path)
+        modify_test_cmd(path)
 
 
 if __name__ == "__main__":
