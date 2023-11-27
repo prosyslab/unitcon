@@ -131,6 +131,14 @@ let find_this_symbol sym condition =
       | _ -> this_symbol)
     condition sym
 
+let find_return_symbol sym condition =
+  Condition.M.fold
+    (fun symbol symbol_id return_symbol ->
+      match symbol_id with
+      | Condition.RH_Var v when v = "return" -> symbol
+      | _ -> return_symbol)
+    condition sym
+
 let get_id_symbol id variable memory =
   let this_symbol = find_this_symbol Condition.RH_Any variable in
   let this_tail_symbol = get_tail_symbol "this" this_symbol memory in
@@ -895,6 +903,39 @@ let is_recursive_param parent_class method_name m_info =
       | Language.Var (typ, _) when typ = this -> true
       | _ -> check)
     false info.MethodInfo.formal_params
+
+let contains_symbol symbol memory =
+  let inner_contains_symbol mem =
+    Condition.M.fold
+      (fun _ hd check -> if hd = symbol then true else check)
+      mem false
+  in
+  Condition.M.fold
+    (fun sym hd check ->
+      if sym = symbol then true else inner_contains_symbol hd || check)
+    memory false
+
+let is_new_loc summary =
+  let collect_symbol mem =
+    Condition.M.fold
+      (fun _ hd acc_lst ->
+        match hd with Condition.RH_Symbol _ -> hd :: acc_lst | _ -> acc_lst)
+      mem []
+  in
+  let post_var, post_mem = summary.Language.postcond in
+  let return_var = find_return_symbol Condition.RH_Any post_var in
+  let new_loc_list =
+    (match Condition.M.find_opt return_var post_mem with
+    | Some m -> collect_symbol m
+    | _ -> [])
+    |> List.filter (fun x ->
+           contains_symbol x (summary.Language.precond |> snd) |> not)
+  in
+  if new_loc_list = [] then false else true
+
+let is_method_with_memory_effect m_name summary =
+  let sum_list = SummaryMap.M.find m_name summary in
+  List.filter is_new_loc sum_list = [] |> not
 
 let is_void_method m_name s_map =
   let c_name = get_class_name ~infer:true m_name in
@@ -1685,6 +1726,8 @@ let get_ret_c ret summary m_info c_info s_map =
     let package = (AST.get_v ret).import in
     let summary_filtering list =
       List.filter (fun (_, c, _, _) -> is_public c m_info) list
+      |> List.filter (fun (_, c, _, _) ->
+             is_method_with_memory_effect c summary)
       |> List.filter (fun (_, c, _, _) ->
              is_recursive_param class_name c m_info |> not)
     in
