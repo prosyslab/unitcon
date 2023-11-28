@@ -100,7 +100,11 @@ let test_command_of_file file =
   s
 
 let find word str =
-  match Str.search_forward (word |> Str.regexp) str 0 with
+  match
+    Str.search_forward
+      ("java.lang.NullPointerException" ^ "[ \t\r\n]+" ^ word |> Str.regexp)
+      str 0
+  with
   | exception Not_found -> false
   | _ -> true
 
@@ -111,7 +115,12 @@ let run_type str =
 
 let string_of_expected_bug file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
-  open_in file |> input_line |> Str.global_replace Regexp.dollar "\\$"
+  let ic = open_in file in
+  let s = really_input_string ic (in_channel_length ic) in
+  close_in ic;
+  s
+  |> Str.global_replace Regexp.dollar "\\$"
+  |> Str.global_replace (Str.regexp "\n") "[ \t\r\n]+"
 
 let simple_compiler program_dir compile_command =
   let current_dir = Unix.getcwd () in
@@ -176,7 +185,7 @@ let checking_bug_presence ic expected_bug =
   (* print_endline "checking ..."; *)
   let data = my_really_read_string ic in
   close_in ic;
-  let check_bug bug = find bug data && find "NullPointerException" data in
+  let check_bug bug = find bug data in
   check_bug (string_of_expected_bug expected_bug)
 
 let init program_dir =
