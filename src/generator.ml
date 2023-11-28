@@ -2200,7 +2200,7 @@ let rec mk_testcase summary cg m_info c_info s_map e_info queue =
             combinate (p.prec, p.tc) x
             |> List.fold_left
                  (fun lst new_tc ->
-                   mk_cost p (new_tc |> snd) (p.prec + (new_tc |> fst)) :: lst)
+                   mk_cost p (new_tc |> snd) (new_tc |> fst) :: lst)
                  []
             |> List.rev_append (tl |> List.rev))
         |> mk_testcase summary cg m_info c_info s_map e_info
