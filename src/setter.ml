@@ -68,10 +68,12 @@ let get_change_fields
   let post_this = get_next_symbol (get_this_symbol post_var) post_mem in
   get_change_field post_this pre_mem post_mem FieldSet.S.empty
 
-let get_class_name method_name = String.split_on_char '.' method_name |> List.hd
-
-let is_constructor method_name =
-  Str.string_match (".*\\.<init>" |> Str.regexp) method_name 0
+let get_class_name method_name =
+  let m_name =
+    Regexp.first_rm ("(.*)" |> Str.regexp) method_name
+    |> Str.split Regexp.dot |> List.rev |> List.hd
+  in
+  Regexp.first_rm ("\\." ^ m_name ^ "(.*)" |> Str.regexp) method_name
 
 let find_setter m_name m_summarys m_infos mmap =
   let class_name = get_class_name m_name in
