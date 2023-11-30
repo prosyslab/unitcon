@@ -102,7 +102,7 @@ let test_command_of_file file =
 let find word str =
   match
     Str.search_forward
-      ("java.lang.NullPointerException" ^ "[ \t\r\n]+" ^ word |> Str.regexp)
+      (".*java.lang.NullPointerException" ^ "[ \t\r\n]+" ^ word |> Str.regexp)
       str 0
   with
   | exception Not_found -> false
@@ -122,19 +122,22 @@ let string_of_expected_bug file =
   |> Str.global_replace Regexp.dollar "\\$"
   |> Str.global_replace (Str.regexp "\n") "[ \t\r\n]+"
 
-let simple_compiler program_dir compile_command =
+let simple_compiler program_dir command =
   let current_dir = Unix.getcwd () in
   Sys.chdir program_dir;
-  let stdout, stdin, stderr = Unix.open_process_full compile_command [| "" |] in
+  let stdout, stdin, stderr =
+    Unix.open_process_full command (Unix.environment ())
+  in
+  Unix.wait () |> ignore;
   Sys.chdir current_dir;
   close_out stdin;
-  match run_type compile_command with
+  match run_type command with
   | Compile ->
       close_in stderr;
-      Event.always stdout |> Event.sync
+      stdout
   | Test ->
       close_in stdout;
-      Event.always stderr |> Event.sync
+      stderr
 
 (* test: (string * string) *)
 let insert_test test test_file =
@@ -218,10 +221,7 @@ let build_program info tc =
   add_testcase tc info.test_file;
   (* javac *)
   simple_compiler info.program_dir compile_cmd |> close_in;
-  Unix.wait () |> ignore;
-  let x = simple_compiler info.program_dir test_cmd in
-  Unix.wait () |> ignore;
-  x
+  simple_compiler info.program_dir test_cmd
 
 (* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start pkg info queue e_method_info p_info =
