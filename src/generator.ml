@@ -1265,7 +1265,7 @@ let satisfied_c m_summary id candidate_constructor summary =
       (m_summary.Language.precond |> snd)
     |> get_rh_name ~is_var:false
   in
-  if target_symbol = "" then (true, c_summarys |> List.hd)
+  if target_symbol = "" then [ (true, c_summarys |> List.hd) ]
   else
     List.fold_left
       (fun lst c_summary ->
@@ -1280,13 +1280,14 @@ let satisfied_c m_summary id candidate_constructor summary =
         :: lst)
       [] c_summarys
     |> List.fold_left
-         (fun check_value (check_summary, c_summary) ->
+         (fun lst (check_summary, c_summary) ->
            if List.filter (fun (_, c) -> c = false) check_summary = [] then
              ( true,
                combine_value c_summary.Language.value check_summary
                |> new_value_summary c_summary )
-           else check_value)
-         (false, Language.empty_summary)
+             :: lst
+           else (false, c_summary) :: lst)
+         []
 
 let match_constructor_name class_name method_name =
   let class_name = Str.global_replace Regexp.dollar "\\$" class_name in
@@ -1337,7 +1338,8 @@ let find_global_var_list c_name t_var mem summary m_info =
       (fun head _ gvar_list ->
         match head with
         | Condition.RH_Var var ->
-            (0, AST.GlobalConstant (c_name ^ "." ^ var)) :: gvar_list
+            (0, AST.GlobalConstant (AST.get_short_class_name c_name ^ "." ^ var))
+            :: gvar_list
         | _ -> gvar_list)
       s_trace []
   in
@@ -1345,7 +1347,8 @@ let find_global_var_list c_name t_var mem summary m_info =
     Condition.M.fold
       (fun head _ gvar ->
         match head with
-        | Condition.RH_Var var when var = t_var -> c_name ^ "." ^ var |> mk_some
+        | Condition.RH_Var var when var = t_var ->
+            AST.get_short_class_name c_name ^ "." ^ var |> mk_some
         | _ -> gvar)
       s_trace None
   in
@@ -1624,12 +1627,14 @@ let satisfied_c_list id t_summary summary summary_list =
   else
     List.fold_left
       (fun list constructor ->
-        let check, summary = satisfied_c t_summary id constructor summary in
-        if check then
-          if is_array_init constructor then
-            (1, constructor, modify_summary id t_summary summary) :: list
-          else (1, constructor, summary) :: list
-        else (0, constructor, summary) :: list)
+        (List.fold_left (fun lst (check, summary) ->
+             if check then
+               if is_array_init constructor then
+                 (1, constructor, modify_summary id t_summary summary) :: lst
+               else (1, constructor, summary) :: lst
+             else (0, constructor, summary) :: lst))
+          list
+          (satisfied_c t_summary id constructor summary))
       [] summary_list
 
 let get_cfunc constructor m_info =
