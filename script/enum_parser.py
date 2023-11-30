@@ -21,6 +21,7 @@ extract_interface_name_query = J_LANGUAGE.query("""
 """)
 
 extract_enum_query = J_LANGUAGE.query("""
+(package_declaration)* @package-name
 (class_declaration
   name: (identifier) @class-name)*
 (enum_declaration
@@ -30,6 +31,12 @@ extract_enum_query = J_LANGUAGE.query("""
 """)
 
 enum_list = []
+
+
+def get_package_class(package_name, class_name):
+    if package_name:
+        class_name = package_name + '.' + class_name
+    return class_name
 
 
 def get_text(node, src):
@@ -70,16 +77,22 @@ def get_parent_class_name(node, src, name):
 
 def get_enum(node, src):
     match_list = extract_enum_query.captures(node)
+    package_name = ''
     enum_name = ''
     for i in match_list:
         text = get_text(i, src)
-        if i[1] == 'enum-name':
+        if i[1] == 'package-name':
+            package_name = text.replace('package', '', 1).replace(';', '',
+                                                                  1).strip()
+        elif i[1] == 'enum-name':
             parent_name = get_parent_class_name(i[0].parent, src, '')
-            enum_name = parent_name + text
+            enum_name = get_package_class(package_name, parent_name + text)
         elif i[1] == 'enum-const':
             enum_list.append({
-                'enum': enum_name,
-                'const': re.sub("\(.*\)", "", text)
+                'enum':
+                enum_name,
+                'const':
+                re.sub("\([^)]*\)[\),;]*", "", text, re.MULTILINE).strip()
             })
 
 

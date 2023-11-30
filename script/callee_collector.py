@@ -10,6 +10,7 @@ parser = Parser()
 parser.set_language(J_LANGUAGE)
 
 extract_class_name_query = J_LANGUAGE.query("""
+(package_declaration)* @package-name
 (class_declaration
   name: (identifier) @class-name
   body: (class_body) @class-body
@@ -40,6 +41,12 @@ extract_catch_block_query = J_LANGUAGE.query("""
 """)
 
 extra_callee = []
+
+
+def get_package_class(package_name, class_name):
+    if package_name:
+        class_name = package_name + '.' + class_name
+    return class_name
 
 
 def remove_generic(name):
@@ -166,12 +173,17 @@ def get_parent_class_name(node, src, name):
 
 def get_class_name(node, src):
     match_list = extract_class_name_query.captures(node)
+    package_name = ''
     class_name = ''
     for i in match_list:
         text = get_text(i, src)
-        if i[1] == 'class-name':
+        if i[1] == 'package-name':
+            package_name = text.replace('package', '', 1).replace(';', '',
+                                                                  1).strip()
+        elif i[1] == 'class-name':
             class_name = re.sub("\$$", "",
                                 get_parent_class_name(i[0], src, ''))
+            class_name = get_package_class(package_name, class_name)
         elif i[1] == 'class-body':
             if class_name == '':
                 continue
