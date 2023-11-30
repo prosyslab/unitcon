@@ -14,6 +14,8 @@ let bk2 = Str.regexp "[)\\[\\]]"
 
 let bm = Str.regexp ","
 
+let colon = Str.regexp ":"
+
 let eq = Str.regexp "="
 
 let neq = Str.regexp "!="
@@ -36,11 +38,7 @@ let end_bk = Str.regexp "\\]"
 
 let ots = Str.regexp "not_in\\["
 
-let stack = Str.regexp "Stack="
-
 let remain_symbol = Str.regexp "[&{}]"
-
-let heap = Str.regexp "Heap="
 
 let remain_symbol2 = Str.regexp "}*[ \t\r\n]+}$"
 
@@ -69,22 +67,6 @@ let dot = Str.regexp "\\."
 let space = Str.regexp " "
 
 let space2 = Str.regexp "  "
-
-let caller = Str.regexp "caller:"
-
-let callee = Str.regexp "callee:"
-
-let procname = Str.regexp "^.*procname:"
-
-let boitv = Str.regexp "^.*BoItv:"
-
-let citv = Str.regexp "^.*CItv:"
-
-let precond = Str.regexp "^.*Precond:"
-
-let postcond = Str.regexp "^.*Postcond:"
-
-let fparam = Str.regexp "^.*actual:"
 
 let global_rm exp str = Str.global_replace exp "" str
 

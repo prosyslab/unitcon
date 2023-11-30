@@ -431,16 +431,6 @@ let file_summary =
       args = [];
     }
 
-(* let file_create_summary =
-   Language.
-     {
-       relation = Relation.M.empty;
-       value = Value.M.empty;
-       precond = (file_create_var, file_create_premem);
-       postcond = (file_create_var, file_create_postmem);
-       args = [];
-     } *)
-
 let image_summary =
   Language.
     {
@@ -546,10 +536,10 @@ let point_summary =
  * ************************************** *)
 
 let map_put_info =
-  let this = ("java.util.Map", Language.This (Object "Map")) in
-  let arg_typ = Language.Object "Object" in
-  let arg1 = ("java.lang.Object", Language.Var (arg_typ, "key")) in
-  let arg2 = ("java.lang.Object", Language.Var (arg_typ, "value")) in
+  let this = Language.This (Object "java.util.Map") in
+  let arg_typ = Language.Object "java.lang.Object" in
+  let arg1 = Language.Var (arg_typ, "key") in
+  let arg2 = Language.Var (arg_typ, "value") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -560,7 +550,7 @@ let map_put_info =
     }
 
 let array_list_info =
-  let this = ("java.util.ArrayList", Language.This (Object "ArrayList")) in
+  let this = Language.This (Object "java.util.ArrayList") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -571,8 +561,8 @@ let array_list_info =
     }
 
 let file_info =
-  let this = ("java.io.File", Language.This (Object "File")) in
-  let arg = ("java.lang.String", Language.Var (String, "file")) in
+  let this = Language.This (Object "java.io.File") in
+  let arg = Language.Var (String, "file") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -582,24 +572,11 @@ let file_info =
       filename = "";
     }
 
-(* let file_create_info =
-   let this = ("java.io.File", Language.This (Object "File")) in
-   MethodInfo.
-     {
-       modifier = Language.Public;
-       is_static = false;
-       formal_params = [ this ];
-       return = "void";
-       filename = "";
-     } *)
-
 let image_info =
-  let this =
-    ("java.awt.image.BufferedImage", Language.This (Object "BufferedImage"))
-  in
-  let arg1 = ("", Language.Var (Int, "w")) in
-  let arg2 = ("", Language.Var (Int, "h")) in
-  let arg3 = ("", Language.Var (Int, "t")) in
+  let this = Language.This (Object "java.awt.image.BufferedImage") in
+  let arg1 = Language.Var (Int, "w") in
+  let arg2 = Language.Var (Int, "h") in
+  let arg3 = Language.Var (Int, "t") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -610,9 +587,7 @@ let image_info =
     }
 
 let image_create_info =
-  let this =
-    ("java.awt.image.BufferedImage", Language.This (Object "BufferedImage"))
-  in
+  let this = Language.This (Object "java.awt.image.BufferedImage") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -623,19 +598,19 @@ let image_create_info =
     }
 
 let class_get_info =
-  let this = ("java.lang.Object", Language.This (Object "Object")) in
+  let this = Language.This (Object "java.lang.Object") in
   MethodInfo.
     {
       modifier = Language.Public;
       is_static = false;
       formal_params = [ this ];
-      return = "Class";
+      return = "java.lang.Class";
       filename = "";
     }
 
 let print_info =
-  let this = ("java.io.PrintStream", Language.This (Object "PrintStream")) in
-  let arg = ("java.io.File", Language.Var (Object "File", "file")) in
+  let this = Language.This (Object "java.io.PrintStream") in
+  let arg = Language.Var (Object "java.io.File", "file") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -646,10 +621,8 @@ let print_info =
     }
 
 let file_input_info =
-  let this =
-    ("java.io.FileInputStream", Language.This (Object "FileInputStream"))
-  in
-  let arg = ("java.io.File", Language.Var (Object "File", "file")) in
+  let this = Language.This (Object "java.io.FileInputStream") in
+  let arg = Language.Var (Object "java.io.File", "file") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -660,7 +633,7 @@ let file_input_info =
     }
 
 let obj_info =
-  let this = ("java.lang.Object", Language.This (Object "Object")) in
+  let this = Language.This (Object "java.lang.Object") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -671,8 +644,8 @@ let obj_info =
     }
 
 let string_info =
-  let this = ("java.lang.String", Language.This String) in
-  let arg = ("java.lang.String", Language.Var (String, "s")) in
+  let this = Language.This String in
+  let arg = Language.Var (String, "s") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -683,8 +656,8 @@ let string_info =
     }
 
 let int_array_info =
-  let this = ("IntArray", Language.This (Array Int)) in
-  let arg = ("", Language.Var (Int, "size")) in
+  let this = Language.This (Array Int) in
+  let arg = Language.Var (Int, "size") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -695,8 +668,8 @@ let int_array_info =
     }
 
 let long_array_info =
-  let this = ("LongArray", Language.This (Array Long)) in
-  let arg = ("", Language.Var (Int, "size")) in
+  let this = Language.This (Array Long) in
+  let arg = Language.Var (Int, "size") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -707,8 +680,8 @@ let long_array_info =
     }
 
 let float_array_info =
-  let this = ("FloatArray", Language.This (Array Float)) in
-  let arg = ("", Language.Var (Int, "size")) in
+  let this = Language.This (Array Float) in
+  let arg = Language.Var (Int, "size") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -719,8 +692,8 @@ let float_array_info =
     }
 
 let double_array_info =
-  let this = ("DoubleArray", Language.This (Array Double)) in
-  let arg = ("", Language.Var (Int, "size")) in
+  let this = Language.This (Array Double) in
+  let arg = Language.Var (Int, "size") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -731,8 +704,8 @@ let double_array_info =
     }
 
 let bool_array_info =
-  let this = ("BoolArray", Language.This (Array Bool)) in
-  let arg = ("", Language.Var (Int, "size")) in
+  let this = Language.This (Array Bool) in
+  let arg = Language.Var (Int, "size") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -743,8 +716,8 @@ let bool_array_info =
     }
 
 let char_array_info =
-  let this = ("CharArray", Language.This (Array Char)) in
-  let arg = ("", Language.Var (Int, "size")) in
+  let this = Language.This (Array Char) in
+  let arg = Language.Var (Int, "size") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -755,8 +728,8 @@ let char_array_info =
     }
 
 let string_array_info =
-  let this = ("StringArray", Language.This (Array String)) in
-  let arg = ("", Language.Var (Int, "size")) in
+  let this = Language.This (Array String) in
+  let arg = Language.Var (Int, "size") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -767,8 +740,8 @@ let string_array_info =
     }
 
 let object_array_info =
-  let this = ("ObjectArray", Language.This (Array (Object "Object"))) in
-  let arg = ("", Language.Var (Int, "size")) in
+  let this = Language.This (Array (Object "java.lang.Object")) in
+  let arg = Language.Var (Int, "size") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -781,9 +754,9 @@ let object_array_info =
 (*TODO: array_array_info *)
 
 let int_array_set_info =
-  let this = ("IntArray", Language.This (Array Int)) in
-  let arg1 = ("", Language.Var (Int, "index")) in
-  let arg2 = ("", Language.Var (Int, "elem")) in
+  let this = Language.This (Array Int) in
+  let arg1 = Language.Var (Int, "index") in
+  let arg2 = Language.Var (Int, "elem") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -794,9 +767,9 @@ let int_array_set_info =
     }
 
 let long_array_set_info =
-  let this = ("LongArray", Language.This (Array Long)) in
-  let arg1 = ("", Language.Var (Int, "index")) in
-  let arg2 = ("", Language.Var (Long, "elem")) in
+  let this = Language.This (Array Long) in
+  let arg1 = Language.Var (Int, "index") in
+  let arg2 = Language.Var (Long, "elem") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -807,9 +780,9 @@ let long_array_set_info =
     }
 
 let float_array_set_info =
-  let this = ("FloatArray", Language.This (Array Float)) in
-  let arg1 = ("", Language.Var (Int, "index")) in
-  let arg2 = ("", Language.Var (Float, "elem")) in
+  let this = Language.This (Array Float) in
+  let arg1 = Language.Var (Int, "index") in
+  let arg2 = Language.Var (Float, "elem") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -820,9 +793,9 @@ let float_array_set_info =
     }
 
 let double_array_set_info =
-  let this = ("DoubleArray", Language.This (Array Double)) in
-  let arg1 = ("", Language.Var (Int, "index")) in
-  let arg2 = ("", Language.Var (Double, "elem")) in
+  let this = Language.This (Array Double) in
+  let arg1 = Language.Var (Int, "index") in
+  let arg2 = Language.Var (Double, "elem") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -833,9 +806,9 @@ let double_array_set_info =
     }
 
 let bool_array_set_info =
-  let this = ("BoolArray", Language.This (Array Bool)) in
-  let arg1 = ("", Language.Var (Int, "index")) in
-  let arg2 = ("", Language.Var (Bool, "elem")) in
+  let this = Language.This (Array Bool) in
+  let arg1 = Language.Var (Int, "index") in
+  let arg2 = Language.Var (Bool, "elem") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -846,9 +819,9 @@ let bool_array_set_info =
     }
 
 let char_array_set_info =
-  let this = ("CharArray", Language.This (Array Char)) in
-  let arg1 = ("", Language.Var (Int, "index")) in
-  let arg2 = ("", Language.Var (Char, "elem")) in
+  let this = Language.This (Array Char) in
+  let arg1 = Language.Var (Int, "index") in
+  let arg2 = Language.Var (Char, "elem") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -859,9 +832,9 @@ let char_array_set_info =
     }
 
 let string_array_set_info =
-  let this = ("StringArray", Language.This (Array String)) in
-  let arg1 = ("", Language.Var (Int, "index")) in
-  let arg2 = ("java.lang.String", Language.Var (String, "elem")) in
+  let this = Language.This (Array String) in
+  let arg1 = Language.Var (Int, "index") in
+  let arg2 = Language.Var (String, "elem") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -872,9 +845,9 @@ let string_array_set_info =
     }
 
 let object_array_set_info =
-  let this = ("ObjectArray", Language.This (Array (Object "Object"))) in
-  let arg1 = ("", Language.Var (Int, "index")) in
-  let arg2 = ("java.lang.Object", Language.Var (Object "Object", "elem")) in
+  let this = Language.This (Array (Object "java.lang.Object")) in
+  let arg1 = Language.Var (Int, "index") in
+  let arg2 = Language.Var (Object "java.lang.Object", "elem") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -885,9 +858,9 @@ let object_array_set_info =
     }
 
 let point_info =
-  let this = ("Point", Language.This (Object "Point")) in
-  let arg1 = ("", Language.Var (Int, "x")) in
-  let arg2 = ("", Language.Var (Int, "y")) in
+  let this = Language.This (Object "java.awt.Point") in
+  let arg1 = Language.Var (Int, "x") in
+  let arg2 = Language.Var (Int, "y") in
   MethodInfo.
     {
       modifier = Language.Public;
@@ -898,17 +871,22 @@ let point_info =
     }
 
 let add_java_package_summary mmap =
-  SummaryMap.M.add "Map.put(Object,Object)" [ map_put_summary ] mmap
-  |> SummaryMap.M.add "ArrayList.<init>()" [ array_list_summary ]
-  |> SummaryMap.M.add "File.<init>(String)" [ file_summary ]
-  (* |> SummaryMap.M.add "File.createNewFile()" [ file_create_summary ] *)
-  |> SummaryMap.M.add "BufferedImage.<init>(int,int,int)" [ image_summary ]
-  |> SummaryMap.M.add "BufferedImage.createGraphics()" [ image_create_summary ]
-  |> SummaryMap.M.add "Object.getClass()" [ class_get_summary ]
-  |> SummaryMap.M.add "PrintStream.<init>(File)" [ print_summary ]
-  |> SummaryMap.M.add "FileInputStream.<init>(File)" [ file_input_summary ]
-  |> SummaryMap.M.add "Object.<init>()" [ obj_summary ]
-  |> SummaryMap.M.add "String.<init>(String)" [ string_summary ]
+  SummaryMap.M.add "java.util.Map.put(java.lang.Object,java.lang.Object)"
+    [ map_put_summary ] mmap
+  |> SummaryMap.M.add "java.util.ArrayList.<init>()" [ array_list_summary ]
+  |> SummaryMap.M.add "java.io.File.<init>(java.lang.String)" [ file_summary ]
+  |> SummaryMap.M.add "java.awt.image.BufferedImage.<init>(int,int,int)"
+       [ image_summary ]
+  |> SummaryMap.M.add "java.awt.image.BufferedImage.createGraphics()"
+       [ image_create_summary ]
+  |> SummaryMap.M.add "java.lang.Object.getClass()" [ class_get_summary ]
+  |> SummaryMap.M.add "java.io.PrintStream.<init>(java.io.File)"
+       [ print_summary ]
+  |> SummaryMap.M.add "java.io.FileInputStream.<init>(java.io.File)"
+       [ file_input_summary ]
+  |> SummaryMap.M.add "java.lang.Object.<init>()" [ obj_summary ]
+  |> SummaryMap.M.add "java.lang.String.<init>(java.lang.String)"
+       [ string_summary ]
   |> SummaryMap.M.add "IntArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "LongArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "FloatArray.<init>(int)" [ array_summary ]
@@ -923,22 +901,27 @@ let add_java_package_summary mmap =
   |> SummaryMap.M.add "DoubleArray.set(int,double)" [ array_set_summary ]
   |> SummaryMap.M.add "BoolArray.set(int,boolean)" [ array_set_summary ]
   |> SummaryMap.M.add "CharArray.set(int,char)" [ array_set_summary ]
-  |> SummaryMap.M.add "StringArray.set(int,String)" [ array_set_summary ]
-  |> SummaryMap.M.add "ObjectArray.set(int,Object)" [ array_set_summary ]
-  |> SummaryMap.M.add "Point.<init>(int,int)" [ point_summary ]
+  |> SummaryMap.M.add "StringArray.set(int,java.lang.String)"
+       [ array_set_summary ]
+  |> SummaryMap.M.add "ObjectArray.set(int,java.lang.Object)"
+       [ array_set_summary ]
+  |> SummaryMap.M.add "java.awt.Point.<init>(int,int)" [ point_summary ]
 
 let add_java_package_method mmap =
-  MethodInfo.M.add "Map.put(Object,Object)" map_put_info mmap
-  |> MethodInfo.M.add "ArrayList.<init>()" array_list_info
-  |> MethodInfo.M.add "File.<init>(String)" file_info
-  (* |> MethodInfo.M.add "File.createNewFile()" file_create_info *)
-  |> MethodInfo.M.add "BufferedImage.<init>(int,int,int)" image_info
-  |> MethodInfo.M.add "BufferedImage.createGraphics()" image_create_info
-  |> MethodInfo.M.add "Object.getClass()" class_get_info
-  |> MethodInfo.M.add "PrintStream.<init>(File)" print_info
-  |> MethodInfo.M.add "FileInputStream.<init>(File)" file_input_info
-  |> MethodInfo.M.add "Object.<init>()" obj_info
-  |> MethodInfo.M.add "String.<init>(String)" string_info
+  MethodInfo.M.add "java.util.Map.put(java.lang.Object,java.lang.Object)"
+    map_put_info mmap
+  |> MethodInfo.M.add "java.util.ArrayList.<init>()" array_list_info
+  |> MethodInfo.M.add "java.io.File.<init>(java.lang.String)" file_info
+  |> MethodInfo.M.add "java.awt.image.BufferedImage.<init>(int,int,int)"
+       image_info
+  |> MethodInfo.M.add "java.awt.image.BufferedImage.createGraphics()"
+       image_create_info
+  |> MethodInfo.M.add "java.lang.Object.getClass()" class_get_info
+  |> MethodInfo.M.add "java.io.PrintStream.<init>(java.io.File)" print_info
+  |> MethodInfo.M.add "java.io.FileInputStream.<init>(java.io.File)"
+       file_input_info
+  |> MethodInfo.M.add "java.lang.Object.<init>()" obj_info
+  |> MethodInfo.M.add "java.lang.String.<init>(java.lang.String)" string_info
   |> MethodInfo.M.add "IntArray.<init>(int)" int_array_info
   |> MethodInfo.M.add "LongArray.<init>(int)" long_array_info
   |> MethodInfo.M.add "FloatArray.<init>(int)" float_array_info
@@ -953,9 +936,11 @@ let add_java_package_method mmap =
   |> MethodInfo.M.add "DoubleArray.set(int,double)" double_array_set_info
   |> MethodInfo.M.add "BoolArray.set(int,boolean)" bool_array_set_info
   |> MethodInfo.M.add "CharArray.set(int,char)" char_array_set_info
-  |> MethodInfo.M.add "StringArray.set(int,String)" string_array_set_info
-  |> MethodInfo.M.add "ObjectArray.set(int,Object)" object_array_set_info
-  |> MethodInfo.M.add "Point.<init>(int,int)" point_info
+  |> MethodInfo.M.add "StringArray.set(int,java.lang.String)"
+       string_array_set_info
+  |> MethodInfo.M.add "ObjectArray.set(int,java.lang.Object)"
+       object_array_set_info
+  |> MethodInfo.M.add "java.awt.Point.<init>(int,int)" point_info
 
 let add_java_package_inheritance ig =
   let add_inheritance super child ig = IG.add_edge ig super child in

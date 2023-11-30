@@ -41,7 +41,7 @@ type variable = This of typ | Var of typ * id [@@deriving compare]
 
 type import = string (* package.class *) [@@deriving compare]
 
-type params = (import * variable) list [@@deriving compare]
+type params = variable list [@@deriving compare]
 
 type symbol = string (*e.g. v1 *) [@@deriving compare]
 
@@ -772,6 +772,14 @@ module AST = struct
      Return Code
    * ************************************** *)
 
+  let get_method_name m =
+    Regexp.first_rm ("(.*)" |> Str.regexp) m
+    |> Str.split Regexp.dot |> List.rev |> List.hd
+
+  let get_short_class_name c =
+    Regexp.first_rm ("\\.<init>(.*)" |> Str.regexp) c
+    |> Str.split Regexp.dot |> List.rev |> List.hd
+
   let arg_code f arg =
     let cc code x idx = code ^ ", " ^ x ^ (idx |> string_of_int) in
     match arg with
@@ -806,15 +814,11 @@ module AST = struct
         else if is_array_set func then ""
         else if Str.string_match (".*\\.<init>" |> Str.regexp) f.method_name 0
         then
-          Str.split Regexp.dot f.method_name
-          |> List.hd
+          get_short_class_name f.method_name
           |> Str.global_replace Regexp.dollar "."
           |> String.cat "new "
         else
-          Str.split Regexp.dot f.method_name
-          |> List.tl |> List.hd
-          |> Regexp.global_rm (Str.regexp "(.*)$")
-          |> Str.global_replace Regexp.dollar "."
+          get_method_name f.method_name |> Str.global_replace Regexp.dollar "."
     | _ -> "Func"
 
   let is_var = function Variable _ -> true | _ -> false
@@ -837,7 +841,8 @@ module AST = struct
     | Char -> "char " ^ (v |> snd)
     | String -> "String " ^ (v |> snd)
     | Object name ->
-        (name |> Str.global_replace Regexp.dollar ".") ^ " " ^ (v |> snd)
+        (name |> get_short_class_name |> Str.global_replace Regexp.dollar ".")
+        ^ " " ^ (v |> snd)
     | Array typ -> (
         match typ with
         | Int -> "int[] " ^ (v |> snd)
@@ -858,7 +863,9 @@ module AST = struct
             id ^ (idx |> string_of_int)
         | Var (_, id), Some idx -> id ^ (idx |> string_of_int) ^ "."
         | _ -> "")
-    | ClassName c -> (c |> Str.global_replace Regexp.dollar ".") ^ "."
+    | ClassName c ->
+        (c |> get_short_class_name |> Str.global_replace Regexp.dollar ".")
+        ^ "."
     | _ -> "ID."
 
   let id_code = function

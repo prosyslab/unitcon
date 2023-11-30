@@ -19,32 +19,30 @@ let parse_param param =
   let v_and_t = String.split_on_char ':' param in
   let rec get_type t =
     match t with
-    | "int" | "signed short" -> ("", Language.Int)
-    | "long" -> ("", Language.Long)
-    | "float" -> ("", Language.Float)
-    | "double" -> ("", Language.Double)
-    | "_Bool" | "boolean" -> ("", Language.Bool)
-    | "unsigned short" | "signed char" | "unsigned char" -> ("", Language.Char)
-    | "java.lang.String*" -> ("java.lang.String", Language.String)
-    | "" -> ("", Language.None)
+    | "int" | "signed short" -> Language.Int
+    | "long" -> Language.Long
+    | "float" -> Language.Float
+    | "double" -> Language.Double
+    | "_Bool" | "boolean" -> Language.Bool
+    | "unsigned short" | "signed char" | "unsigned char" -> Language.Char
+    | "java.lang.String*" -> Language.String
+    | "" -> Language.None
     | _ when Str.string_match Regexp.array t 0 ->
-        let _, typ = t |> Regexp.first_rm Regexp.rm_array |> get_type in
-        ("", Language.Array typ)
+        let typ = t |> Regexp.first_rm Regexp.rm_array |> get_type in
+        Language.Array typ
     | _ ->
-        let import = Regexp.global_rm (Str.regexp "\\*.*$") t in
-        let class_name = String.split_on_char '.' t |> List.rev |> List.hd in
-        let class_name = Regexp.first_rm Regexp.any class_name in
-        (import, Language.Object class_name)
+        let typ = Regexp.global_rm (Str.regexp "\\*.*$") t in
+        Language.Object typ
   in
-  if List.length v_and_t = 1 then ("", Language.Var (None, ""))
+  if List.length v_and_t = 1 then Language.Var (None, "")
   else
     let mk_variable var typ =
       if var = "this" then
-        let import, typ = get_type typ in
-        (import, Language.This typ)
+        let typ = get_type typ in
+        Language.This typ
       else
-        let import, typ = get_type typ in
-        (import, Language.Var (typ, var))
+        let typ = get_type typ in
+        Language.Var (typ, var)
     in
     let var = List.hd v_and_t in
     let typ = List.tl v_and_t |> List.hd in

@@ -235,7 +235,7 @@ let get_param_index head_symbol variables formal_params =
     let rec get_index count params =
       match params with
       | hd :: tl -> (
-          match hd |> snd with
+          match hd with
           | Language.This _ -> get_index (count + 1) tl
           | Var (_, id) when id = variable -> count
           | _ -> get_index (count + 1) tl)
@@ -862,51 +862,25 @@ let get_class_name ~infer method_name =
   if infer then Regexp.global_rm ("\\..+(.*)" |> Str.regexp) method_name
   else Regexp.global_rm ("(.*)" |> Str.regexp) method_name
 
-let get_package_from_param formal_params =
-  List.fold_left
-    (fun found (import, var) ->
-      match var with Language.This _ -> import | _ -> found)
-    "" formal_params
-
-(* e.g., java.util.Date --> contain class name *)
-let get_package_from_method t_method (c_info, _) =
-  let class_name = get_class_name ~infer:true t_method in
-  let full_class_name =
-    ClassInfo.M.fold
-      (fun full_name _ find_name ->
-        let name = Str.split Regexp.dot full_name |> List.rev |> List.hd in
-        if class_name = name then full_name else find_name)
-      c_info ""
+let get_package_from_m t_method =
+  let m_name =
+    Regexp.first_rm ("(.*)" |> Str.regexp) t_method
+    |> Str.split Regexp.dot |> List.rev |> List.hd
   in
-  full_class_name
+  Regexp.first_rm ("\\." ^ m_name ^ "(.*)" |> Str.regexp) t_method
 
-let get_package t_method m_info c_info =
-  let info = MethodInfo.M.find t_method m_info in
-  let p_package = get_package_from_param info.MethodInfo.formal_params in
-  let m_package = get_package_from_method t_method c_info in
-  if p_package = "" then m_package else p_package
-
-(* e.g., java.util. --> not contain class name *)
-let get_import t_method (c_info, _) =
-  let class_name = get_class_name ~infer:true t_method in
-  let full_class_name =
-    ClassInfo.M.fold
-      (fun full_name _ find_name ->
-        let name = Str.split Regexp.dot full_name |> List.rev |> List.hd in
-        if class_name = name then
-          let name = Str.global_replace Regexp.dollar "\\$" name in
-          let s = name ^ "$" in
-          Regexp.global_rm (Str.regexp s) full_name
-        else find_name)
-      c_info ""
-  in
-  full_class_name
+let get_package_from_v v =
+  let typ = match v with Language.This typ -> typ | Var (typ, _) -> typ in
+  match typ with
+  | Language.Int | Long | Float | Double | Bool | Char | Array _ | None -> ""
+  | String -> "java.lang.String"
+  | Object t -> t
 
 let is_recursive_param parent_class method_name m_info =
   let info = MethodInfo.M.find method_name m_info in
   let this = Language.Object parent_class in
   List.fold_left
-    (fun check (_, var) ->
+    (fun check var ->
       match var with
       | Language.Var (typ, _) when typ = this -> true
       | _ -> check)
@@ -1279,7 +1253,7 @@ let get_same_precond_param summary param_sets =
   |> VarSets.filter (fun x -> VarSet.is_empty x |> not)
 
 let get_same_params_set summary params =
-  let new_p = List.fold_left (fun p (_, v) -> v :: p) [] params |> List.rev in
+  let new_p = List.fold_left (fun p v -> v :: p) [] params |> List.rev in
   get_same_type_param new_p |> get_same_precond_param summary
 
 let satisfied_c m_summary id candidate_constructor summary =
@@ -1315,26 +1289,18 @@ let satisfied_c m_summary id candidate_constructor summary =
          (false, Language.empty_summary)
 
 let match_constructor_name class_name method_name =
-  let class_name =
-    Str.split Regexp.dot class_name
-    |> List.rev |> List.hd
-    |> Str.global_replace Regexp.dollar "\\$"
-  in
+  let class_name = Str.global_replace Regexp.dollar "\\$" class_name in
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
 let match_return_object class_name method_name m_info =
-  let class_name = Str.split Regexp.dot class_name |> List.rev |> List.hd in
   let info = MethodInfo.M.find method_name m_info in
   let return = info.MethodInfo.return in
   String.equal class_name return
 
-let get_clist (class_package, class_name) m_info (c_info, ig) =
-  let full_class_name =
-    if class_package = "" then class_name else class_package
-  in
+let get_clist class_name m_info (c_info, ig) =
   let class_to_find =
-    try IG.succ ig full_class_name |> List.cons full_class_name
-    with Invalid_argument _ -> [ full_class_name ]
+    try IG.succ ig class_name |> List.cons class_name
+    with Invalid_argument _ -> [ class_name ]
   in
   MethodInfo.M.fold
     (fun method_name _ method_list ->
@@ -1344,7 +1310,7 @@ let get_clist (class_package, class_name) m_info (c_info, ig) =
             is_normal_class class_name_to_find c_info
             && is_private method_name m_info |> not
             && match_constructor_name class_name_to_find method_name
-          then (method_name, class_name_to_find) :: init_list
+          then method_name :: init_list
           else init_list)
         method_list class_to_find)
     m_info []
@@ -1454,14 +1420,14 @@ let mk_params_list summary params_set org_param =
   in
   let org_params_list =
     List.fold_left
-      (fun params (i, v) ->
+      (fun params v ->
         match v with
         | Language.Var (typ, _) when typ = Language.None -> params
         | _ ->
             incr new_var;
             AST.
               {
-                import = i;
+                import = get_package_from_v v;
                 variable = (v, !new_var |> mk_some);
                 field = FieldSet.S.empty;
                 summary;
@@ -1514,7 +1480,7 @@ let get_field_map ret s_map =
 let error_entry_func ee es m_info c_info =
   let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
   let f_arg_list = mk_arg ~is_s:(is_s_method ee m_info) param es in
-  let import = get_package ee m_info c_info in
+  let import = get_package_from_m ee in
   let typ_list =
     if is_private_class import c_info then
       try IG.succ (c_info |> snd) import |> List.cons import
@@ -1522,14 +1488,13 @@ let error_entry_func ee es m_info c_info =
     else [ import ]
   in
   List.fold_left
-    (fun lst x ->
-      let typ = x |> Str.split Regexp.dot |> List.rev |> List.hd in
+    (fun lst typ ->
       if VarListSet.cardinal f_arg_list = 0 then
-        (AST.F { typ; method_name = ee; import = x; summary = es }, []) :: lst
+        (AST.F { typ; method_name = ee; import = typ; summary = es }, []) :: lst
       else
         VarListSet.fold
           (fun f_arg acc ->
-            (AST.F { typ; method_name = ee; import = x; summary = es }, f_arg)
+            (AST.F { typ; method_name = ee; import = typ; summary = es }, f_arg)
             :: acc)
           f_arg_list lst)
     [] typ_list
@@ -1540,16 +1505,11 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
   if AST.is_id id then error_entry_func ee es m_info c_info
   else
     let var = AST.get_v id in
-    let name =
-      if var.import = "" then AST.get_vinfo id |> fst |> Language.get_class_name
-      else
-        get_class_name ~infer:false var.import
-        |> String.split_on_char '.' |> List.rev |> List.hd
-    in
-    if name = "" || name = "String" then []
+    let class_name = AST.get_vinfo id |> fst |> Language.get_class_name in
+    if class_name = "" || class_name = "String" then []
     else
       let setter_list =
-        (try SetterMap.M.find name s_map with _ -> [])
+        (try SetterMap.M.find class_name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
                is_private s m_info |> not
                && (FieldSet.S.subset var.field fields
@@ -1564,7 +1524,7 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
           let f =
             AST.F
               {
-                typ = name;
+                typ = class_name;
                 method_name = s;
                 import = var.import;
                 summary = var.summary;
@@ -1575,13 +1535,10 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
             VarListSet.fold (fun f_arg acc -> (f, f_arg) :: acc) f_arg_list lst)
         [] setter_list
 
-let get_ret_obj (class_package, class_name) m_info (c_info, ig) s_map =
-  let full_class_name =
-    if class_package = "" then class_name else class_package
-  in
+let get_ret_obj class_name m_info (_, ig) s_map =
   let class_to_find =
-    try IG.succ ig full_class_name |> List.cons full_class_name
-    with Invalid_argument _ -> [ full_class_name ]
+    try IG.succ ig class_name |> List.cons class_name
+    with Invalid_argument _ -> [ class_name ]
   in
   MethodInfo.M.fold
     (fun method_name _ method_list ->
@@ -1592,9 +1549,7 @@ let get_ret_obj (class_package, class_name) m_info (c_info, ig) s_map =
             && is_private method_name m_info |> not
             && is_init_method method_name |> not
             && is_void_method method_name s_map |> not
-          then
-            (method_name, get_package method_name m_info (c_info, ig))
-            :: init_list
+          then method_name :: init_list
           else init_list)
         method_list class_to_find)
     m_info []
@@ -1664,31 +1619,23 @@ let modify_summary id t_summary a_summary =
 let satisfied_c_list id t_summary summary summary_list =
   if !Cmdline.basic_mode || !Cmdline.syn_priority then
     List.fold_left
-      (fun list (constructor, import) ->
-        (0, constructor, Language.empty_summary, import) :: list)
+      (fun list constructor -> (0, constructor, Language.empty_summary) :: list)
       [] summary_list
   else
     List.fold_left
-      (fun list (constructor, import) ->
+      (fun list constructor ->
         let check, summary = satisfied_c t_summary id constructor summary in
         if check then
           if is_array_init constructor then
-            (1, constructor, modify_summary id t_summary summary, import)
-            :: list
-          else (1, constructor, summary, import) :: list
-        else (0, constructor, summary, import) :: list)
+            (1, constructor, modify_summary id t_summary summary) :: list
+          else (1, constructor, summary) :: list
+        else (0, constructor, summary) :: list)
       [] summary_list
 
 let get_cfunc constructor m_info =
-  let cost, c, s, i = constructor in
-  let t =
-    if is_init_method c then
-      c
-      |> Str.replace_first (Str.regexp ".<init>") ""
-      |> Regexp.global_rm (Str.regexp "(.*)$")
-    else c |> Str.split Regexp.dot |> List.hd
-  in
-  let func = AST.F { typ = t; method_name = c; import = i; summary = s } in
+  let cost, c, s = constructor in
+  let t = get_package_from_m c in
+  let func = AST.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
     mk_arg ~is_s:(is_s_method c m_info)
       (MethodInfo.M.find c m_info).MethodInfo.formal_params s
@@ -1701,8 +1648,8 @@ let get_cfunc constructor m_info =
 
 let get_cfuncs list m_info =
   List.fold_left
-    (fun lst (cost, c, s, i) ->
-      List.rev_append (get_cfunc (cost, c, s, i) m_info) lst)
+    (fun lst (cost, c, s) ->
+      List.rev_append (get_cfunc (cost, c, s) m_info) lst)
     [] list
 
 let get_c ret summary _ m_info c_info =
@@ -1710,14 +1657,13 @@ let get_c ret summary _ m_info c_info =
   if class_name = "" then []
   else
     let id = AST.get_vinfo ret |> snd in
-    let package = (AST.get_v ret).import in
     let summary_filtering list =
-      List.filter (fun (_, c, _, _) -> is_public c m_info) list
-      |> List.filter (fun (_, c, _, _) ->
+      List.filter (fun (_, c, _) -> is_public c m_info) list
+      |> List.filter (fun (_, c, _) ->
              is_recursive_param class_name c m_info |> not)
     in
     let s_list =
-      get_clist (package, class_name) m_info c_info
+      get_clist class_name m_info c_info
       |> satisfied_c_list id (AST.get_v ret).summary summary
       |> summary_filtering
     in
@@ -1725,19 +1671,17 @@ let get_c ret summary _ m_info c_info =
 
 let get_ret_c ret summary m_info c_info s_map =
   let class_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
-  if class_name = "" || class_name = "String" then []
+  if class_name = "" then []
   else
     let id = AST.get_vinfo ret |> snd in
-    let package = (AST.get_v ret).import in
     let summary_filtering list =
-      List.filter (fun (_, c, _, _) -> is_public c m_info) list
-      |> List.filter (fun (_, c, _, _) ->
-             is_method_with_memory_effect c summary)
-      |> List.filter (fun (_, c, _, _) ->
+      List.filter (fun (_, c, _) -> is_public c m_info) list
+      |> List.filter (fun (_, c, _) -> is_method_with_memory_effect c summary)
+      |> List.filter (fun (_, c, _) ->
              is_recursive_param class_name c m_info |> not)
     in
     let s_list =
-      get_ret_obj (package, class_name) m_info c_info s_map
+      get_ret_obj class_name m_info c_info s_map
       |> satisfied_c_list id (AST.get_v ret).summary summary
       |> summary_filtering
     in
@@ -2218,6 +2162,11 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
   let init =
     if is_start then (
       pkg := pkg_name;
+      let e_method =
+        if String.contains e_method ':' then
+          e_method |> Str.split Regexp.colon |> List.hd
+        else e_method
+      in
       ErrorEntrySet.fold
         (fun (ee, ee_s) init_list ->
           apply_rule (get_void_func AST.Id ~ee ~es:ee_s m_info c_info s_map)

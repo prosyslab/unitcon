@@ -40,8 +40,7 @@ let parse_summary summary =
 
 let get_method_name assoc =
   let split_name name =
-    if String.contains name ' ' then
-      name |> String.split_on_char ' ' |> List.tl |> List.hd
+    if String.contains name ':' then name |> Str.split Regexp.colon |> List.hd
     else name
   in
   let method_name =
@@ -52,7 +51,8 @@ let get_method_name assoc =
 
 let get_return assoc =
   let split_return m =
-    if String.contains m ' ' then m |> String.split_on_char ' ' |> List.hd
+    if String.contains m ':' then
+      m |> Str.split Regexp.colon |> List.rev |> List.hd
     else ""
   in
   let return =
@@ -76,7 +76,7 @@ let is_unnes_method fparam =
     if Str.string_match ("\\$bcvar" |> Str.regexp) id 0 then true else false
   in
   let check_unnes p =
-    match p |> snd with
+    match p with
     | Language.This _ -> false
     | Var (typ, id) -> check_anony_class typ || check_lambda id
   in

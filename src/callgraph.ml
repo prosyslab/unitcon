@@ -34,8 +34,7 @@ end
 
 let get_caller_method_name assoc =
   let split_name name =
-    if String.contains name ' ' then
-      name |> String.split_on_char ' ' |> List.tl |> List.hd
+    if String.contains name ':' then name |> Str.split Regexp.colon |> List.hd
     else name
   in
   let method_name =
@@ -46,8 +45,7 @@ let get_caller_method_name assoc =
 
 let get_callee_method_name assoc =
   let split_name name =
-    if String.contains name ' ' then
-      name |> String.split_on_char ' ' |> List.tl |> List.hd
+    if String.contains name ':' then name |> Str.split Regexp.colon |> List.hd
     else name
   in
   let method_name =
@@ -59,9 +57,7 @@ let get_callee_method_name assoc =
   method_name
 
 let get_extra_callee_method_name minfo assoc =
-  let check param =
-    match param with _, Language.This _ -> true | _ -> false
-  in
+  let check param = match param with Language.This _ -> true | _ -> false in
   let rec check_this params =
     match params with
     | hd :: tl -> if check hd then true else check_this tl
