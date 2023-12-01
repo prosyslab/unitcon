@@ -1391,7 +1391,7 @@ let global_var_list class_name t_summary summary m_info e_info =
   in
   match t_var with
   | None ->
-      if class_name = "Class" then find_class_file
+      if class_name = "java.lang.Class" then find_class_file
       else
         let gvlist = find_global_var_list class_name None mem summary m_info in
         if gvlist = [] then find_enum_var_list class_name e_info else gvlist
@@ -2065,7 +2065,8 @@ let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
       else (prev_ee, ErrorEntrySet.empty)
     in
     let caller_list =
-      try CG.succ cg e_method |> List.filter (fun x -> x <> e_method)
+      try CG.succ cg e_method 
+      |> List.filter (fun x -> x <> e_method && x <> prev_ee)
       with Invalid_argument _ -> []
     in
     List.fold_left
