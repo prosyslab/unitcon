@@ -94,7 +94,7 @@ module Relation = struct
 end
 
 module Value = struct
-  type value =
+  type const =
     | Int of int
     | Long of int
     | Float of float
@@ -105,23 +105,25 @@ module Value = struct
     | PlusInf
     | MinusInf
     | Null
-    | None (* Determining whether to use the default value *)
+    | None (* Determining whether to use the default const *)
 
   type op =
-    | Eq of value
-    | Neq of value
-    | Le of value
-    | Lt of value
-    | Ge of value
-    | Gt of value
-    | Between of value * value
-    | Outside of value * value
+    | Eq of const
+    | Neq of const
+    | Le of const
+    | Lt of const
+    | Ge of const
+    | Gt of const
+    | Between of const * const
+    | Outside of const * const
 
   module M = Map.Make (struct
     type t = symbol [@@deriving compare]
   end)
 
-  type t = op M.t
+  type v = { from_error : bool; value : op }
+
+  type t = v M.t
 
   let is_le str = String.contains str '<' && String.contains str '='
 
@@ -377,7 +379,8 @@ module AST = struct
 
   let is_file f =
     let fname = (get_func f).method_name in
-    if Str.string_match ("java.io.File\\.<init>" |> Str.regexp) fname 0 then true
+    if Str.string_match ("java.io.File\\.<init>" |> Str.regexp) fname 0 then
+      true
     else false
 
   (* ************************************** *
@@ -587,7 +590,8 @@ module AST = struct
       Value.M.fold
         (fun symbol value find_value ->
           if symbol = s then value else find_value)
-        values (Value.Eq None)
+        values
+        { from_error = false; value = Value.Eq None }
     in
     match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
     | Some x ->
@@ -600,8 +604,11 @@ module AST = struct
                     find_value (get_tail_symbol "" v memory |> get_rh_name) ) )
             | _ -> ((idx, idx_value), (elem, elem_value)))
           x
-          (("", Value.Ge (Int 0)), ("", Value.Eq None))
-    | None -> (("", Value.Ge (Int 0)), ("", Value.Eq None))
+          ( ("", { from_error = false; value = Value.Ge (Int 0) }),
+            ("", { from_error = false; value = Value.Eq None }) )
+    | None ->
+        ( ("", { from_error = false; value = Value.Ge (Int 0) }),
+          ("", { from_error = false; value = Value.Eq None }) )
 
   let remove_array_index array idx summary =
     let _, memory = summary.precond in
@@ -685,11 +692,16 @@ module AST = struct
     let arr_id = x0 |> get_vinfo |> snd in
     let new_idx, new_elem = get_array_index arr_id (x0 |> get_v).summary in
     (* remove setter of duplicate index *)
-    if FieldSet.S.mem (new_idx |> snd |> get_index_value) (x0 |> get_v).field
+    if
+      FieldSet.S.mem
+        ((new_idx |> snd).value |> get_index_value)
+        (x0 |> get_v).field
     then []
     else
       let nfield =
-        FieldSet.S.add (new_idx |> snd |> get_index_value) (x0 |> get_v).field
+        FieldSet.S.add
+          ((new_idx |> snd).value |> get_index_value)
+          (x0 |> get_v).field
       in
       let new_next_summary =
         next_summary_in_void (x0 |> get_v).summary
