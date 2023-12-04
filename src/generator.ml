@@ -319,6 +319,12 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
   else vs_list
 
 let check_intersect ~is_init caller_prop callee_summary vs_list =
+  let vmap_maker symbol target_vmap from_error =
+    let value = Value.M.find symbol target_vmap in
+    Value.M.add symbol
+      Value.{ from_error; value = value.Value.value }
+      target_vmap
+  in
   let check_one caller_symbol callee_symbol =
     try
       let caller_value =
@@ -327,27 +333,30 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
       let callee_value =
         Value.M.find callee_symbol callee_summary.Language.value
       in
-      match (caller_value, callee_value) with
+      let return_caller check =
+        if check then
+          ( (caller_value.Value.from_error || callee_value.Value.from_error)
+            |> vmap_maker caller_symbol caller_prop.Language.value,
+            check )
+        else (caller_prop.Language.value, check)
+      in
+      match (caller_value.Value.value, callee_value.Value.value) with
       | Eq eq_v1, Eq eq_v2 ->
-          if eq_v1 = eq_v2 then (caller_prop.Language.value, true)
-          else (caller_prop.Language.value, false)
+          if eq_v1 = eq_v2 then return_caller true else return_caller false
       | Eq eq_v, Neq neq_v | Neq neq_v, Eq eq_v ->
-          if eq_v = neq_v then (caller_prop.Language.value, false)
-          else (caller_prop.Language.value, true)
+          if eq_v = neq_v then return_caller false else return_caller true
       | Eq eq_v, Le le_v | Le le_v, Eq eq_v -> (
           match (eq_v, le_v) with
           | Int eq_i, Int le_i
           | Long eq_i, Long le_i
           | Int eq_i, Long le_i
           | Long eq_i, Int le_i ->
-              if eq_i <= le_i then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_i <= le_i then return_caller true else return_caller false
           | Float eq_f, Float le_f
           | Double eq_f, Double le_f
           | Float eq_f, Double le_f
           | Double eq_f, Float le_f ->
-              if eq_f <= le_f then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_f <= le_f then return_caller true else return_caller false
           | _ -> (Language.Value.M.empty, false))
       | Eq eq_v, Lt lt_v | Lt lt_v, Eq eq_v -> (
           match (eq_v, lt_v) with
@@ -355,14 +364,12 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Long eq_i, Long lt_i
           | Int eq_i, Long lt_i
           | Long eq_i, Int lt_i ->
-              if eq_i < lt_i then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_i < lt_i then return_caller true else return_caller false
           | Float eq_f, Float lt_f
           | Double eq_f, Double lt_f
           | Float eq_f, Double lt_f
           | Double eq_f, Float lt_f ->
-              if eq_f < lt_f then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_f < lt_f then return_caller true else return_caller false
           | _ -> (Language.Value.M.empty, false))
       | Eq eq_v, Ge ge_v | Ge ge_v, Eq eq_v -> (
           match (eq_v, ge_v) with
@@ -370,14 +377,12 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Long eq_i, Long ge_i
           | Int eq_i, Long ge_i
           | Long eq_i, Int ge_i ->
-              if eq_i >= ge_i then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_i >= ge_i then return_caller true else return_caller false
           | Float eq_f, Float ge_f
           | Double eq_f, Double ge_f
           | Float eq_f, Double ge_f
           | Double eq_f, Float ge_f ->
-              if eq_f >= ge_f then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_f >= ge_f then return_caller true else return_caller false
           | _ -> (Language.Value.M.empty, false))
       | Eq eq_v, Gt gt_v | Gt gt_v, Eq eq_v -> (
           match (eq_v, gt_v) with
@@ -385,14 +390,12 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Long eq_i, Long gt_i
           | Int eq_i, Long gt_i
           | Long eq_i, Int gt_i ->
-              if eq_i > gt_i then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_i > gt_i then return_caller true else return_caller false
           | Float eq_f, Float gt_f
           | Double eq_f, Double gt_f
           | Float eq_f, Double gt_f
           | Double eq_f, Float gt_f ->
-              if eq_f > gt_f then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_f > gt_f then return_caller true else return_caller false
           | _ -> (Language.Value.M.empty, false))
       | Eq eq_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Eq eq_v -> (
@@ -405,9 +408,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Long eq_i, Int btw_min_i, Long btw_max_i
           | Long eq_i, Long btw_min_i, Int btw_max_i
           | Long eq_i, Long btw_min_i, Long btw_max_i ->
-              if eq_i >= btw_min_i && eq_i <= btw_max_i then
-                (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_i >= btw_min_i && eq_i <= btw_max_i then return_caller true
+              else return_caller false
           | Float eq_f, Float btw_min_f, Float btw_max_f
           | Float eq_f, Float btw_min_f, Double btw_max_f
           | Float eq_f, Double btw_min_f, Float btw_max_f
@@ -416,9 +418,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double eq_f, Float btw_min_f, Double btw_max_f
           | Double eq_f, Double btw_min_f, Float btw_max_f
           | Double eq_f, Double btw_min_f, Double btw_max_f ->
-              if eq_f >= btw_min_f && eq_f <= btw_max_f then
-                (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_f >= btw_min_f && eq_f <= btw_max_f then return_caller true
+              else return_caller false
           | _ -> (Language.Value.M.empty, false))
       | Eq eq_v, Outside (out_min, out_max)
       | Outside (out_min, out_max), Eq eq_v -> (
@@ -431,9 +432,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Long eq_i, Int o_min_i, Long o_max_i
           | Long eq_i, Long o_min_i, Int o_max_i
           | Long eq_i, Long o_min_i, Long o_max_i ->
-              if eq_i < o_min_i && eq_i > o_max_i then
-                (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_i < o_min_i && eq_i > o_max_i then return_caller true
+              else return_caller false
           | Float eq_f, Float o_min_f, Float o_max_f
           | Float eq_f, Float o_min_f, Double o_max_f
           | Float eq_f, Double o_min_f, Float o_max_f
@@ -442,9 +442,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double eq_f, Float o_min_f, Double o_max_f
           | Double eq_f, Double o_min_f, Float o_max_f
           | Double eq_f, Double o_min_f, Double o_max_f ->
-              if eq_f < o_min_f && eq_f > o_max_f then
-                (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if eq_f < o_min_f && eq_f > o_max_f then return_caller true
+              else return_caller false
           | _ -> (Language.Value.M.empty, false))
       | Le le_v, Ge ge_v | Ge ge_v, Le le_v -> (
           match (le_v, ge_v) with
@@ -452,14 +451,12 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Long le_i, Long ge_i
           | Int le_i, Long ge_i
           | Long le_i, Int ge_i ->
-              if le_i >= ge_i then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if le_i >= ge_i then return_caller true else return_caller false
           | Float le_f, Float ge_f
           | Double le_f, Double ge_f
           | Float le_f, Double ge_f
           | Double le_f, Float ge_f ->
-              if le_f >= ge_f then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if le_f >= ge_f then return_caller true else return_caller false
           | _ -> (Language.Value.M.empty, false))
       | Le l_v, Gt g_v
       | Lt l_v, Ge g_v
@@ -472,14 +469,12 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Long l_i, Long g_i
           | Int l_i, Long g_i
           | Long l_i, Int g_i ->
-              if l_i > g_i then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if l_i > g_i then return_caller true else return_caller false
           | Float l_f, Float g_f
           | Double l_f, Double g_f
           | Float l_f, Double g_f
           | Double l_f, Float g_f ->
-              if l_f > g_f then (caller_prop.Language.value, true)
-              else (caller_prop.Language.value, false)
+              if l_f > g_f then return_caller true else return_caller false
           | _ -> (Language.Value.M.empty, false))
       | Le le_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Le le_v -> (
@@ -492,8 +487,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Int le_i, Long btw_min_i, Long _
           | Long le_i, Int btw_min_i, Int _
           | Long le_i, Int btw_min_i, Long _ ->
-              if le_i < btw_min_i then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if le_i < btw_min_i then return_caller false
+              else return_caller true
           | Float le_f, Float btw_min_f, Float _
           | Float le_f, Float btw_min_f, Double _
           | Double le_f, Double btw_min_f, Float _
@@ -502,8 +497,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Float le_f, Double btw_min_f, Double _
           | Double le_f, Float btw_min_f, Float _
           | Double le_f, Float btw_min_f, Double _ ->
-              if le_f < btw_min_f then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if le_f < btw_min_f then return_caller false
+              else return_caller true
           | _ -> (Language.Value.M.empty, false))
       | Lt lt_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Lt lt_v -> (
@@ -516,8 +511,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Int lt_i, Long btw_min_i, Long _
           | Long lt_i, Int btw_min_i, Int _
           | Long lt_i, Int btw_min_i, Long _ ->
-              if lt_i <= btw_min_i then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if lt_i <= btw_min_i then return_caller false
+              else return_caller true
           | Float lt_f, Float btw_min_f, Float _
           | Float lt_f, Float btw_min_f, Double _
           | Double lt_f, Double btw_min_f, Float _
@@ -526,8 +521,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Float lt_f, Double btw_min_f, Double _
           | Double lt_f, Float btw_min_f, Float _
           | Double lt_f, Float btw_min_f, Double _ ->
-              if lt_f <= btw_min_f then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if lt_f <= btw_min_f then return_caller false
+              else return_caller true
           | _ -> (Language.Value.M.empty, false))
       | Ge ge_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Ge ge_v -> (
@@ -540,8 +535,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Int ge_i, Long _, Long btw_max_i
           | Long ge_i, Int _, Int btw_max_i
           | Long ge_i, Long _, Int btw_max_i ->
-              if ge_i > btw_max_i then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if ge_i > btw_max_i then return_caller false
+              else return_caller true
           | Float ge_f, Float _, Float btw_max_f
           | Float ge_f, Double _, Float btw_max_f
           | Double ge_f, Float _, Double btw_max_f
@@ -550,8 +545,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Float ge_f, Double _, Double btw_max_f
           | Double ge_f, Float _, Float btw_max_f
           | Double ge_f, Double _, Float btw_max_f ->
-              if ge_f > btw_max_f then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if ge_f > btw_max_f then return_caller false
+              else return_caller true
           | _ -> (Language.Value.M.empty, false))
       | Gt gt_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Gt gt_v -> (
@@ -564,8 +559,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Int gt_i, Long _, Long btw_max_i
           | Long gt_i, Int _, Int btw_max_i
           | Long gt_i, Long _, Int btw_max_i ->
-              if gt_i >= btw_max_i then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if gt_i >= btw_max_i then return_caller false
+              else return_caller true
           | Float gt_f, Float _, Float btw_max_f
           | Float gt_f, Double _, Float btw_max_f
           | Double gt_f, Float _, Double btw_max_f
@@ -574,8 +569,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Float gt_f, Double _, Double btw_max_f
           | Double gt_f, Float _, Float btw_max_f
           | Double gt_f, Double _, Float btw_max_f ->
-              if gt_f >= btw_max_f then (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if gt_f >= btw_max_f then return_caller false
+              else return_caller true
           | _ -> (Language.Value.M.empty, false))
       | Between (caller_min, caller_max), Between (callee_min, callee_max) -> (
           match (caller_min, caller_max, callee_min, callee_max) with
@@ -595,9 +590,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Long r_min_i, Long r_max_i, Int e_min_i, Long e_max_i
           | Long r_min_i, Long r_max_i, Long e_min_i, Int e_max_i
           | Long r_min_i, Long r_max_i, Long e_min_i, Long e_max_i ->
-              if r_max_i < e_min_i || e_max_i < r_min_i then
-                (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if r_max_i < e_min_i || e_max_i < r_min_i then return_caller false
+              else return_caller true
           | Float r_min_f, Float r_max_f, Float e_min_f, Float e_max_f
           | Float r_min_f, Float r_max_f, Float e_min_f, Double e_max_f
           | Float r_min_f, Float r_max_f, Double e_min_f, Float e_max_f
@@ -614,9 +608,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double r_min_f, Double r_max_f, Float e_min_f, Double e_max_f
           | Double r_min_f, Double r_max_f, Double e_min_f, Float e_max_f
           | Double r_min_f, Double r_max_f, Double e_min_f, Double e_max_f ->
-              if r_max_f < e_min_f || e_max_f < r_min_f then
-                (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+              if r_max_f < e_min_f || e_max_f < r_min_f then return_caller false
+              else return_caller true
           | _ -> (Language.Value.M.empty, false))
       | Between (btw_min, btw_max), Outside (out_min, out_max)
       | Outside (out_min, out_max), Between (btw_min, btw_max) -> (
@@ -638,8 +631,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Long btw_min_i, Long btw_max_i, Long o_min_i, Int o_max_i
           | Long btw_min_i, Long btw_max_i, Long o_min_i, Long o_max_i ->
               if o_min_i <= btw_min_i && o_max_i >= btw_max_i then
-                (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+                return_caller false
+              else return_caller true
           | Float btw_min_f, Float btw_max_f, Float o_min_f, Float o_max_f
           | Float btw_min_f, Float btw_max_f, Float o_min_f, Double o_max_f
           | Float btw_min_f, Float btw_max_f, Double o_min_f, Float o_max_f
@@ -658,8 +651,8 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double btw_min_f, Double btw_max_f, Double o_min_f, Double o_max_f
             ->
               if btw_min_f <= o_min_f && btw_max_f >= o_max_f then
-                (caller_prop.Language.value, false)
-              else (caller_prop.Language.value, true)
+                return_caller false
+              else return_caller true
           | _ -> (Language.Value.M.empty, false))
       | _, Outside _
       | Outside _, _
@@ -673,7 +666,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
       | Ge _, Gt _
       | Neq _, _
       | _, Neq _ ->
-          (caller_prop.Language.value, true)
+          return_caller true
     with Not_found -> (
       try
         let callee_value =
@@ -972,13 +965,16 @@ let default_value_list typ =
   in
   default_value
 
-let not_found_value = function Value.Eq None -> true | _ -> false
+let not_found_value v =
+  match v.Value.value with Value.Eq None -> true | _ -> false
 
 let calc_value_list typ org_list =
   List.fold_left (fun lst x -> (0, x) :: lst) org_list (default_value_list typ)
 
-let calc_value id = function
-  | Value.Eq v -> (
+let calc_value id value =
+  let prec = if value.Value.from_error then 1 else 0 in
+  match value.Value.value with
+  | Eq v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
@@ -987,7 +983,7 @@ let calc_value id = function
             |> Z3.Boolean.mk_eq z3ctx var
           in
           calc_value_list Int
-            [ (1, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
+            [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let exp =
@@ -995,11 +991,13 @@ let calc_value id = function
             |> Z3.Boolean.mk_eq z3ctx var
           in
           calc_value_list Float
-            [ (1, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
-      | Bool b -> calc_value_list Bool [ (1, AST.Primitive (B b)) ]
-      | Char c -> calc_value_list Char [ (1, AST.Primitive (C c)) ]
-      | String s -> calc_value_list String [ (1, AST.Primitive (S s)) ]
-      | Null -> [ (1, AST.Null) ]
+            [
+              (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
+            ]
+      | Bool b -> calc_value_list Bool [ (prec, AST.Primitive (B b)) ]
+      | Char c -> calc_value_list Char [ (prec, AST.Primitive (C c)) ]
+      | String s -> calc_value_list String [ (prec, AST.Primitive (S s)) ]
+      | Null -> [ (prec, AST.Null) ]
       | _ -> failwith "not implemented eq")
   | Value.Neq v -> (
       match v with
@@ -1010,7 +1008,7 @@ let calc_value id = function
             |> Z3.Boolean.mk_eq z3ctx var |> Z3.Boolean.mk_not z3ctx
           in
           calc_value_list Int
-            [ (1, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
+            [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let exp =
@@ -1018,14 +1016,17 @@ let calc_value id = function
             |> Z3.Boolean.mk_eq z3ctx var |> Z3.Boolean.mk_not z3ctx
           in
           calc_value_list Float
-            [ (1, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
-      | Bool b -> calc_value_list Bool [ (1, AST.Primitive (B (b |> not))) ]
+            [
+              (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
+            ]
+      | Bool b -> calc_value_list Bool [ (prec, AST.Primitive (B (b |> not))) ]
       | String s ->
-          calc_value_list String [ (1, AST.Primitive (S ("not_" ^ s))) ]
+          calc_value_list String [ (prec, AST.Primitive (S ("not_" ^ s))) ]
       | Null ->
           (* Among the const, only the string can be defined as null *)
           List.fold_left
-            (fun lst x -> if x = AST.Null then (0, x) :: lst else (1, x) :: lst)
+            (fun lst x ->
+              if x = AST.Null then (0, x) :: lst else (prec, x) :: lst)
             []
             (default_value_list String)
       | _ -> failwith "not implemented neq")
@@ -1038,7 +1039,7 @@ let calc_value id = function
             |> Z3.Arithmetic.mk_le z3ctx var
           in
           calc_value_list Int
-            [ (1, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
+            [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let exp =
@@ -1046,7 +1047,9 @@ let calc_value id = function
             |> Z3.Arithmetic.mk_le z3ctx var
           in
           calc_value_list Float
-            [ (1, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
+            [
+              (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
+            ]
       | _ -> failwith "not implemented le")
   | Value.Lt v -> (
       match v with
@@ -1057,7 +1060,7 @@ let calc_value id = function
             |> Z3.Arithmetic.mk_lt z3ctx var
           in
           calc_value_list Int
-            [ (1, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
+            [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let exp =
@@ -1065,7 +1068,9 @@ let calc_value id = function
             |> Z3.Arithmetic.mk_lt z3ctx var
           in
           calc_value_list Float
-            [ (1, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
+            [
+              (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
+            ]
       | _ -> failwith "not implemented lt")
   | Value.Ge v -> (
       match v with
@@ -1076,7 +1081,7 @@ let calc_value id = function
             |> Z3.Arithmetic.mk_ge z3ctx var
           in
           calc_value_list Int
-            [ (1, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
+            [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let exp =
@@ -1084,7 +1089,9 @@ let calc_value id = function
             |> Z3.Arithmetic.mk_ge z3ctx var
           in
           calc_value_list Float
-            [ (1, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
+            [
+              (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
+            ]
       | _ -> failwith "not implemented ge")
   | Value.Gt v -> (
       match v with
@@ -1095,7 +1102,7 @@ let calc_value id = function
             |> Z3.Arithmetic.mk_gt z3ctx var
           in
           calc_value_list Int
-            [ (1, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
+            [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let exp =
@@ -1117,7 +1124,7 @@ let calc_value id = function
             ]
           in
           calc_value_list Int
-            [ (1, AST.Primitive (Z (calc_z3 var exp |> int_of_string))) ]
+            [ (prec, AST.Primitive (Z (calc_z3 var exp |> int_of_string))) ]
       | Float f1, Float f2
       | Double f1, Double f2
       | Float f1, Double f2
@@ -1132,7 +1139,7 @@ let calc_value id = function
             ]
           in
           calc_value_list Float
-            [ (1, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
+            [ (prec, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
       | _ -> failwith "not implemented between")
   | Value.Outside (v1, v2) -> (
       match (v1, v2) with
@@ -1147,7 +1154,7 @@ let calc_value id = function
             ]
           in
           calc_value_list Int
-            [ (1, AST.Primitive (Z (calc_z3 var exp |> int_of_string))) ]
+            [ (prec, AST.Primitive (Z (calc_z3 var exp |> int_of_string))) ]
       | Float f1, Float f2
       | Double f1, Double f2
       | Float f1, Double f2
@@ -1162,7 +1169,7 @@ let calc_value id = function
             ]
           in
           calc_value_list Float
-            [ (1, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
+            [ (prec, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
       | _ -> failwith "not implemented outside")
 
 let find_target_value id summary =
@@ -1194,7 +1201,8 @@ let find_target_value id summary =
   Value.M.fold
     (fun symbol value find_value ->
       if symbol = target_variable then value else find_value)
-    values (Value.Eq None)
+    values
+    Value.{ from_error = false; value = Value.Eq None }
 
 let get_value typ id summary =
   let find_value = find_target_value id summary in
@@ -1561,7 +1569,11 @@ let modify_summary id t_summary a_summary =
   let new_value =
     Value.M.add
       (AST.org_symbol "size" a_summary)
-      (Value.Ge (Int (get_array_size id t_summary)))
+      Value.
+        {
+          from_error = false;
+          value = Value.Ge (Int (get_array_size id t_summary));
+        }
       a_summary.Language.value
   in
   let new_mem_summary old_summary memory =
@@ -2065,8 +2077,9 @@ let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
       else (prev_ee, ErrorEntrySet.empty)
     in
     let caller_list =
-      try CG.succ cg e_method 
-      |> List.filter (fun x -> x <> e_method && x <> prev_ee)
+      try
+        CG.succ cg e_method
+        |> List.filter (fun x -> x <> e_method && x <> prev_ee)
       with Invalid_argument _ -> []
     in
     List.fold_left

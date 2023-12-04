@@ -11,7 +11,7 @@ let parse_summary summary =
     JsonUtil.member "BoItv" summary |> JsonUtil.to_string |> Parser.parse_boitv
   in
   let value =
-    JsonUtil.member "CItv" summary |> JsonUtil.to_string |> Parser.parse_citv
+    JsonUtil.member "CItv" summary |> JsonUtil.to_string |> Parser.parse_citv true
   in
   let pre_var =
     JsonUtil.member "Precond_Stack" summary

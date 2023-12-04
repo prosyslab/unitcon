@@ -77,7 +77,8 @@ let parse_boitv boitv =
           mmap value_list)
       Relation.M.empty relation_list
 
-let parse_citv citv =
+let parse_citv is_error citv =
+  let value_maker value = Value.{ from_error = is_error; value } in
   let value_list = Regexp.remove_bk citv |> Str.split Regexp.bm in
   if value_list = [] then Value.M.empty
   else
@@ -89,37 +90,41 @@ let parse_citv citv =
         if Value.is_eq tail then
           let value = Regexp.first_rm Regexp.eq tail in
           match int_of_string_opt value with
-          | Some v -> Value.M.add head (Value.Eq (Int v)) mmap
+          | Some v -> Value.M.add head (Value.Eq (Int v) |> value_maker) mmap
           | None ->
-              if value = "null" then Value.M.add head (Value.Eq Null) mmap
-              else Value.M.add head (Value.Eq (String value)) mmap
+              if value = "null" then
+                Value.M.add head (Value.Eq Null |> value_maker) mmap
+              else
+                Value.M.add head (Value.Eq (String value) |> value_maker) mmap
         else if Value.is_neq tail then
           let value = Regexp.first_rm Regexp.neq tail in
           match int_of_string_opt value with
-          | Some v -> Value.M.add head (Value.Neq (Int v)) mmap
+          | Some v -> Value.M.add head (Value.Neq (Int v) |> value_maker) mmap
           | None ->
-              if value = "null" then Value.M.add head (Value.Neq Null) mmap
-              else Value.M.add head (Value.Neq (String value)) mmap
+              if value = "null" then
+                Value.M.add head (Value.Neq Null |> value_maker) mmap
+              else
+                Value.M.add head (Value.Neq (String value) |> value_maker) mmap
         else if Value.is_ge tail then
           let value = Regexp.first_rm Regexp.ge tail in
           match int_of_string_opt value with
-          | Some v -> Value.M.add head (Value.Ge (Int v)) mmap
-          | None -> Value.M.add head (Value.Ge MinusInf) mmap
+          | Some v -> Value.M.add head (Value.Ge (Int v) |> value_maker) mmap
+          | None -> Value.M.add head (Value.Ge MinusInf |> value_maker) mmap
         else if Value.is_gt tail then
           let value = Regexp.first_rm Regexp.gt tail in
           match int_of_string_opt value with
-          | Some v -> Value.M.add head (Value.Gt (Int v)) mmap
-          | None -> Value.M.add head (Value.Gt MinusInf) mmap
+          | Some v -> Value.M.add head (Value.Gt (Int v) |> value_maker) mmap
+          | None -> Value.M.add head (Value.Gt MinusInf |> value_maker) mmap
         else if Value.is_le tail then
           let value = Regexp.first_rm Regexp.le tail in
           match int_of_string_opt value with
-          | Some v -> Value.M.add head (Value.Le (Int v)) mmap
-          | None -> Value.M.add head (Value.Le PlusInf) mmap
+          | Some v -> Value.M.add head (Value.Le (Int v) |> value_maker) mmap
+          | None -> Value.M.add head (Value.Le PlusInf |> value_maker) mmap
         else if Value.is_lt tail then
           let value = Regexp.first_rm Regexp.lt tail in
           match int_of_string_opt value with
-          | Some v -> Value.M.add head (Value.Lt (Int v)) mmap
-          | None -> Value.M.add head (Value.Lt PlusInf) mmap
+          | Some v -> Value.M.add head (Value.Lt (Int v) |> value_maker) mmap
+          | None -> Value.M.add head (Value.Lt PlusInf |> value_maker) mmap
         else if Value.is_between tail then
           let values =
             Regexp.first_rm Regexp.in_n tail
@@ -128,7 +133,9 @@ let parse_citv citv =
             |> String.split_on_char ' '
           in
           if List.length values = 1 then
-            Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap
+            Value.M.add head
+              (Value.Between (MinusInf, PlusInf) |> value_maker)
+              mmap
           else
             let min_value = List.hd values in
             let max_value = List.tl values |> List.hd in
@@ -136,26 +143,42 @@ let parse_citv citv =
             | Some v1 -> (
                 match int_of_string_opt max_value with
                 | Some v2 ->
-                    Value.M.add head (Value.Between (Int v1, Int v2)) mmap
+                    Value.M.add head
+                      (Value.Between (Int v1, Int v2) |> value_maker)
+                      mmap
                 | None ->
                     if max_value = "null" then
-                      Value.M.add head (Value.Between (Int v1, Int 0)) mmap
-                    else Value.M.add head (Value.Between (Int v1, PlusInf)) mmap
-                )
+                      Value.M.add head
+                        (Value.Between (Int v1, Int 0) |> value_maker)
+                        mmap
+                    else
+                      Value.M.add head
+                        (Value.Between (Int v1, PlusInf) |> value_maker)
+                        mmap)
             | None -> (
                 match int_of_string_opt max_value with
                 | Some v2 ->
                     if min_value = "null" then
-                      Value.M.add head (Value.Between (Int 0, Int v2)) mmap
+                      Value.M.add head
+                        (Value.Between (Int 0, Int v2) |> value_maker)
+                        mmap
                     else
-                      Value.M.add head (Value.Between (MinusInf, Int v2)) mmap
+                      Value.M.add head
+                        (Value.Between (MinusInf, Int v2) |> value_maker)
+                        mmap
                 | None ->
                     if min_value = "null" then
-                      Value.M.add head (Value.Between (Int 0, PlusInf)) mmap
+                      Value.M.add head
+                        (Value.Between (Int 0, PlusInf) |> value_maker)
+                        mmap
                     else if max_value = "null" then
-                      Value.M.add head (Value.Between (MinusInf, Int 0)) mmap
+                      Value.M.add head
+                        (Value.Between (MinusInf, Int 0) |> value_maker)
+                        mmap
                     else
-                      Value.M.add head (Value.Between (MinusInf, PlusInf)) mmap)
+                      Value.M.add head
+                        (Value.Between (MinusInf, PlusInf) |> value_maker)
+                        mmap)
         else if Value.is_outside tail then
           let values =
             Regexp.first_rm Regexp.ots tail
@@ -168,24 +191,42 @@ let parse_citv citv =
           | Some v1 -> (
               match int_of_string_opt max_value with
               | Some v2 ->
-                  Value.M.add head (Value.Outside (Int v1, Int v2)) mmap
+                  Value.M.add head
+                    (Value.Outside (Int v1, Int v2) |> value_maker)
+                    mmap
               | None ->
                   if max_value = "null" then
-                    Value.M.add head (Value.Outside (Int v1, Int 0)) mmap
-                  else Value.M.add head (Value.Outside (Int v1, PlusInf)) mmap)
+                    Value.M.add head
+                      (Value.Outside (Int v1, Int 0) |> value_maker)
+                      mmap
+                  else
+                    Value.M.add head
+                      (Value.Outside (Int v1, PlusInf) |> value_maker)
+                      mmap)
           | None -> (
               match int_of_string_opt max_value with
               | Some v2 ->
                   if min_value = "null" then
-                    Value.M.add head (Value.Outside (Int 0, Int v2)) mmap
-                  else Value.M.add head (Value.Outside (MinusInf, Int v2)) mmap
+                    Value.M.add head
+                      (Value.Outside (Int 0, Int v2) |> value_maker)
+                      mmap
+                  else
+                    Value.M.add head
+                      (Value.Outside (MinusInf, Int v2) |> value_maker)
+                      mmap
               | None ->
                   if min_value = "null" then
-                    Value.M.add head (Value.Outside (Int 0, PlusInf)) mmap
+                    Value.M.add head
+                      (Value.Outside (Int 0, PlusInf) |> value_maker)
+                      mmap
                   else if max_value = "null" then
-                    Value.M.add head (Value.Outside (MinusInf, Int 0)) mmap
-                  else Value.M.add head (Value.Outside (MinusInf, PlusInf)) mmap
-              )
+                    Value.M.add head
+                      (Value.Outside (MinusInf, Int 0) |> value_maker)
+                      mmap
+                  else
+                    Value.M.add head
+                      (Value.Outside (MinusInf, PlusInf) |> value_maker)
+                      mmap)
         else failwith "parse_citv error")
       Value.M.empty value_list
 

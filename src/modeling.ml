@@ -297,7 +297,9 @@ let array_var =
   |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "size")
   |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
-let array_value = Value.M.empty |> Value.M.add "v4" (Value.Ge (Int 1))
+let array_value =
+  Value.M.empty
+  |> Value.M.add "v4" Value.{ from_error = false; value = Value.Ge (Int 1) }
 
 let array_premem =
   let value_map = Condition.M.empty in
@@ -329,7 +331,9 @@ let array_set_var =
   |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "index")
   |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
-let array_set_value = Value.M.empty |> Value.M.add "v5" (Value.Ge (Int 0))
+let array_set_value =
+  Value.M.empty
+  |> Value.M.add "v5" Value.{ from_error = false; value = Value.Ge (Int 0) }
 
 let array_set_premem =
   let value_map = Condition.M.empty in

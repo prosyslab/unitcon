@@ -11,7 +11,7 @@ let parse_callprop callprop =
     JsonUtil.member "BoItv" callprop |> JsonUtil.to_string |> Parser.parse_boitv
   in
   let value =
-    JsonUtil.member "CItv" callprop |> JsonUtil.to_string |> Parser.parse_citv
+    JsonUtil.member "CItv" callprop |> JsonUtil.to_string |> Parser.parse_citv false
   in
   let pre_var =
     JsonUtil.member "Precond_Stack" callprop
