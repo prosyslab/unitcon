@@ -43,8 +43,8 @@ let parse_callprop callprop =
 
 let get_method_names assoc =
   let split_name name =
-    if String.contains name ' ' then
-      name |> String.split_on_char ' ' |> List.tl |> List.hd
+    if String.contains name ':' then
+      name |> Str.split Regexp.colon |> List.hd
     else name
   in
   let caller_name =

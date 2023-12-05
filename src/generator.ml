@@ -973,6 +973,15 @@ let calc_value_list typ org_list =
 
 let calc_value id value =
   let prec = if value.Value.from_error then 1 else 0 in
+  Value.print value.Value.value;
+  let filter_size lst =
+    if id = "size" || id = "index" then
+      List.filter
+        (fun x ->
+          match x |> snd with AST.Primitive (Z x) -> x >= 0 | _ -> false)
+        lst
+    else lst
+  in
   match value.Value.value with
   | Eq v -> (
       match v with
@@ -984,6 +993,7 @@ let calc_value id value =
           in
           calc_value_list Int
             [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
+          |> filter_size
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let exp =
@@ -999,7 +1009,7 @@ let calc_value id value =
       | String s -> calc_value_list String [ (prec, AST.Primitive (S s)) ]
       | Null -> [ (prec, AST.Null) ]
       | _ -> failwith "not implemented eq")
-  | Value.Neq v -> (
+  | Neq v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
@@ -1030,7 +1040,7 @@ let calc_value id value =
             []
             (default_value_list String)
       | _ -> failwith "not implemented neq")
-  | Value.Le v -> (
+  | Le v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
@@ -1051,7 +1061,7 @@ let calc_value id value =
               (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
             ]
       | _ -> failwith "not implemented le")
-  | Value.Lt v -> (
+  | Lt v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
@@ -1072,7 +1082,7 @@ let calc_value id value =
               (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
             ]
       | _ -> failwith "not implemented lt")
-  | Value.Ge v -> (
+  | Ge v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
@@ -1082,6 +1092,7 @@ let calc_value id value =
           in
           calc_value_list Int
             [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
+          |> filter_size
       | Float f | Double f ->
           let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
           let exp =
@@ -1093,7 +1104,7 @@ let calc_value id value =
               (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
             ]
       | _ -> failwith "not implemented ge")
-  | Value.Gt v -> (
+  | Gt v -> (
       match v with
       | Int i | Long i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
@@ -1109,9 +1120,12 @@ let calc_value id value =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
             |> Z3.Arithmetic.mk_gt z3ctx var
           in
-          [ (1, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string))) ]
+          calc_value_list Float
+            [
+              (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
+            ]
       | _ -> failwith "not implemented gt")
-  | Value.Between (v1, v2) -> (
+  | Between (v1, v2) -> (
       match (v1, v2) with
       | Int i1, Int i2 | Long i1, Long i2 | Int i1, Long i2 | Long i1, Int i2 ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
@@ -1141,7 +1155,7 @@ let calc_value id value =
           calc_value_list Float
             [ (prec, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
       | _ -> failwith "not implemented between")
-  | Value.Outside (v1, v2) -> (
+  | Outside (v1, v2) -> (
       match (v1, v2) with
       | Int i1, Int i2 | Long i1, Long i2 | Int i1, Long i2 | Long i1, Int i2 ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
@@ -1214,8 +1228,8 @@ let get_array_size array summary =
   let _, memory = summary.Language.precond in
   let array_symbol = AST.org_symbol array summary in
   match Condition.M.find_opt (array_symbol |> mk_symbol) memory with
-  | Some x -> Condition.M.fold (fun _ _ size -> size + 1) x 0
-  | None -> 1
+  | Some x -> (true, Condition.M.fold (fun _ _ size -> size + 1) x 0)
+  | None -> (false, 1)
 
 let get_same_type_param params =
   let get_type p = match p with Language.Var (t, _) -> t | _ -> None in
@@ -1245,16 +1259,18 @@ let get_same_precond_param summary param_sets =
         | _ -> failwith "Fail: find the target value"
       in
       let new_set =
-        VarSet.fold
-          (fun p new_set ->
-            let v = get_p_value p summary in
-            VarSet.fold
-              (fun op_p new_set ->
-                if v = get_p_value op_p summary then VarSet.add op_p new_set
-                else new_set)
-              set (VarSet.add p new_set))
-          set VarSet.empty
-        |> filter_singleton
+        let x =
+          VarSet.fold
+            (fun p new_set ->
+              let v = get_p_value p summary in
+              VarSet.fold
+                (fun op_p new_set ->
+                  if v = get_p_value op_p summary then VarSet.add op_p new_set
+                  else new_set)
+                set (VarSet.add p new_set))
+            set VarSet.empty
+        in
+        x |> filter_singleton
       in
       VarSets.add new_set sets)
     param_sets VarSets.empty
@@ -1566,14 +1582,11 @@ let get_ret_obj class_name m_info (_, ig) s_map =
     m_info []
 
 let modify_summary id t_summary a_summary =
+  let from_error, value = get_array_size id t_summary in
   let new_value =
     Value.M.add
       (AST.org_symbol "size" a_summary)
-      Value.
-        {
-          from_error = false;
-          value = Value.Ge (Int (get_array_size id t_summary));
-        }
+      Value.{ from_error; value = Value.Ge (Int value) }
       a_summary.Language.value
   in
   let new_mem_summary old_summary memory =
@@ -2144,7 +2157,7 @@ let priority_q queue =
       let nt2, t2, prec2 = get_cost p2 in
       if compare (nt1 + t1 - prec1) (nt2 + t2 - prec2) <> 0 then
         compare (nt1 + t1 - prec1) (nt2 + t2 - prec2)
-      else if compare prec1 prec2 <> 0 then compare prec1 prec2
+      else if compare prec1 prec2 <> 0 then compare prec2 prec1
       else compare nt1 nt2)
     queue
 

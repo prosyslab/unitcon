@@ -42,6 +42,10 @@ let remain_symbol = Str.regexp "[&{}]"
 
 let remain_symbol2 = Str.regexp "}*[ \t\r\n]+}$"
 
+let o_bks = Str.regexp "\\[{"
+
+let c_bks = Str.regexp "}\\]"
+
 let o_bk = Str.regexp "{"
 
 let c_bk = Str.regexp "}"

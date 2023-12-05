@@ -25,7 +25,7 @@ let parse_param param =
     | "double" -> Language.Double
     | "_Bool" | "boolean" -> Language.Bool
     | "unsigned short" | "signed char" | "unsigned char" -> Language.Char
-    | "java.lang.String*" -> Language.String
+    | "java.lang.String*" | "java.lang.String" -> Language.String
     | "" -> Language.None
     | _ when Str.string_match Regexp.array t 0 ->
         let typ = t |> Regexp.first_rm Regexp.rm_array |> get_type in
@@ -257,8 +257,8 @@ let parse_mem mem =
     let mem =
       mem
       |> Regexp.global_rm Regexp.remain_symbol2
-      |> Regexp.global_rm Regexp.open_bk
-      |> Regexp.global_rm Regexp.end_bk
+      |> Regexp.first_rm Regexp.o_bks
+      |> Regexp.first_rm Regexp.c_bks
       |> Regexp.global_rm Regexp.o_bk
       |> Regexp.rm_space |> Str.split Regexp.c_bk
     in
