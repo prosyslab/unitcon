@@ -973,7 +973,6 @@ let calc_value_list typ org_list =
 
 let calc_value id value =
   let prec = if value.Value.from_error then 1 else 0 in
-  Value.print value.Value.value;
   let filter_size lst =
     if id = "size" || id = "index" then
       List.filter
