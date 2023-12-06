@@ -367,15 +367,35 @@ module AST = struct
 
   and count_texp = function Exp -> 0 | _ -> 1
 
-  let is_array f =
+  let is_array_init f =
     let fname = (get_func f).method_name in
-    if Str.string_match (".*Array\\.<init>" |> Str.regexp) fname 0 then true
-    else false
+    let arr =
+      [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
+    in
+    let rec check arr =
+      match arr with
+      | h :: t ->
+          if Str.string_match (h ^ "Array\\.<init>" |> Str.regexp) fname 0 then
+            true
+          else check t
+      | [] -> false
+    in
+    check arr
 
   let is_array_set f =
     let fname = (get_func f).method_name in
-    if Str.string_match (".*Array\\.set" |> Str.regexp) fname 0 then true
-    else false
+    let arr =
+      [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
+    in
+    let rec check arr =
+      match arr with
+      | h :: t ->
+          if Str.string_match (h ^ "Array\\.set" |> Str.regexp) fname 0 then
+            true
+          else check t
+      | [] -> false
+    in
+    check arr
 
   let is_file f =
     let fname = (get_func f).method_name in
@@ -733,7 +753,7 @@ module AST = struct
     | Seq (s1, _) -> (
         match s1 with
         | Assign (x0, x1, f, arg) ->
-            if is_array f then void_rule2_array x0 x1 f arg
+            if is_array_init f then void_rule2_array x0 x1 f arg
             else void_rule2_normal x0 x1 f arg
         | _ -> [ s ])
     | _ -> [ s ]
@@ -805,7 +825,7 @@ module AST = struct
             "" p
           |> Regexp.rm_first_rest
         in
-        if is_array f then "[" ^ param ^ "]"
+        if is_array_init f then "[" ^ param ^ "]"
         else if is_array_set f then
           let lst = param |> Str.split Regexp.bm in
           "["
@@ -818,7 +838,7 @@ module AST = struct
   let func_code func =
     match func with
     | F f ->
-        if is_array func then
+        if is_array_init func then
           Str.split Regexp.dot f.method_name
           |> List.hd
           |> Regexp.first_rm (Str.regexp "Array")
