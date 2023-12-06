@@ -106,7 +106,7 @@ let rec find_relation given_symbol relation =
   | Some find_symbol -> find_relation find_symbol relation
   | None -> given_symbol
 
-let get_rh_name ~is_var rh =
+let get_rh_name ?(is_var = false) rh =
   if is_var then match rh with Condition.RH_Var v -> v | _ -> ""
   else match rh with Condition.RH_Symbol s -> s | _ -> ""
 
@@ -201,7 +201,7 @@ let rec find_real_head head_symbol memory =
 let get_head_symbol symbol mem =
   Condition.M.fold
     (fun hd_symbol trace hd_list ->
-      let hd = find_real_head (get_rh_name ~is_var:false hd_symbol) mem in
+      let hd = find_real_head (get_rh_name hd_symbol) mem in
       Condition.M.fold
         (fun trace_hd trace_tl hd_list ->
           match trace_tl with
@@ -210,8 +210,7 @@ let get_head_symbol symbol mem =
               match trace_hd with
               | Condition.RH_Index i when symbol = i ->
                   ( symbol,
-                    get_next_symbol trace_tl mem
-                    |> get_rh_name ~is_var:false |> mk_some,
+                    get_next_symbol trace_tl mem |> get_rh_name |> mk_some,
                     hd )
                   :: hd_list
               | _ -> hd_list))
@@ -285,12 +284,8 @@ let get_value_symbol key sym c t_mem c_mem =
         | None -> Condition.RH_Any (*fail to match*))
   in
   let field_name = get_rh_name ~is_var:true key in
-  let tail_t_symbol =
-    get_tail_symbol field_name sym t_mem |> get_rh_name ~is_var:false
-  in
-  let tail_c_symbol =
-    get_tail_symbol field_name c_sym c_mem |> get_rh_name ~is_var:false
-  in
+  let tail_t_symbol = get_tail_symbol field_name sym t_mem |> get_rh_name in
+  let tail_c_symbol = get_tail_symbol field_name c_sym c_mem |> get_rh_name in
   (tail_t_symbol, tail_c_symbol)
 
 let get_value_symbol_list ~is_init t_summary c_summary vs_list =
@@ -896,6 +891,11 @@ let contains_symbol symbol memory =
     memory false
 
 let is_new_loc summary =
+  let is_null symbol =
+    match Value.M.find_opt symbol summary.Language.value with
+    | Some x when x.Value.value = Eq Null -> true
+    | _ -> false
+  in
   let collect_symbol mem =
     Condition.M.fold
       (fun _ hd acc_lst ->
@@ -910,6 +910,7 @@ let is_new_loc summary =
     | _ -> [])
     |> List.filter (fun x ->
            contains_symbol x (summary.Language.precond |> snd) |> not)
+    |> List.filter (fun x -> is_null (get_rh_name x) |> not)
   in
   if new_loc_list = [] then false else true
 
@@ -1204,7 +1205,7 @@ let find_target_value id summary =
   let target_variable =
     Condition.M.fold
       (fun symbol symbol_trace find_variable ->
-        let symbol = get_rh_name ~is_var:false symbol in
+        let symbol = get_rh_name symbol in
         if symbol = target_variable then
           Condition.M.fold
             (fun _ trace_tl trace_find_var ->
@@ -1291,7 +1292,7 @@ let satisfied_c m_summary id candidate_constructor summary =
       (if is_receiver id then "this" else id)
       (m_summary.Language.precond |> fst)
       (m_summary.Language.precond |> snd)
-    |> get_rh_name ~is_var:false
+    |> get_rh_name
   in
   if target_symbol = "" then [ (true, c_summarys |> List.hd) ]
   else
@@ -1301,7 +1302,7 @@ let satisfied_c m_summary id candidate_constructor summary =
             ( find_relation target_symbol m_summary.Language.relation,
               find_this_symbol Condition.RH_Any
                 (c_summary.Language.postcond |> fst)
-              |> get_rh_name ~is_var:false );
+              |> get_rh_name );
           ]
           |> check_intersect ~is_init:true m_summary c_summary,
           c_summary )
@@ -1415,7 +1416,7 @@ let global_var_list class_name t_summary summary m_info e_info =
         match var with
         | Condition.RH_Var var ->
             if Str.string_match (".*\\." ^ class_name |> Str.regexp) var 0 then
-              get_rh_name ~is_var:false symbol |> mk_some
+              get_rh_name symbol |> mk_some
             else find_var
         | _ -> find_var)
       vars None
@@ -1430,7 +1431,7 @@ let global_var_list class_name t_summary summary m_info e_info =
       let target_variable =
         Condition.M.fold
           (fun symbol symbol_trace find_variable ->
-            if get_rh_name ~is_var:false symbol = x then
+            if get_rh_name symbol = x then
               Condition.M.fold
                 (fun trace_hd _ trace_find_var ->
                   match trace_hd with
