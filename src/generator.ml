@@ -318,6 +318,11 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
               t [])
   else vs_list
 
+let is_from_error summary =
+  Value.M.fold
+    (fun _ v check -> if v.Value.from_error then 1 else check)
+    summary.Language.value 0
+
 let check_intersect ~is_init caller_prop callee_summary vs_list =
   let vmap_maker symbol target_vmap from_error =
     let value = Value.M.find symbol target_vmap in
@@ -1386,7 +1391,10 @@ let find_global_var_list c_name t_var mem summary m_info =
         | Some v ->
             (Condition.M.fold (fun _ s_trace list ->
                  match compare_var v s_trace with
-                 | Some gv -> (1, AST.GlobalConstant gv) :: list
+                 | Some gv ->
+                     ( is_from_error (init_summary |> List.hd),
+                       AST.GlobalConstant gv )
+                     :: list
                  | None -> list))
               mem list
             |> (Condition.M.fold (fun _ s_trace list ->
@@ -1654,8 +1662,11 @@ let satisfied_c_list id t_summary summary summary_list =
         (List.fold_left (fun lst (check, summary) ->
              if check then
                if is_array_init constructor then
-                 (1, constructor, modify_summary id t_summary summary) :: lst
-               else (1, constructor, summary) :: lst
+                 ( is_from_error summary,
+                   constructor,
+                   modify_summary id t_summary summary )
+                 :: lst
+               else (is_from_error summary, constructor, summary) :: lst
              else (0, constructor, summary) :: lst))
           list
           (satisfied_c t_summary id constructor summary))
