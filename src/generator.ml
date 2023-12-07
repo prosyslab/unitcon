@@ -80,7 +80,10 @@ let solver = Z3.Solver.mk_solver z3ctx None
 
 (* non-terminal cost for p, terminal cost for p, precision for p *)
 let get_cost p =
-  if p.unroll > 2 then (p.nt_cost, p.t_cost, p.prec) else (0, 0, 0)
+  if !Cmdline.syn_priority then (p.nt_cost, p.t_cost, 0)
+  else if !Cmdline.sem_priority then (0, 0, p.prec)
+  else if p.unroll > 2 then (p.nt_cost, p.t_cost, p.prec)
+  else (0, 0, 0)
 
 let mk_cost prev_p curr_tc prec =
   {
@@ -1499,7 +1502,9 @@ let mk_params_list summary params_set org_param =
 
 let mk_arg ~is_s param s =
   let param = if is_s then param else param |> List.tl in
-  let same_params_set = get_same_params_set s param in
+  let same_params_set =
+    if !Cmdline.syn_priority then VarSets.empty else get_same_params_set s param
+  in
   let params_list = mk_params_list s same_params_set param in
   List.fold_left
     (fun arg_set lst -> VarListSet.add (lst |> List.rev) arg_set)
@@ -1717,14 +1722,20 @@ let get_ret_c ret summary m_info c_info s_map =
     let id = AST.get_vinfo ret |> snd in
     let summary_filtering list =
       List.filter (fun (_, c, _) -> is_public c m_info) list
-      |> List.filter (fun (_, c, _) -> is_method_with_memory_effect c summary)
       |> List.filter (fun (_, c, _) ->
              is_recursive_param class_name c m_info |> not)
+    in
+    let memory_effect_filtering list =
+      if !Cmdline.syn_priority then list
+      else
+        List.filter
+          (fun (_, c, _) -> is_method_with_memory_effect c summary)
+          list
     in
     let s_list =
       get_ret_obj class_name m_info c_info s_map
       |> satisfied_c_list id (AST.get_v ret).summary summary
-      |> summary_filtering
+      |> summary_filtering |> memory_effect_filtering
     in
     get_cfuncs s_list m_info
 
