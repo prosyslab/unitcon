@@ -82,8 +82,7 @@ let solver = Z3.Solver.mk_solver z3ctx None
 let get_cost p =
   if !Cmdline.syn_priority then (p.nt_cost, p.t_cost, 0)
   else if !Cmdline.sem_priority then (0, 0, p.prec)
-  else if p.unroll > 2 then (p.nt_cost, p.t_cost, p.prec)
-  else (0, 0, 0)
+  else (p.nt_cost, p.t_cost, p.prec)
 
 let mk_cost prev_p curr_tc prec =
   {
@@ -854,16 +853,21 @@ let is_array_init m =
   in
   check arr
 
-let get_class_name ~infer method_name =
-  if infer then Regexp.global_rm ("\\..+(.*)" |> Str.regexp) method_name
-  else Regexp.global_rm ("(.*)" |> Str.regexp) method_name
-
-let get_package_from_m t_method =
-  let m_name =
-    Regexp.first_rm ("(.*)" |> Str.regexp) t_method
-    |> Str.split Regexp.dot |> List.rev |> List.hd
+let is_array_set m =
+  let arr =
+    [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
   in
-  Regexp.first_rm ("\\." ^ m_name ^ "(.*)" |> Str.regexp) t_method
+  let rec check arr =
+    match arr with
+    | h :: t ->
+        if Str.string_match (h ^ "Array\\.set" |> Str.regexp) m 0 then true
+        else check t
+    | [] -> false
+  in
+  check arr
+
+let get_class_name method_name =
+  Regexp.global_rm ("\\.[^\\.]+(.*)" |> Str.regexp) method_name
 
 let get_package_from_v v =
   let typ = match v with Language.This typ -> typ | Var (typ, _) -> typ in
@@ -922,7 +926,7 @@ let is_method_with_memory_effect m_name summary =
   List.filter is_new_loc sum_list = [] |> not
 
 let is_void_method m_name s_map =
-  let c_name = get_class_name ~infer:true m_name in
+  let c_name = get_class_name m_name in
   let slist = try SetterMap.M.find c_name s_map with _ -> [] in
   let rec check lst =
     match lst with
@@ -1520,12 +1524,12 @@ let get_field_map ret s_map =
 let error_entry_func ee es m_info c_info =
   let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
   let f_arg_list = mk_arg ~is_s:(is_s_method ee m_info) param es in
-  let import = get_package_from_m ee in
+  let c_name = get_class_name ee in
   let typ_list =
-    if is_private_class import c_info then
-      try IG.succ (c_info |> snd) import |> List.cons import
-      with Invalid_argument _ -> [ import ]
-    else [ import ]
+    if is_private_class c_name c_info then
+      try IG.succ (c_info |> snd) c_name |> List.cons c_name
+      with Invalid_argument _ -> [ c_name ]
+    else [ c_name ]
   in
   List.fold_left
     (fun lst typ ->
@@ -1552,8 +1556,7 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
         (try SetterMap.M.find class_name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
                is_private s m_info |> not
-               && (FieldSet.S.subset var.field fields
-                  || Str.string_match (".*Array\\.set" |> Str.regexp) s 0))
+               && (FieldSet.S.subset var.field fields || is_array_set s))
       in
       List.fold_left
         (fun lst (s, _) ->
@@ -1575,7 +1578,7 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
             VarListSet.fold (fun f_arg acc -> (f, f_arg) :: acc) f_arg_list lst)
         [] setter_list
 
-let get_ret_obj class_name m_info (_, ig) s_map =
+let get_ret_obj class_name m_info (c_info, ig) s_map =
   let class_to_find =
     try IG.succ ig class_name |> List.cons class_name
     with Invalid_argument _ -> [ class_name ]
@@ -1586,6 +1589,8 @@ let get_ret_obj class_name m_info (_, ig) s_map =
         (fun init_list class_name_to_find ->
           if
             match_return_object class_name_to_find method_name m_info
+            && is_private_class (method_name |> get_class_name) (c_info, ig)
+               |> not
             && is_private method_name m_info |> not
             && is_init_method method_name |> not
             && is_void_method method_name s_map |> not
@@ -1680,7 +1685,7 @@ let satisfied_c_list id t_summary summary summary_list =
 
 let get_cfunc constructor m_info =
   let cost, c, s = constructor in
-  let t = get_package_from_m c in
+  let t = get_class_name c in
   let func = AST.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
     mk_arg ~is_s:(is_s_method c m_info)
