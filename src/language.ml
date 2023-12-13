@@ -207,13 +207,9 @@ module ClassInfo = struct
   type t = info M.t
 end
 
-module FieldSet = struct
-  module S = Set.Make (struct
-    type t = string [@@deriving compare]
-  end)
-
-  type t = S.t
-end
+module FieldSet = Set.Make (struct
+  type t = string [@@deriving compare]
+end)
 
 module SetterMap = struct
   module M = Map.Make (struct
@@ -272,7 +268,7 @@ module AST = struct
     {
       import = "";
       variable = (This None, None);
-      field = FieldSet.S.empty;
+      field = FieldSet.empty;
       summary = empty_summary;
     }
 
@@ -505,7 +501,7 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
-              field = FieldSet.S.empty;
+              field = FieldSet.empty;
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -522,7 +518,7 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
-              field = FieldSet.S.empty;
+              field = FieldSet.empty;
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -713,13 +709,13 @@ module AST = struct
     let new_idx, new_elem = get_array_index arr_id (x0 |> get_v).summary in
     (* remove setter of duplicate index *)
     if
-      FieldSet.S.mem
+      FieldSet.mem
         ((new_idx |> snd).value |> get_index_value)
         (x0 |> get_v).field
     then []
     else
       let nfield =
-        FieldSet.S.add
+        FieldSet.add
           ((new_idx |> snd).value |> get_index_value)
           (x0 |> get_v).field
       in
@@ -739,12 +735,12 @@ module AST = struct
       ]
 
   let void_rule2_normal x0 x1 f arg =
-    let remove = FieldSet.S.remove in
-    FieldSet.S.fold
+    let remove = FieldSet.remove in
+    FieldSet.fold
       (fun field lst ->
         new_seq
           (Assign (new_field x0 (remove field (x0 |> get_v).field), x1, f, arg))
-          (Void (new_field x0 (FieldSet.S.singleton field), Func, Arg []))
+          (Void (new_field x0 (FieldSet.singleton field), Func, Arg []))
         :: lst)
       (x0 |> get_v).field []
 
@@ -775,7 +771,7 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
-              field = FieldSet.S.empty;
+              field = FieldSet.empty;
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -792,7 +788,7 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
-              field = FieldSet.S.empty;
+              field = FieldSet.empty;
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }

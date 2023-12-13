@@ -61,18 +61,18 @@ let get_change_field post_key pre_mem post_mem field_set =
                     let pre = get_tail_set value pre_mem TailsSet.empty in
                     let post = get_tail_set value post_mem TailsSet.empty in
                     let change_field = if pre = post then false else true in
-                    if change_field then FieldSet.S.add id field_set
+                    if change_field then FieldSet.add id field_set
                     else field_set
                 | _ -> field_set
               in
-              FieldSet.S.union new_field_set old_field_set)
+              FieldSet.union new_field_set old_field_set)
             value_map field_set)
 
 let get_change_fields
     Language.{ precond = _, pre_mem; postcond = post_var, post_mem; _ } =
   let post_this = get_next_symbol (get_this_symbol post_var) post_mem in
   (* e.g., post_this = v3 *)
-  get_change_field post_this pre_mem post_mem FieldSet.S.empty
+  get_change_field post_this pre_mem post_mem FieldSet.empty
 
 let get_class_name method_name =
   Regexp.global_rm ("\\.[^\\.]+(.*)" |> Str.regexp) method_name
@@ -82,8 +82,8 @@ let find_setter m_name m_summarys m_infos mmap =
   let change_fields =
     List.fold_left
       (fun field_set summary ->
-        get_change_fields summary |> FieldSet.S.union field_set)
-      FieldSet.S.empty m_summarys
+        get_change_fields summary |> FieldSet.union field_set)
+      FieldSet.empty m_summarys
   in
   match MethodInfo.M.find_opt m_name m_infos with
   | Some i ->

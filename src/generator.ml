@@ -1472,7 +1472,7 @@ let mk_params_list summary params_set org_param =
               {
                 import = get_package_from_v v;
                 variable = (v, !new_var |> mk_some);
-                field = FieldSet.S.empty;
+                field = FieldSet.empty;
                 summary;
               }
             :: params)
@@ -1518,8 +1518,8 @@ let mk_arg ~is_s param s =
 let get_field_map ret s_map =
   let c_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
   List.fold_left
-    (fun fm (_, fields) -> FieldSet.S.union fields fm)
-    FieldSet.S.empty
+    (fun fm (_, fields) -> FieldSet.union fields fm)
+    FieldSet.empty
     (try SetterMap.M.find c_name s_map with _ -> [])
 
 let error_entry_func ee es m_info c_info =
@@ -1557,7 +1557,7 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
         (try SetterMap.M.find class_name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
                is_private s m_info |> not
-               && (FieldSet.S.subset var.field fields || is_array_set s))
+               && (FieldSet.subset var.field fields || is_array_set s))
       in
       List.fold_left
         (fun lst (s, _) ->
@@ -1776,7 +1776,7 @@ let get_inner_func f arg =
                   |> Regexp.first_rm (Str.regexp ("\\$" ^ fname))),
                 "con_outer" ),
             !outer |> mk_some );
-        field = FieldSet.S.empty;
+        field = FieldSet.empty;
         summary = recv.summary;
       }
   in
