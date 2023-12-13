@@ -82,7 +82,8 @@ let solver = Z3.Solver.mk_solver z3ctx None
 let get_cost p =
   if !Cmdline.syn_priority then (p.nt_cost, p.t_cost, 0)
   else if !Cmdline.sem_priority then (0, 0, p.prec)
-  else (p.nt_cost, p.t_cost, p.prec)
+  else if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec)
+  else (0, 0, 0)
 
 let mk_cost prev_p curr_tc prec =
   {
@@ -1556,7 +1557,7 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
         (try SetterMap.M.find class_name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
                is_private s m_info |> not
-               && (FieldSet.S.subset var.field fields || is_array_set s))
+               && (FieldSet.S.subset fields var.field |> not || is_array_set s))
       in
       List.fold_left
         (fun lst (s, _) ->
@@ -1670,17 +1671,22 @@ let satisfied_c_list id t_summary summary summary_list =
   else
     List.fold_left
       (fun list constructor ->
-        (List.fold_left (fun lst (check, summary) ->
-             if check then
-               if is_array_init constructor then
-                 ( is_from_error summary,
-                   constructor,
-                   modify_summary id t_summary summary )
-                 :: lst
-               else (is_from_error summary, constructor, summary) :: lst
-             else (0, constructor, summary) :: lst))
-          list
-          (satisfied_c t_summary id constructor summary))
+        let lst = satisfied_c t_summary id constructor summary in
+        let init = (0, "", Language.empty_summary) in
+        let pick =
+          (List.fold_left (fun pick (check, summary) ->
+               if check then
+                 if is_array_init constructor then
+                   ( is_from_error summary,
+                     constructor,
+                     modify_summary id t_summary summary )
+                 else (is_from_error summary, constructor, summary)
+               else if pick = (0, "", Language.empty_summary) then
+                 (0, constructor, Language.empty_summary)
+               else pick))
+            init lst
+        in
+        if pick = init then list else pick :: list)
       [] summary_list
 
 let get_cfunc constructor m_info =

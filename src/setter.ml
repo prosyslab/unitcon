@@ -6,6 +6,12 @@ module SetterMap = Language.SetterMap
 module FieldSet = Language.FieldSet
 module MethodInfo = Language.MethodInfo
 
+module TailsSet = Set.Make (struct
+  type t = Condition.rh
+
+  let compare = compare
+end)
+
 let get_this_symbol variable =
   Condition.M.fold
     (fun symbol id this_symbol ->
@@ -15,23 +21,22 @@ let get_this_symbol variable =
     variable Condition.RH_Any
 
 let get_next_symbol symbol memory =
-  let next_symbol = Condition.M.find_opt symbol memory in
-  match next_symbol with
+  match Condition.M.find_opt symbol memory with
   | Some sym -> (
       match Condition.M.find_opt Condition.RH_Any sym with
       | Some s -> s
       | None -> symbol)
   | None -> symbol
 
-let rec get_tail_symbol symbol memory =
-  let next_symbol = Condition.M.find_opt symbol memory in
-  match next_symbol with
-  | Some sym -> (
-      let m_any_symbol = Condition.M.find_opt Condition.RH_Any sym in
-      match m_any_symbol with
-      | Some any_s -> get_tail_symbol any_s memory
-      | None -> symbol)
-  | None -> symbol
+let rec get_tail_set symbol memory tails =
+  match Condition.M.find_opt symbol memory with
+  | Some sym ->
+      Condition.M.fold
+        (fun _ symbol set ->
+          if TailsSet.mem symbol set then set
+          else get_tail_set symbol memory (TailsSet.add symbol set))
+        sym tails
+  | None -> tails
 
 let get_head_of_tail symbol memory =
   Condition.M.fold
@@ -53,8 +58,8 @@ let get_change_field post_key pre_mem post_mem field_set =
               let new_field_set =
                 match field with
                 | Condition.RH_Var id ->
-                    let pre = get_tail_symbol value pre_mem in
-                    let post = get_tail_symbol value post_mem in
+                    let pre = get_tail_set value pre_mem TailsSet.empty in
+                    let post = get_tail_set value post_mem TailsSet.empty in
                     let change_field = if pre = post then false else true in
                     if change_field then FieldSet.S.add id field_set
                     else field_set
@@ -66,14 +71,11 @@ let get_change_field post_key pre_mem post_mem field_set =
 let get_change_fields
     Language.{ precond = _, pre_mem; postcond = post_var, post_mem; _ } =
   let post_this = get_next_symbol (get_this_symbol post_var) post_mem in
+  (* e.g., post_this = v3 *)
   get_change_field post_this pre_mem post_mem FieldSet.S.empty
 
 let get_class_name method_name =
-  let m_name =
-    Regexp.first_rm ("(.*)" |> Str.regexp) method_name
-    |> Str.split Regexp.dot |> List.rev |> List.hd
-  in
-  Regexp.first_rm ("\\." ^ m_name ^ "(.*)" |> Str.regexp) method_name
+  Regexp.global_rm ("\\.[^\\.]+(.*)" |> Str.regexp) method_name
 
 let find_setter m_name m_summarys m_infos mmap =
   let class_name = get_class_name m_name in
