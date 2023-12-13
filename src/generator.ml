@@ -1557,7 +1557,7 @@ let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
         (try SetterMap.M.find class_name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
                is_private s m_info |> not
-               && (FieldSet.S.subset fields var.field |> not || is_array_set s))
+               && (FieldSet.S.subset var.field fields || is_array_set s))
       in
       List.fold_left
         (fun lst (s, _) ->
