@@ -2111,11 +2111,6 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
   let init =
     if is_start then (
       pkg := pkg_name;
-      let e_method =
-        if String.contains e_method ':' then
-          e_method |> Str.split Regexp.colon |> List.hd
-        else e_method
-      in
       ErrorEntrySet.fold
         (fun (ee, ee_s) init_list ->
           apply_rule (get_void_func AST.Id ~ee ~es:ee_s m_info c_info s_map)
