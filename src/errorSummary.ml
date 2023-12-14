@@ -48,7 +48,7 @@ let parse_summary summary =
   {
     relation;
     value;
-    usage_field = get_use_field pre_var pre_mem;
+    use_field = get_use_field pre_var pre_mem;
     precond = (pre_var, pre_mem);
     postcond = (post_var, post_mem);
     args = [];

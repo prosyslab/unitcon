@@ -214,6 +214,25 @@ let get_caller_value_symbol_list caller_prop callee_param_index_list =
     [] callee_param_index_list
   |> List.rev
 
+let mk_new_uf method_name from_s to_s m_info =
+  let params =
+    match MethodInfo.M.find_opt method_name m_info with
+    | Some p -> p.MethodInfo.formal_params
+    | _ -> []
+  in
+  UseFieldMap.M.fold
+    (fun sym field_set new_ufset ->
+      let idx =
+        get_param_index (AST.get_rh_name sym) (from_s.precond |> fst) params
+      in
+      if idx = -1 then new_ufset
+      else
+        UseFieldMap.M.add
+          (find_real_head (List.nth to_s.args idx) (to_s.precond |> snd)
+          |> mk_symbol)
+          field_set new_ufset)
+    from_s.use_field UseFieldMap.M.empty
+
 let get_field_symbol id symbol mem =
   AST.get_tail_symbol
     (id |> AST.get_rh_name ~is_var:true)
@@ -695,23 +714,33 @@ let satisfy callee_method callee_summary call_prop m_info =
     (intersect_value |> fst, caller_new_mem, true)
   else (intersect_value |> fst, caller_new_mem, false)
 
-let new_value_summary old_summary new_value =
+let new_value_summary new_value old_summary =
   {
     relation = old_summary.relation;
     value = new_value;
-    usage_field = old_summary.usage_field;
+    use_field = old_summary.use_field;
     precond = old_summary.precond;
     postcond = old_summary.postcond;
     args = old_summary.args;
   }
 
-let new_mem_summary old_summary new_mem =
+let new_mem_summary new_mem old_summary =
   {
     relation = old_summary.relation;
     value = old_summary.value;
-    usage_field = old_summary.usage_field;
+    use_field = old_summary.use_field;
     precond = (old_summary.precond |> fst, new_mem);
     postcond = (old_summary.postcond |> fst, new_mem);
+    args = old_summary.args;
+  }
+
+let new_uf_summary new_uf old_summary =
+  {
+    relation = old_summary.relation;
+    value = old_summary.value;
+    use_field = new_uf;
+    precond = old_summary.precond;
+    postcond = old_summary.postcond;
     args = old_summary.args;
   }
 
@@ -1209,8 +1238,9 @@ let satisfied_c m_summary id candidate_constructor summary =
          (fun lst (check_summary, c_summary) ->
            if List.filter (fun (_, c) -> c = false) check_summary = [] then
              ( true,
-               combine_value c_summary.value check_summary
-               |> new_value_summary c_summary )
+               c_summary
+               |> new_value_summary
+                    (combine_value c_summary.value check_summary) )
              :: lst
            else (false, c_summary) :: lst)
          []
@@ -1496,16 +1526,6 @@ let modify_summary id t_summary a_summary =
       Value.{ from_error; value = Value.Ge (Int value) }
       a_summary.value
   in
-  let new_mem_summary old_summary memory =
-    {
-      relation = old_summary.relation;
-      value = old_summary.value;
-      usage_field = old_summary.usage_field;
-      precond = (old_summary.precond |> fst, memory);
-      postcond = (old_summary.postcond |> fst, memory);
-      args = old_summary.args;
-    }
-  in
   let new_this_summary old_summary values =
     let this_symbol = AST.org_symbol "this" old_summary |> mk_symbol in
     let new_premem =
@@ -1528,7 +1548,7 @@ let modify_summary id t_summary a_summary =
           (values |> fst |> snd)
           old_summary.value
         |> Value.M.add (values |> snd |> fst) (values |> snd |> snd);
-      usage_field = old_summary.usage_field;
+      use_field = old_summary.use_field;
       precond =
         ( old_summary.precond |> fst,
           Condition.M.add this_symbol new_premem (old_summary.precond |> snd) );
@@ -1546,9 +1566,9 @@ let modify_summary id t_summary a_summary =
       let new_mem = AST.remove_array_index id (tmp |> fst |> fst) summary in
       mk_new_summary
         (new_this_summary new_summary tmp)
-        (new_mem_summary summary new_mem)
+        (new_mem_summary new_mem summary)
   in
-  mk_new_summary (new_value_summary a_summary new_value) t_summary |> fst
+  mk_new_summary (new_value_summary new_value a_summary) t_summary |> fst
 
 let satisfied_c_list id t_summary summary summary_list =
   if !Cmdline.basic_mode || !Cmdline.syn_priority then
@@ -1986,13 +2006,15 @@ let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
     let new_value, new_mem, check_match =
       satisfy e_method e_summary call_prop m_info
     in
+    let new_uf = mk_new_uf e_method e_summary call_prop m_info in
     if !Cmdline.basic_mode || !Cmdline.syn_priority then
       ErrorEntrySet.union caller_preconds
         (find_ee ~prev_ee caller_method empty_summary cg summary call_prop_map
            m_info c_info)
     else if check_match then
       let new_call_prop =
-        new_mem_summary (new_value_summary call_prop new_value) new_mem
+        new_value_summary new_value call_prop
+        |> new_mem_summary new_mem |> new_uf_summary new_uf
       in
       ErrorEntrySet.union caller_preconds
         (find_ee ~prev_ee caller_method new_call_prop cg summary call_prop_map

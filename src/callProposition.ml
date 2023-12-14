@@ -32,7 +32,7 @@ let parse_callprop callprop =
   {
     relation;
     value;
-    usage_field = UseFieldMap.M.empty;
+    use_field = UseFieldMap.M.empty;
     precond = (pre_var, pre_mem);
     postcond = (post_var, post_mem);
     args;
