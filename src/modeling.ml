@@ -1,8 +1,4 @@
-module Relation = Language.Relation
-module Value = Language.Value
-module Condition = Language.Condition
-module SummaryMap = Language.SummaryMap
-module MethodInfo = Language.MethodInfo
+open Language
 module IG = Inheritance.G
 
 (* ************************************** *
@@ -406,147 +402,134 @@ let point_postmem =
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v9") value_map)
 
 let map_put_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (map_put_var, map_put_premem);
-      postcond = (map_put_var, map_put_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (map_put_var, map_put_premem);
+    postcond = (map_put_var, map_put_postmem);
+    args = [];
+  }
 
 let array_list_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (array_list_var, array_list_premem);
-      postcond = (array_list_var, array_list_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (array_list_var, array_list_premem);
+    postcond = (array_list_var, array_list_postmem);
+    args = [];
+  }
 
 let file_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (file_var, file_premem);
-      postcond = (file_var, file_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (file_var, file_premem);
+    postcond = (file_var, file_postmem);
+    args = [];
+  }
 
 let image_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (image_var, image_premem);
-      postcond = (image_var, image_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (image_var, image_premem);
+    postcond = (image_var, image_postmem);
+    args = [];
+  }
 
 let image_create_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (image_create_var, image_create_premem);
-      postcond = (image_create_var, image_create_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (image_create_var, image_create_premem);
+    postcond = (image_create_var, image_create_postmem);
+    args = [];
+  }
 
 let class_get_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (class_get_var, class_get_premem);
-      postcond = (class_get_var, class_get_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (class_get_var, class_get_premem);
+    postcond = (class_get_var, class_get_postmem);
+    args = [];
+  }
 
 let print_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (print_var, print_premem);
-      postcond = (print_var, print_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (print_var, print_premem);
+    postcond = (print_var, print_postmem);
+    args = [];
+  }
 
 let file_input_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (file_input_var, file_input_premem);
-      postcond = (file_input_var, file_input_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (file_input_var, file_input_premem);
+    postcond = (file_input_var, file_input_postmem);
+    args = [];
+  }
 
 let obj_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (obj_var, obj_premem);
-      postcond = (obj_var, obj_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (obj_var, obj_premem);
+    postcond = (obj_var, obj_postmem);
+    args = [];
+  }
 
 let string_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (string_var, string_premem);
-      postcond = (string_var, string_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (string_var, string_premem);
+    postcond = (string_var, string_postmem);
+    args = [];
+  }
 
 let array_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = array_value;
-      precond = (array_var, array_premem);
-      postcond = (array_var, array_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = array_value;
+    precond = (array_var, array_premem);
+    postcond = (array_var, array_postmem);
+    args = [];
+  }
 
 let array_set_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = array_set_value;
-      precond = (array_set_var, array_set_premem);
-      postcond = (array_set_var, array_set_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = array_set_value;
+    precond = (array_set_var, array_set_premem);
+    postcond = (array_set_var, array_set_postmem);
+    args = [];
+  }
 
 let point_summary =
-  Language.
-    {
-      relation = Relation.M.empty;
-      value = Value.M.empty;
-      precond = (point_var, point_premem);
-      postcond = (point_var, point_postmem);
-      args = [];
-    }
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    precond = (point_var, point_premem);
+    postcond = (point_var, point_postmem);
+    args = [];
+  }
 
 (* ************************************** *
    Method Info
  * ************************************** *)
 
 let map_put_info =
-  let this = Language.This (Object "java.util.Map") in
-  let arg_typ = Language.Object "java.lang.Object" in
-  let arg1 = Language.Var (arg_typ, "key") in
-  let arg2 = Language.Var (arg_typ, "value") in
+  let this = This (Object "java.util.Map") in
+  let arg_typ = Object "java.lang.Object" in
+  let arg1 = Var (arg_typ, "key") in
+  let arg2 = Var (arg_typ, "value") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2 ];
       return = "void";
@@ -554,10 +537,10 @@ let map_put_info =
     }
 
 let array_list_info =
-  let this = Language.This (Object "java.util.ArrayList") in
+  let this = This (Object "java.util.ArrayList") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this ];
       return = "";
@@ -565,11 +548,11 @@ let array_list_info =
     }
 
 let file_info =
-  let this = Language.This (Object "java.io.File") in
-  let arg = Language.Var (String, "file") in
+  let this = This (Object "java.io.File") in
+  let arg = Var (String, "file") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -577,13 +560,13 @@ let file_info =
     }
 
 let image_info =
-  let this = Language.This (Object "java.awt.image.BufferedImage") in
-  let arg1 = Language.Var (Int, "w") in
-  let arg2 = Language.Var (Int, "h") in
-  let arg3 = Language.Var (Int, "t") in
+  let this = This (Object "java.awt.image.BufferedImage") in
+  let arg1 = Var (Int, "w") in
+  let arg2 = Var (Int, "h") in
+  let arg3 = Var (Int, "t") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2; arg3 ];
       return = "";
@@ -591,10 +574,10 @@ let image_info =
     }
 
 let image_create_info =
-  let this = Language.This (Object "java.awt.image.BufferedImage") in
+  let this = This (Object "java.awt.image.BufferedImage") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this ];
       return = "Graphics2D";
@@ -602,10 +585,10 @@ let image_create_info =
     }
 
 let class_get_info =
-  let this = Language.This (Object "java.lang.Object") in
+  let this = This (Object "java.lang.Object") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this ];
       return = "java.lang.Class";
@@ -613,11 +596,11 @@ let class_get_info =
     }
 
 let print_info =
-  let this = Language.This (Object "java.io.PrintStream") in
-  let arg = Language.Var (Object "java.io.File", "file") in
+  let this = This (Object "java.io.PrintStream") in
+  let arg = Var (Object "java.io.File", "file") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -625,11 +608,11 @@ let print_info =
     }
 
 let file_input_info =
-  let this = Language.This (Object "java.io.FileInputStream") in
-  let arg = Language.Var (Object "java.io.File", "file") in
+  let this = This (Object "java.io.FileInputStream") in
+  let arg = Var (Object "java.io.File", "file") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -637,10 +620,10 @@ let file_input_info =
     }
 
 let obj_info =
-  let this = Language.This (Object "java.lang.Object") in
+  let this = This (Object "java.lang.Object") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this ];
       return = "";
@@ -648,11 +631,11 @@ let obj_info =
     }
 
 let string_info =
-  let this = Language.This String in
-  let arg = Language.Var (String, "s") in
+  let this = This String in
+  let arg = Var (String, "s") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -660,11 +643,11 @@ let string_info =
     }
 
 let int_array_info =
-  let this = Language.This (Array Int) in
-  let arg = Language.Var (Int, "size") in
+  let this = This (Array Int) in
+  let arg = Var (Int, "size") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -672,11 +655,11 @@ let int_array_info =
     }
 
 let long_array_info =
-  let this = Language.This (Array Long) in
-  let arg = Language.Var (Int, "size") in
+  let this = This (Array Long) in
+  let arg = Var (Int, "size") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -684,11 +667,11 @@ let long_array_info =
     }
 
 let float_array_info =
-  let this = Language.This (Array Float) in
-  let arg = Language.Var (Int, "size") in
+  let this = This (Array Float) in
+  let arg = Var (Int, "size") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -696,11 +679,11 @@ let float_array_info =
     }
 
 let double_array_info =
-  let this = Language.This (Array Double) in
-  let arg = Language.Var (Int, "size") in
+  let this = This (Array Double) in
+  let arg = Var (Int, "size") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -708,11 +691,11 @@ let double_array_info =
     }
 
 let bool_array_info =
-  let this = Language.This (Array Bool) in
-  let arg = Language.Var (Int, "size") in
+  let this = This (Array Bool) in
+  let arg = Var (Int, "size") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -720,11 +703,11 @@ let bool_array_info =
     }
 
 let char_array_info =
-  let this = Language.This (Array Char) in
-  let arg = Language.Var (Int, "size") in
+  let this = This (Array Char) in
+  let arg = Var (Int, "size") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -732,11 +715,11 @@ let char_array_info =
     }
 
 let string_array_info =
-  let this = Language.This (Array String) in
-  let arg = Language.Var (Int, "size") in
+  let this = This (Array String) in
+  let arg = Var (Int, "size") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -744,11 +727,11 @@ let string_array_info =
     }
 
 let object_array_info =
-  let this = Language.This (Array (Object "java.lang.Object")) in
-  let arg = Language.Var (Int, "size") in
+  let this = This (Array (Object "java.lang.Object")) in
+  let arg = Var (Int, "size") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
       return = "";
@@ -758,12 +741,12 @@ let object_array_info =
 (*TODO: array_array_info *)
 
 let int_array_set_info =
-  let this = Language.This (Array Int) in
-  let arg1 = Language.Var (Int, "index") in
-  let arg2 = Language.Var (Int, "elem") in
+  let this = This (Array Int) in
+  let arg1 = Var (Int, "index") in
+  let arg2 = Var (Int, "elem") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2 ];
       return = "void";
@@ -771,12 +754,12 @@ let int_array_set_info =
     }
 
 let long_array_set_info =
-  let this = Language.This (Array Long) in
-  let arg1 = Language.Var (Int, "index") in
-  let arg2 = Language.Var (Long, "elem") in
+  let this = This (Array Long) in
+  let arg1 = Var (Int, "index") in
+  let arg2 = Var (Long, "elem") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2 ];
       return = "void";
@@ -784,12 +767,12 @@ let long_array_set_info =
     }
 
 let float_array_set_info =
-  let this = Language.This (Array Float) in
-  let arg1 = Language.Var (Int, "index") in
-  let arg2 = Language.Var (Float, "elem") in
+  let this = This (Array Float) in
+  let arg1 = Var (Int, "index") in
+  let arg2 = Var (Float, "elem") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2 ];
       return = "void";
@@ -797,12 +780,12 @@ let float_array_set_info =
     }
 
 let double_array_set_info =
-  let this = Language.This (Array Double) in
-  let arg1 = Language.Var (Int, "index") in
-  let arg2 = Language.Var (Double, "elem") in
+  let this = This (Array Double) in
+  let arg1 = Var (Int, "index") in
+  let arg2 = Var (Double, "elem") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2 ];
       return = "void";
@@ -810,12 +793,12 @@ let double_array_set_info =
     }
 
 let bool_array_set_info =
-  let this = Language.This (Array Bool) in
-  let arg1 = Language.Var (Int, "index") in
-  let arg2 = Language.Var (Bool, "elem") in
+  let this = This (Array Bool) in
+  let arg1 = Var (Int, "index") in
+  let arg2 = Var (Bool, "elem") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2 ];
       return = "void";
@@ -823,12 +806,12 @@ let bool_array_set_info =
     }
 
 let char_array_set_info =
-  let this = Language.This (Array Char) in
-  let arg1 = Language.Var (Int, "index") in
-  let arg2 = Language.Var (Char, "elem") in
+  let this = This (Array Char) in
+  let arg1 = Var (Int, "index") in
+  let arg2 = Var (Char, "elem") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2 ];
       return = "void";
@@ -836,12 +819,12 @@ let char_array_set_info =
     }
 
 let string_array_set_info =
-  let this = Language.This (Array String) in
-  let arg1 = Language.Var (Int, "index") in
-  let arg2 = Language.Var (String, "elem") in
+  let this = This (Array String) in
+  let arg1 = Var (Int, "index") in
+  let arg2 = Var (String, "elem") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2 ];
       return = "void";
@@ -849,12 +832,12 @@ let string_array_set_info =
     }
 
 let object_array_set_info =
-  let this = Language.This (Array (Object "java.lang.Object")) in
-  let arg1 = Language.Var (Int, "index") in
-  let arg2 = Language.Var (Object "java.lang.Object", "elem") in
+  let this = This (Array (Object "java.lang.Object")) in
+  let arg1 = Var (Int, "index") in
+  let arg2 = Var (Object "java.lang.Object", "elem") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2 ];
       return = "void";
@@ -862,12 +845,12 @@ let object_array_set_info =
     }
 
 let point_info =
-  let this = Language.This (Object "java.awt.Point") in
-  let arg1 = Language.Var (Int, "x") in
-  let arg2 = Language.Var (Int, "y") in
+  let this = This (Object "java.awt.Point") in
+  let arg1 = Var (Int, "x") in
+  let arg2 = Var (Int, "y") in
   MethodInfo.
     {
-      modifier = Language.Public;
+      modifier = Public;
       is_static = false;
       formal_params = [ this; arg1; arg2 ];
       return = "";

@@ -1,21 +1,11 @@
-module Relation = Language.Relation
-module Value = Language.Value
-module Condition = Language.Condition
-module MethodInfo = Language.MethodInfo
-module SummaryMap = Language.SummaryMap
-module CallPropMap = Language.CallPropMap
-module ClassInfo = Language.ClassInfo
-module SetterMap = Language.SetterMap
-module FieldSet = Language.FieldSet
-module EnumInfo = Language.EnumInfo
+open Language
 module CG = Callgraph.G
 module IG = Inheritance.G
-module AST = Language.AST
 
 exception Not_found_setter
 
 module VarSet = Set.Make (struct
-  type t = Language.variable
+  type t = variable
 
   let compare = compare
 end)
@@ -36,7 +26,7 @@ module ImportSet = Set.Make (struct
 end)
 
 module ErrorEntrySet = Set.Make (struct
-  type t = string * Language.summary
+  type t = string * summary
 
   let compare = compare
 end)
@@ -112,15 +102,6 @@ let rec find_relation given_symbol relation =
 let get_rh_name ?(is_var = false) rh =
   if is_var then match rh with Condition.RH_Var v -> v | _ -> ""
   else match rh with Condition.RH_Symbol s -> s | _ -> ""
-
-let get_next_symbol symbol memory =
-  let next_symbol = Condition.M.find_opt symbol memory in
-  match next_symbol with
-  | Some sym -> (
-      match Condition.M.find_opt Condition.RH_Any sym with
-      | Some s -> s
-      | None -> symbol)
-  | None -> symbol
 
 let rec get_tail_symbol field_name symbol memory =
   let next_symbol = Condition.M.find_opt symbol memory in
@@ -213,7 +194,7 @@ let get_head_symbol symbol mem =
               match trace_hd with
               | Condition.RH_Index i when symbol = i ->
                   ( symbol,
-                    get_next_symbol trace_tl mem |> get_rh_name |> mk_some,
+                    Utils.get_next_symbol trace_tl mem |> get_rh_name |> mk_some,
                     hd )
                   :: hd_list
               | _ -> hd_list))
@@ -238,7 +219,7 @@ let get_param_index head_symbol variables formal_params =
       match params with
       | hd :: tl -> (
           match hd with
-          | Language.This _ -> get_index (count + 1) tl
+          | This _ -> get_index (count + 1) tl
           | Var (_, id) when id = variable -> count
           | _ -> get_index (count + 1) tl)
       | [] -> -1
@@ -269,8 +250,7 @@ let get_caller_value_symbol_list caller_prop callee_param_index_list =
   List.fold_left
     (fun lst (callee_value_symbol, _, index) ->
       if index = -1 then ("", callee_value_symbol) :: lst
-      else
-        (List.nth caller_prop.Language.args index, callee_value_symbol) :: lst)
+      else (List.nth caller_prop.args index, callee_value_symbol) :: lst)
     [] callee_param_index_list
   |> List.rev
 
@@ -295,8 +275,8 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
   if is_init then
     (*this, this*)
     let t_symbol, c_symbol = vs_list |> List.hd in
-    let t_var, t_mem = t_summary.Language.precond in
-    let c_var, c_mem = c_summary.Language.precond in
+    let t_var, t_mem = t_summary.precond in
+    let c_var, c_mem = c_summary.precond in
     let c_t_mem = Condition.M.find_opt (t_symbol |> mk_symbol) t_var in
     let c_c_mem = Condition.M.find_opt (c_symbol |> mk_symbol) c_var in
     match (c_t_mem, c_c_mem) with
@@ -319,7 +299,7 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
 let is_from_error summary =
   Value.M.fold
     (fun _ v check -> if v.Value.from_error then 1 else check)
-    summary.Language.value 0
+    summary.value 0
 
 let check_intersect ~is_init caller_prop callee_summary vs_list =
   let vmap_maker symbol target_vmap from_error =
@@ -330,18 +310,14 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
   in
   let check_one caller_symbol callee_symbol =
     try
-      let caller_value =
-        Value.M.find caller_symbol caller_prop.Language.value
-      in
-      let callee_value =
-        Value.M.find callee_symbol callee_summary.Language.value
-      in
+      let caller_value = Value.M.find caller_symbol caller_prop.value in
+      let callee_value = Value.M.find callee_symbol callee_summary.value in
       let return_caller check =
         if check then
           ( (caller_value.Value.from_error || callee_value.Value.from_error)
-            |> vmap_maker caller_symbol caller_prop.Language.value,
+            |> vmap_maker caller_symbol caller_prop.value,
             check )
-        else (caller_prop.Language.value, check)
+        else (caller_prop.value, check)
       in
       match (caller_value.Value.value, callee_value.Value.value) with
       | Eq eq_v1, Eq eq_v2 ->
@@ -360,7 +336,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Float eq_f, Double le_f
           | Double eq_f, Float le_f ->
               if eq_f <= le_f then return_caller true else return_caller false
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Eq eq_v, Lt lt_v | Lt lt_v, Eq eq_v -> (
           match (eq_v, lt_v) with
           | Int eq_i, Int lt_i
@@ -373,7 +349,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Float eq_f, Double lt_f
           | Double eq_f, Float lt_f ->
               if eq_f < lt_f then return_caller true else return_caller false
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Eq eq_v, Ge ge_v | Ge ge_v, Eq eq_v -> (
           match (eq_v, ge_v) with
           | Int eq_i, Int ge_i
@@ -386,7 +362,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Float eq_f, Double ge_f
           | Double eq_f, Float ge_f ->
               if eq_f >= ge_f then return_caller true else return_caller false
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Eq eq_v, Gt gt_v | Gt gt_v, Eq eq_v -> (
           match (eq_v, gt_v) with
           | Int eq_i, Int gt_i
@@ -399,7 +375,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Float eq_f, Double gt_f
           | Double eq_f, Float gt_f ->
               if eq_f > gt_f then return_caller true else return_caller false
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Eq eq_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Eq eq_v -> (
           match (eq_v, btw_min, btw_max) with
@@ -423,7 +399,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double eq_f, Double btw_min_f, Double btw_max_f ->
               if eq_f >= btw_min_f && eq_f <= btw_max_f then return_caller true
               else return_caller false
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Eq eq_v, Outside (out_min, out_max)
       | Outside (out_min, out_max), Eq eq_v -> (
           match (eq_v, out_min, out_max) with
@@ -447,7 +423,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double eq_f, Double o_min_f, Double o_max_f ->
               if eq_f < o_min_f && eq_f > o_max_f then return_caller true
               else return_caller false
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Le le_v, Ge ge_v | Ge ge_v, Le le_v -> (
           match (le_v, ge_v) with
           | Int le_i, Int ge_i
@@ -460,7 +436,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Float le_f, Double ge_f
           | Double le_f, Float ge_f ->
               if le_f >= ge_f then return_caller true else return_caller false
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Le l_v, Gt g_v
       | Lt l_v, Ge g_v
       | Lt l_v, Gt g_v
@@ -478,7 +454,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Float l_f, Double g_f
           | Double l_f, Float g_f ->
               if l_f > g_f then return_caller true else return_caller false
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Le le_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Le le_v -> (
           match (le_v, btw_min, btw_max) with
@@ -502,7 +478,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double le_f, Float btw_min_f, Double _ ->
               if le_f < btw_min_f then return_caller false
               else return_caller true
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Lt lt_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Lt lt_v -> (
           match (lt_v, btw_min, btw_max) with
@@ -526,7 +502,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double lt_f, Float btw_min_f, Double _ ->
               if lt_f <= btw_min_f then return_caller false
               else return_caller true
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Ge ge_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Ge ge_v -> (
           match (ge_v, btw_min, btw_max) with
@@ -550,7 +526,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double ge_f, Double _, Float btw_max_f ->
               if ge_f > btw_max_f then return_caller false
               else return_caller true
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Gt gt_v, Between (btw_min, btw_max)
       | Between (btw_min, btw_max), Gt gt_v -> (
           match (gt_v, btw_min, btw_max) with
@@ -574,7 +550,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double gt_f, Double _, Float btw_max_f ->
               if gt_f >= btw_max_f then return_caller false
               else return_caller true
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Between (caller_min, caller_max), Between (callee_min, callee_max) -> (
           match (caller_min, caller_max, callee_min, callee_max) with
           | Int r_min_i, Int r_max_i, Int e_min_i, Int e_max_i
@@ -613,7 +589,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           | Double r_min_f, Double r_max_f, Double e_min_f, Double e_max_f ->
               if r_max_f < e_min_f || e_max_f < r_min_f then return_caller false
               else return_caller true
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | Between (btw_min, btw_max), Outside (out_min, out_max)
       | Outside (out_min, out_max), Between (btw_min, btw_max) -> (
           match (btw_min, btw_max, out_min, out_max) with
@@ -656,7 +632,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
               if btw_min_f <= o_min_f && btw_max_f >= o_max_f then
                 return_caller false
               else return_caller true
-          | _ -> (Language.Value.M.empty, false))
+          | _ -> (Value.M.empty, false))
       | _, Outside _
       | Outside _, _
       | Lt _, Le _
@@ -672,21 +648,16 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
           return_caller true
     with Not_found -> (
       try
-        let callee_value =
-          Value.M.find callee_symbol callee_summary.Language.value
-        in
-        ( Value.M.add caller_symbol callee_value caller_prop.Language.value
+        let callee_value = Value.M.find callee_symbol callee_summary.value in
+        ( Value.M.add caller_symbol callee_value caller_prop.value
           |> Value.M.add callee_symbol callee_value,
           true )
       with Not_found -> (
         try
           (* constructor prop propagation *)
-          let caller_value =
-            Value.M.find caller_symbol caller_prop.Language.value
-          in
-          ( Value.M.add callee_symbol caller_value callee_summary.Language.value,
-            true )
-        with Not_found -> (caller_prop.Language.value, true)))
+          let caller_value = Value.M.find caller_symbol caller_prop.value in
+          (Value.M.add callee_symbol caller_value callee_summary.value, true)
+        with Not_found -> (caller_prop.value, true)))
   in
   let vs_list =
     get_value_symbol_list ~is_init caller_prop callee_summary vs_list
@@ -701,7 +672,7 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
    callee_sym_list: (symbol, value, head) list --> value is set only when symbol is index
 *)
 let combine_memory base_summary value_symbol_list callee_sym_list =
-  let _, memory = base_summary.Language.precond in
+  let _, memory = base_summary.precond in
   let combine r s value trace org_mem =
     Condition.M.add (r |> mk_symbol)
       (Condition.M.add (s |> mk_index) (value |> mk_symbol) trace)
@@ -737,12 +708,12 @@ let combine_value base_value vc_list =
 
 let satisfy callee_method callee_summary call_prop m_info =
   let callee_head_symbols =
-    callee_summary.Language.value |> get_symbol_list
-    |> get_head_symbol_list callee_summary.Language.precond
+    callee_summary.value |> get_symbol_list
+    |> get_head_symbol_list callee_summary.precond
   in
   let value_symbol_list =
     (MethodInfo.M.find callee_method m_info).MethodInfo.formal_params
-    |> get_param_index_list callee_head_symbols callee_summary.Language.precond
+    |> get_param_index_list callee_head_symbols callee_summary.precond
     |> get_caller_value_symbol_list call_prop
   in
   let caller_new_mem =
@@ -752,7 +723,7 @@ let satisfy callee_method callee_summary call_prop m_info =
     let values_and_check =
       check_intersect ~is_init:false call_prop callee_summary value_symbol_list
     in
-    ( combine_value call_prop.Language.value values_and_check,
+    ( combine_value call_prop.value values_and_check,
       List.filter (fun (_, c) -> c = false) values_and_check )
   in
   if intersect_value |> snd = [] then
@@ -760,24 +731,22 @@ let satisfy callee_method callee_summary call_prop m_info =
   else (intersect_value |> fst, caller_new_mem, false)
 
 let new_value_summary old_summary new_value =
-  Language.
-    {
-      relation = old_summary.relation;
-      value = new_value;
-      precond = old_summary.precond;
-      postcond = old_summary.postcond;
-      args = old_summary.args;
-    }
+  {
+    relation = old_summary.relation;
+    value = new_value;
+    precond = old_summary.precond;
+    postcond = old_summary.postcond;
+    args = old_summary.args;
+  }
 
 let new_mem_summary old_summary new_mem =
-  Language.
-    {
-      relation = old_summary.relation;
-      value = old_summary.value;
-      precond = (old_summary.precond |> fst, new_mem);
-      postcond = (old_summary.postcond |> fst, new_mem);
-      args = old_summary.args;
-    }
+  {
+    relation = old_summary.relation;
+    value = old_summary.value;
+    precond = (old_summary.precond |> fst, new_mem);
+    postcond = (old_summary.postcond |> fst, new_mem);
+    args = old_summary.args;
+  }
 
 let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 
@@ -793,9 +762,7 @@ let is_nested_class name = String.contains name '$'
 let is_normal_class class_name c_info =
   match ClassInfo.M.find_opt class_name c_info with
   | Some typ -> (
-      match typ.ClassInfo.class_type with
-      | Language.Static | Language.Normal -> true
-      | _ -> false)
+      match typ.ClassInfo.class_type with Static | Normal -> true | _ -> false)
   | None -> true (* modeling class *)
 
 let is_s_class name (c_info, _) =
@@ -805,14 +772,14 @@ let is_s_class name (c_info, _) =
   in
   match ClassInfo.M.find_opt name c_info with
   | Some typ -> (
-      match typ.ClassInfo.class_type with Language.Static -> true | _ -> false)
+      match typ.ClassInfo.class_type with Static -> true | _ -> false)
   | None -> false
 
 let is_private_class class_package c_info =
   match ClassInfo.M.find_opt class_package (c_info |> fst) with
   | Some info -> (
       let class_type = info.ClassInfo.class_type in
-      match class_type with Language.Private -> true | _ -> false)
+      match class_type with Private -> true | _ -> false)
   | None -> false
 
 let is_s_method m_name m_info =
@@ -867,24 +834,22 @@ let is_array_set m =
   in
   check arr
 
-let get_class_name method_name =
+let get_class_name_from_m method_name =
   Regexp.global_rm ("\\.[^\\.]+(.*)" |> Str.regexp) method_name
 
 let get_package_from_v v =
-  let typ = match v with Language.This typ -> typ | Var (typ, _) -> typ in
+  let typ = match v with This typ -> typ | Var (typ, _) -> typ in
   match typ with
-  | Language.Int | Long | Float | Double | Bool | Char | Array _ | None -> ""
+  | Int | Long | Float | Double | Bool | Char | Array _ | NonType -> ""
   | String -> "java.lang.String"
   | Object t -> t
 
 let is_recursive_param parent_class method_name m_info =
   let info = MethodInfo.M.find method_name m_info in
-  let this = Language.Object parent_class in
+  let this = Object parent_class in
   List.fold_left
     (fun check var ->
-      match var with
-      | Language.Var (typ, _) when typ = this -> true
-      | _ -> check)
+      match var with Var (typ, _) when typ = this -> true | _ -> check)
     false info.MethodInfo.formal_params
 
 let contains_symbol symbol memory =
@@ -900,7 +865,7 @@ let contains_symbol symbol memory =
 
 let is_new_loc summary =
   let is_null symbol =
-    match Value.M.find_opt symbol summary.Language.value with
+    match Value.M.find_opt symbol summary.value with
     | Some x when x.Value.value = Eq Null -> true
     | _ -> false
   in
@@ -910,14 +875,13 @@ let is_new_loc summary =
         match hd with Condition.RH_Symbol _ -> hd :: acc_lst | _ -> acc_lst)
       mem []
   in
-  let post_var, post_mem = summary.Language.postcond in
+  let post_var, post_mem = summary.postcond in
   let return_var = find_return_symbol Condition.RH_Any post_var in
   let new_loc_list =
     (match Condition.M.find_opt return_var post_mem with
     | Some m -> collect_symbol m
     | _ -> [])
-    |> List.filter (fun x ->
-           contains_symbol x (summary.Language.precond |> snd) |> not)
+    |> List.filter (fun x -> contains_symbol x (summary.precond |> snd) |> not)
     |> List.filter (fun x -> is_null (get_rh_name x) |> not)
   in
   if new_loc_list = [] then false else true
@@ -927,7 +891,7 @@ let is_method_with_memory_effect m_name summary =
   List.filter is_new_loc sum_list = [] |> not
 
 let is_void_method m_name s_map =
-  let c_name = get_class_name m_name in
+  let c_name = get_class_name_from_m m_name in
   let slist = try SetterMap.M.find c_name s_map with _ -> [] in
   let rec check lst =
     match lst with
@@ -952,7 +916,7 @@ let calc_z3 id z3exp =
 let default_value_list typ =
   let default_value =
     match typ with
-    | Language.Int | Long ->
+    | Int | Long ->
         [
           AST.Primitive (Z 1);
           AST.Primitive (Z 0);
@@ -980,7 +944,7 @@ let default_value_list typ =
   default_value
 
 let not_found_value v =
-  match v.Value.value with Value.Eq None -> true | _ -> false
+  match v.Value.value with Value.Eq NonValue -> true | _ -> false
 
 let calc_value_list typ org_list =
   List.fold_left (fun lst x -> (0, x) :: lst) org_list (default_value_list typ)
@@ -1200,7 +1164,7 @@ let calc_value id value =
       | _ -> failwith "not implemented outside")
 
 let find_target_value id summary =
-  let variables, mem = summary.Language.precond in
+  let variables, mem = summary.precond in
   let target_variable =
     Condition.M.fold
       (fun symbol variable find_variable ->
@@ -1224,12 +1188,12 @@ let find_target_value id summary =
         else find_variable)
       mem target_variable
   in
-  let values = summary.Language.value in
+  let values = summary.value in
   Value.M.fold
     (fun symbol value find_value ->
       if symbol = target_variable then value else find_value)
     values
-    Value.{ from_error = false; value = Value.Eq None }
+    Value.{ from_error = false; value = Value.Eq NonValue }
 
 let get_value typ id summary =
   let find_value = find_target_value id summary in
@@ -1238,20 +1202,20 @@ let get_value typ id summary =
   else calc_value id find_value
 
 let get_array_size array summary =
-  let _, memory = summary.Language.precond in
+  let _, memory = summary.precond in
   let array_symbol = AST.org_symbol array summary in
   match Condition.M.find_opt (array_symbol |> mk_symbol) memory with
   | Some x -> (true, Condition.M.fold (fun _ _ size -> size + 1) x 0)
   | None -> (false, 1)
 
 let get_same_type_param params =
-  let get_type p = match p with Language.Var (t, _) -> t | _ -> None in
+  let get_type p = match p with Var (t, _) -> t | _ -> NonType in
   List.fold_left
     (fun sets p ->
       let new_set =
         List.fold_left
           (fun set op_p ->
-            if get_type p = get_type op_p && get_type p <> Language.None then
+            if get_type p = get_type op_p && get_type p <> NonType then
               VarSet.add op_p set
             else set)
           (VarSet.empty |> VarSet.add p)
@@ -1268,7 +1232,7 @@ let get_same_precond_param summary param_sets =
       in
       let get_p_value p s =
         match p with
-        | Language.Var (_, id) -> find_target_value id s
+        | Var (_, id) -> find_target_value id s
         | _ -> failwith "Fail: find the target value"
       in
       let new_set =
@@ -1298,8 +1262,7 @@ let satisfied_c m_summary id candidate_constructor summary =
   let target_symbol =
     get_id_symbol
       (if is_receiver id then "this" else id)
-      (m_summary.Language.precond |> fst)
-      (m_summary.Language.precond |> snd)
+      (m_summary.precond |> fst) (m_summary.precond |> snd)
     |> get_rh_name
   in
   if target_symbol = "" then [ (true, c_summarys |> List.hd) ]
@@ -1307,9 +1270,8 @@ let satisfied_c m_summary id candidate_constructor summary =
     List.fold_left
       (fun lst c_summary ->
         ( [
-            ( find_relation target_symbol m_summary.Language.relation,
-              find_this_symbol Condition.RH_Any
-                (c_summary.Language.postcond |> fst)
+            ( find_relation target_symbol m_summary.relation,
+              find_this_symbol Condition.RH_Any (c_summary.postcond |> fst)
               |> get_rh_name );
           ]
           |> check_intersect ~is_init:true m_summary c_summary,
@@ -1320,7 +1282,7 @@ let satisfied_c m_summary id candidate_constructor summary =
          (fun lst (check_summary, c_summary) ->
            if List.filter (fun (_, c) -> c = false) check_summary = [] then
              ( true,
-               combine_value c_summary.Language.value check_summary
+               combine_value c_summary.value check_summary
                |> new_value_summary c_summary )
              :: lst
            else (false, c_summary) :: lst)
@@ -1391,7 +1353,7 @@ let find_global_var_list c_name t_var mem summary m_info =
   in
   SummaryMap.M.fold
     (fun init_name init_summary list ->
-      let _, init_mem = (init_summary |> List.hd).Language.precond in
+      let _, init_mem = (init_summary |> List.hd).precond in
       if
         Str.string_match (c_name ^ "\\.<clinit>" |> Str.regexp) init_name 0
         && is_public init_name m_info
@@ -1417,7 +1379,7 @@ let find_global_var_list c_name t_var mem summary m_info =
     summary []
 
 let global_var_list class_name t_summary summary m_info e_info =
-  let vars, mem = t_summary.Language.precond in
+  let vars, mem = t_summary.precond in
   let t_var =
     Condition.M.fold
       (fun symbol var find_var ->
@@ -1465,7 +1427,7 @@ let mk_params_list summary params_set org_param =
     List.fold_left
       (fun params v ->
         match v with
-        | Language.Var (typ, _) when typ = Language.None -> params
+        | Var (typ, _) when typ = NonType -> params
         | _ ->
             incr new_var;
             AST.
@@ -1516,7 +1478,7 @@ let mk_arg ~is_s param s =
     VarListSet.empty params_list
 
 let get_field_map ret s_map =
-  let c_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
+  let c_name = AST.get_vinfo ret |> fst |> get_class_name in
   List.fold_left
     (fun fm (_, fields) -> FieldSet.union fields fm)
     FieldSet.empty
@@ -1525,7 +1487,7 @@ let get_field_map ret s_map =
 let error_entry_func ee es m_info c_info =
   let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
   let f_arg_list = mk_arg ~is_s:(is_s_method ee m_info) param es in
-  let c_name = get_class_name ee in
+  let c_name = get_class_name_from_m ee in
   let typ_list =
     if is_private_class c_name c_info then
       try IG.succ (c_info |> snd) c_name |> List.cons c_name
@@ -1545,12 +1507,11 @@ let error_entry_func ee es m_info c_info =
     [] typ_list
 
 (* id is receiver variable *)
-let get_void_func id ?(ee = "") ?(es = Language.empty_summary) m_info c_info
-    s_map =
+let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
   if AST.is_id id then error_entry_func ee es m_info c_info
   else
     let var = AST.get_v id in
-    let class_name = AST.get_vinfo id |> fst |> Language.get_class_name in
+    let class_name = AST.get_vinfo id |> fst |> get_class_name in
     if class_name = "" || class_name = "String" then []
     else
       let setter_list =
@@ -1590,7 +1551,9 @@ let get_ret_obj class_name m_info (c_info, ig) s_map =
         (fun init_list class_name_to_find ->
           if
             match_return_object class_name_to_find method_name m_info
-            && is_private_class (method_name |> get_class_name) (c_info, ig)
+            && is_private_class
+                 (method_name |> get_class_name_from_m)
+                 (c_info, ig)
                |> not
             && is_private method_name m_info |> not
             && is_init_method method_name |> not
@@ -1606,17 +1569,16 @@ let modify_summary id t_summary a_summary =
     Value.M.add
       (AST.org_symbol "size" a_summary)
       Value.{ from_error; value = Value.Ge (Int value) }
-      a_summary.Language.value
+      a_summary.value
   in
   let new_mem_summary old_summary memory =
-    Language.
-      {
-        relation = old_summary.relation;
-        value = old_summary.value;
-        precond = (old_summary.precond |> fst, memory);
-        postcond = (old_summary.postcond |> fst, memory);
-        args = old_summary.args;
-      }
+    {
+      relation = old_summary.relation;
+      value = old_summary.value;
+      precond = (old_summary.precond |> fst, memory);
+      postcond = (old_summary.postcond |> fst, memory);
+      args = old_summary.args;
+    }
   in
   let new_this_summary old_summary values =
     let this_symbol = AST.org_symbol "this" old_summary |> mk_symbol in
@@ -1632,25 +1594,24 @@ let modify_summary id t_summary a_summary =
            (values |> fst |> fst |> mk_index)
            (values |> snd |> fst |> mk_symbol)
     in
-    Language.
-      {
-        relation = old_summary.relation;
-        value =
-          Value.M.add
-            (values |> fst |> fst)
-            (values |> fst |> snd)
-            old_summary.value
-          |> Value.M.add (values |> snd |> fst) (values |> snd |> snd);
-        precond =
-          ( old_summary.precond |> fst,
-            Condition.M.add this_symbol new_premem (old_summary.precond |> snd)
-          );
-        postcond =
-          ( old_summary.postcond |> fst,
-            Condition.M.add this_symbol new_postmem (old_summary.postcond |> snd)
-          );
-        args = old_summary.args;
-      }
+
+    {
+      relation = old_summary.relation;
+      value =
+        Value.M.add
+          (values |> fst |> fst)
+          (values |> fst |> snd)
+          old_summary.value
+        |> Value.M.add (values |> snd |> fst) (values |> snd |> snd);
+      precond =
+        ( old_summary.precond |> fst,
+          Condition.M.add this_symbol new_premem (old_summary.precond |> snd) );
+      postcond =
+        ( old_summary.postcond |> fst,
+          Condition.M.add this_symbol new_postmem (old_summary.postcond |> snd)
+        );
+      args = old_summary.args;
+    }
   in
   let rec mk_new_summary new_summary summary =
     let tmp = AST.get_array_index id summary in
@@ -1666,13 +1627,13 @@ let modify_summary id t_summary a_summary =
 let satisfied_c_list id t_summary summary summary_list =
   if !Cmdline.basic_mode || !Cmdline.syn_priority then
     List.fold_left
-      (fun list constructor -> (0, constructor, Language.empty_summary) :: list)
+      (fun list constructor -> (0, constructor, empty_summary) :: list)
       [] summary_list
   else
     List.fold_left
       (fun list constructor ->
         let lst = satisfied_c t_summary id constructor summary in
-        let init = (0, "", Language.empty_summary) in
+        let init = (0, "", empty_summary) in
         let pick =
           (List.fold_left (fun pick (check, summary) ->
                if check then
@@ -1681,8 +1642,8 @@ let satisfied_c_list id t_summary summary summary_list =
                      constructor,
                      modify_summary id t_summary summary )
                  else (is_from_error summary, constructor, summary)
-               else if pick = (0, "", Language.empty_summary) then
-                 (0, constructor, Language.empty_summary)
+               else if pick = (0, "", empty_summary) then
+                 (0, constructor, empty_summary)
                else pick))
             init lst
         in
@@ -1691,7 +1652,7 @@ let satisfied_c_list id t_summary summary summary_list =
 
 let get_cfunc constructor m_info =
   let cost, c, s = constructor in
-  let t = get_class_name c in
+  let t = get_class_name_from_m c in
   let func = AST.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
     mk_arg ~is_s:(is_s_method c m_info)
@@ -1710,7 +1671,7 @@ let get_cfuncs list m_info =
     [] list
 
 let get_c ret summary _ m_info c_info =
-  let class_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
+  let class_name = AST.get_vinfo ret |> fst |> get_class_name in
   if class_name = "" then []
   else
     let id = AST.get_vinfo ret |> snd in
@@ -1727,7 +1688,7 @@ let get_c ret summary _ m_info c_info =
     get_cfuncs s_list m_info
 
 let get_ret_c ret summary m_info c_info s_map =
-  let class_name = AST.get_vinfo ret |> fst |> Language.get_class_name in
+  let class_name = AST.get_vinfo ret |> fst |> get_class_name in
   if class_name = "" then []
   else
     let id = AST.get_vinfo ret |> snd in
@@ -1834,7 +1795,7 @@ let const_unroll p summary m_info e_info =
             (fun lst x1 -> (x1 |> fst, AST.const_rule2 p (x1 |> snd)) :: lst)
             []
             (global_var_list
-               (Language.get_class_name (AST.get_vinfo x |> fst))
+               (get_class_name (AST.get_vinfo x |> fst))
                (AST.get_v x).summary summary m_info e_info)
         in
         if is_receiver (AST.get_vinfo x |> snd) then r2
@@ -2103,8 +2064,8 @@ let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
     in
     if !Cmdline.basic_mode || !Cmdline.syn_priority then
       ErrorEntrySet.union caller_preconds
-        (find_ee ~prev_ee caller_method Language.empty_summary cg summary
-           call_prop_map m_info c_info)
+        (find_ee ~prev_ee caller_method empty_summary cg summary call_prop_map
+           m_info c_info)
     else if check_match then
       let new_call_prop =
         new_mem_summary (new_value_summary call_prop new_value) new_mem
@@ -2135,8 +2096,8 @@ let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
          with
         | None ->
             (* It is possible without any specific conditions *)
-            find_ee ~prev_ee:new_prev_ee caller_method Language.empty_summary cg
-              summary call_prop_map m_info c_info
+            find_ee ~prev_ee:new_prev_ee caller_method empty_summary cg summary
+              call_prop_map m_info c_info
         | Some prop_list ->
             List.fold_left
               (fun caller_preconds call_prop ->
@@ -2215,7 +2176,7 @@ let rec mk_testcase summary cg m_info c_info s_map e_info queue =
         |> mk_testcase summary cg m_info c_info s_map e_info
   | [] -> []
 
-let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
+let mk_testcases ~is_start pkg_name queue (e_method, error_summary, use_fields)
     (cg, summary, call_prop_map, m_info, c_info, s_map, e_info) =
   let apply_rule list =
     List.fold_left

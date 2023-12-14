@@ -3,6 +3,7 @@
  (modules
   main
   language
+  utils
   callgraph
   cmdline
   summary

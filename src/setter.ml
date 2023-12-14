@@ -1,10 +1,4 @@
-module Relation = Language.Relation
-module Value = Language.Value
-module Condition = Language.Condition
-module SummaryMap = Language.SummaryMap
-module SetterMap = Language.SetterMap
-module FieldSet = Language.FieldSet
-module MethodInfo = Language.MethodInfo
+open Language
 
 module TailsSet = Set.Make (struct
   type t = Condition.rh
@@ -19,14 +13,6 @@ let get_this_symbol variable =
       | Condition.RH_Var v when v = "this" -> symbol
       | _ -> this_symbol)
     variable Condition.RH_Any
-
-let get_next_symbol symbol memory =
-  match Condition.M.find_opt symbol memory with
-  | Some sym -> (
-      match Condition.M.find_opt Condition.RH_Any sym with
-      | Some s -> s
-      | None -> symbol)
-  | None -> symbol
 
 let rec get_tail_set symbol memory tails =
   match Condition.M.find_opt symbol memory with
@@ -68,9 +54,9 @@ let get_change_field post_key pre_mem post_mem field_set =
               FieldSet.union new_field_set old_field_set)
             value_map field_set)
 
-let get_change_fields
-    Language.{ precond = _, pre_mem; postcond = post_var, post_mem; _ } =
-  let post_this = get_next_symbol (get_this_symbol post_var) post_mem in
+let get_change_fields { precond = _, pre_mem; postcond = post_var, post_mem; _ }
+    =
+  let post_this = Utils.get_next_symbol (get_this_symbol post_var) post_mem in
   (* e.g., post_this = v3 *)
   get_change_field post_this pre_mem post_mem FieldSet.empty
 

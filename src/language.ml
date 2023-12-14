@@ -32,7 +32,7 @@ type typ =
   | String
   | Object of class_name
   | Array of typ
-  | None
+  | NonType
 [@@deriving compare]
 
 type id = string (*e.g. i *) [@@deriving compare]
@@ -58,7 +58,7 @@ let get_class_name = function
       | String -> "StringArray"
       | Object _ -> "ObjectArray"
       | _ -> "")
-  | None -> ""
+  | NonType -> ""
   | _ -> failwith "get_class_name: not supported"
 
 let modifier_of_json json =
@@ -105,7 +105,7 @@ module Value = struct
     | PlusInf
     | MinusInf
     | Null
-    | None (* Determining whether to use the default const *)
+    | NonValue (* Determining whether to use the default const *)
 
   type op =
     | Eq of const
@@ -211,6 +211,14 @@ module FieldSet = Set.Make (struct
   type t = string [@@deriving compare]
 end)
 
+module UseFieldMap = struct
+  module M = Map.Make (struct
+    type t = Condition.rh [@@deriving compare]
+  end)
+
+  type t = FieldSet.t M.t
+end
+
 module SetterMap = struct
   module M = Map.Make (struct
     type t = class_name [@@deriving compare]
@@ -267,7 +275,7 @@ module AST = struct
   let empty_var =
     {
       import = "";
-      variable = (This None, None);
+      variable = (This NonType, None);
       field = FieldSet.empty;
       summary = empty_summary;
     }
@@ -607,7 +615,7 @@ module AST = struct
         (fun symbol value find_value ->
           if symbol = s then value else find_value)
         values
-        { from_error = false; value = Value.Eq None }
+        { from_error = false; value = Value.Eq NonValue }
     in
     match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
     | Some x ->
@@ -621,10 +629,10 @@ module AST = struct
             | _ -> ((idx, idx_value), (elem, elem_value)))
           x
           ( ("", { from_error = false; value = Value.Ge (Int 0) }),
-            ("", { from_error = false; value = Value.Eq None }) )
+            ("", { from_error = false; value = Value.Eq NonValue }) )
     | None ->
         ( ("", { from_error = false; value = Value.Ge (Int 0) }),
-          ("", { from_error = false; value = Value.Eq None }) )
+          ("", { from_error = false; value = Value.Eq NonValue }) )
 
   let remove_array_index array idx summary =
     let _, memory = summary.precond in
@@ -857,8 +865,8 @@ module AST = struct
     let v =
       match v.variable with
       | Var (typ, id), Some idx -> (typ, id ^ (idx |> string_of_int))
-      | _, None -> (None, "")
-      | This _, _ -> (None, "")
+      | _, None -> (NonType, "")
+      | This _, _ -> (NonType, "")
     in
     match v |> fst with
     | Int -> "int " ^ (v |> snd)

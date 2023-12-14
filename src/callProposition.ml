@@ -1,17 +1,14 @@
+open Language
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
-module Relation = Language.Relation
-module Value = Language.Value
-module Condition = Language.Condition
-module MethodInfo = Language.MethodInfo
-module CallPropMap = Language.CallPropMap
 
 let parse_callprop callprop =
   let relation =
     JsonUtil.member "BoItv" callprop |> JsonUtil.to_string |> Parser.parse_boitv
   in
   let value =
-    JsonUtil.member "CItv" callprop |> JsonUtil.to_string |> Parser.parse_citv false
+    JsonUtil.member "CItv" callprop
+    |> JsonUtil.to_string |> Parser.parse_citv false
   in
   let pre_var =
     JsonUtil.member "Precond_Stack" callprop
@@ -32,19 +29,17 @@ let parse_callprop callprop =
   let args =
     JsonUtil.member "Args" callprop |> JsonUtil.to_string |> Parser.parse_args
   in
-  Language.
-    {
-      relation;
-      value;
-      precond = (pre_var, pre_mem);
-      postcond = (post_var, post_mem);
-      args;
-    }
+  {
+    relation;
+    value;
+    precond = (pre_var, pre_mem);
+    postcond = (post_var, post_mem);
+    args;
+  }
 
 let get_method_names assoc =
   let split_name name =
-    if String.contains name ':' then
-      name |> Str.split Regexp.colon |> List.hd
+    if String.contains name ':' then name |> Str.split Regexp.colon |> List.hd
     else name
   in
   let caller_name =

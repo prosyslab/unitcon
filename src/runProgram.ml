@@ -1,7 +1,7 @@
+open Language
 module F = Format
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
-module EnumInfo = Language.EnumInfo
 
 let con_path = "unitcon_properties"
 

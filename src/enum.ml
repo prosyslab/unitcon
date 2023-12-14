@@ -1,6 +1,6 @@
+open Language
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
-module EnumInfo = Language.EnumInfo
 
 let collect_enum_const assoc mmap =
   let enum_name = JsonUtil.member "enum" assoc |> JsonUtil.to_string in

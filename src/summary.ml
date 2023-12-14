@@ -1,17 +1,14 @@
+open Language
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
-module Relation = Language.Relation
-module Value = Language.Value
-module Condition = Language.Condition
-module MethodInfo = Language.MethodInfo
-module SummaryMap = Language.SummaryMap
 
 let parse_summary summary =
   let relation =
     JsonUtil.member "BoItv" summary |> JsonUtil.to_string |> Parser.parse_boitv
   in
   let value =
-    JsonUtil.member "CItv" summary |> JsonUtil.to_string |> Parser.parse_citv false
+    JsonUtil.member "CItv" summary
+    |> JsonUtil.to_string |> Parser.parse_citv false
   in
   let pre_var =
     JsonUtil.member "Precond_Stack" summary
@@ -29,14 +26,14 @@ let parse_summary summary =
     JsonUtil.member "Postcond_Heap" summary
     |> JsonUtil.to_string |> Parser.parse_mem
   in
-  Language.
-    {
-      relation;
-      value;
-      precond = (pre_var, pre_mem);
-      postcond = (post_var, post_mem);
-      args = [];
-    }
+
+  {
+    relation;
+    value;
+    precond = (pre_var, pre_mem);
+    postcond = (post_var, post_mem);
+    args = [];
+  }
 
 let get_method_name assoc =
   let split_name name =
@@ -64,7 +61,7 @@ let get_return assoc =
 let is_unnes_method fparam =
   let check_anony_class t =
     match t with
-    | Language.Object o ->
+    | Object o ->
         let clist = Str.split Regexp.dollar o in
         List.fold_left
           (fun check name ->
@@ -77,7 +74,7 @@ let is_unnes_method fparam =
   in
   let check_unnes p =
     match p with
-    | Language.This _ -> false
+    | This _ -> false
     | Var (typ, id) -> check_anony_class typ || check_lambda id
   in
   List.fold_left
@@ -89,7 +86,7 @@ let mapping_method_info method_info mmap =
   let return = get_return method_info in
   let modifier =
     JsonUtil.member "modifier" method_info
-    |> JsonUtil.to_list |> List.hd |> Language.modifier_of_json
+    |> JsonUtil.to_list |> List.hd |> modifier_of_json
   in
   let is_static =
     JsonUtil.member "is_static" method_info
@@ -126,9 +123,7 @@ let mapping_summary method_summarys minfo mmap =
     |> List.fold_left (fun lst summary -> parse_summary summary :: lst) []
     |> List.rev
   in
-  let summarys =
-    if summarys = [] then [ Language.empty_summary ] else summarys
-  in
+  let summarys = if summarys = [] then [ empty_summary ] else summarys in
   if
     Str.string_match (".*access\\$.*" |> Str.regexp) method_name 0
     || Str.string_match (".*access_.*" |> Str.regexp) method_name 0
