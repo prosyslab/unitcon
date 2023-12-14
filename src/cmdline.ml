@@ -10,7 +10,7 @@ let syn_priority = ref false
 
 let sem_priority = ref false
 
-let time_out = ref (30 * 60)
+let time_out = ref (5 * 60)
 
 let until_time_out = ref false
 
