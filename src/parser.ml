@@ -306,3 +306,11 @@ let parse_args args =
       if a = "" then lst else a :: lst)
     [] arg_list
   |> List.rev
+
+let split_name m =
+  if String.contains m ':' then m |> Str.split Regexp.colon |> List.hd else m
+
+let split_return m =
+  if String.contains m ':' then
+    m |> Str.split Regexp.colon |> List.rev |> List.hd
+  else ""

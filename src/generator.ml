@@ -699,6 +699,7 @@ let new_value_summary old_summary new_value =
   {
     relation = old_summary.relation;
     value = new_value;
+    usage_field = old_summary.usage_field;
     precond = old_summary.precond;
     postcond = old_summary.postcond;
     args = old_summary.args;
@@ -708,6 +709,7 @@ let new_mem_summary old_summary new_mem =
   {
     relation = old_summary.relation;
     value = old_summary.value;
+    usage_field = old_summary.usage_field;
     precond = (old_summary.precond |> fst, new_mem);
     postcond = (old_summary.postcond |> fst, new_mem);
     args = old_summary.args;
@@ -1498,6 +1500,7 @@ let modify_summary id t_summary a_summary =
     {
       relation = old_summary.relation;
       value = old_summary.value;
+      usage_field = old_summary.usage_field;
       precond = (old_summary.precond |> fst, memory);
       postcond = (old_summary.postcond |> fst, memory);
       args = old_summary.args;
@@ -1517,7 +1520,6 @@ let modify_summary id t_summary a_summary =
            (values |> fst |> fst |> mk_index)
            (values |> snd |> fst |> mk_symbol)
     in
-
     {
       relation = old_summary.relation;
       value =
@@ -1526,6 +1528,7 @@ let modify_summary id t_summary a_summary =
           (values |> fst |> snd)
           old_summary.value
         |> Value.M.add (values |> snd |> fst) (values |> snd |> snd);
+      usage_field = old_summary.usage_field;
       precond =
         ( old_summary.precond |> fst,
           Condition.M.add this_symbol new_premem (old_summary.precond |> snd) );
@@ -2096,7 +2099,7 @@ let rec mk_testcase summary cg m_info c_info s_map e_info queue =
         |> mk_testcase summary cg m_info c_info s_map e_info
   | [] -> []
 
-let mk_testcases ~is_start pkg_name queue (e_method, error_summary, use_fields)
+let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
     (cg, summary, call_prop_map, m_info, c_info, s_map, e_info) =
   let apply_rule list =
     List.fold_left

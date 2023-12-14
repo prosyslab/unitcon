@@ -26,35 +26,26 @@ let parse_summary summary =
     JsonUtil.member "Postcond_Heap" summary
     |> JsonUtil.to_string |> Parser.parse_mem
   in
-
   {
     relation;
     value;
+    usage_field = UseFieldMap.M.empty;
     precond = (pre_var, pre_mem);
     postcond = (post_var, post_mem);
     args = [];
   }
 
 let get_method_name assoc =
-  let split_name name =
-    if String.contains name ':' then name |> Str.split Regexp.colon |> List.hd
-    else name
-  in
   let method_name =
     JsonUtil.member "method" assoc
-    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> split_name
+    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> Parser.split_name
   in
   method_name
 
 let get_return assoc =
-  let split_return m =
-    if String.contains m ':' then
-      m |> Str.split Regexp.colon |> List.rev |> List.hd
-    else ""
-  in
   let return =
     JsonUtil.member "method" assoc
-    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> split_return
+    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> Parser.split_return
   in
   return
 

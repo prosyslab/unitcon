@@ -32,21 +32,18 @@ let parse_callprop callprop =
   {
     relation;
     value;
+    usage_field = UseFieldMap.M.empty;
     precond = (pre_var, pre_mem);
     postcond = (post_var, post_mem);
     args;
   }
 
 let get_method_names assoc =
-  let split_name name =
-    if String.contains name ':' then name |> Str.split Regexp.colon |> List.hd
-    else name
-  in
   let caller_name =
-    JsonUtil.member "Caller" assoc |> JsonUtil.to_string |> split_name
+    JsonUtil.member "Caller" assoc |> JsonUtil.to_string |> Parser.split_name
   in
   let callee_name =
-    JsonUtil.member "Callee" assoc |> JsonUtil.to_string |> split_name
+    JsonUtil.member "Callee" assoc |> JsonUtil.to_string |> Parser.split_name
   in
   (caller_name, callee_name)
 

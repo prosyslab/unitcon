@@ -163,9 +163,22 @@ module Condition = struct
   type t = var * mem
 end
 
+module FieldSet = Set.Make (struct
+  type t = string [@@deriving compare]
+end)
+
+module UseFieldMap = struct
+  module M = Map.Make (struct
+    type t = Condition.rh [@@deriving compare]
+  end)
+
+  type t = FieldSet.t M.t
+end
+
 type summary = {
   relation : Relation.t;
   value : Value.t;
+  usage_field : UseFieldMap.t;
   precond : Condition.t;
   postcond : Condition.t;
   args : symbol list;
@@ -175,6 +188,7 @@ let empty_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (Condition.M.empty, Condition.M.empty);
     postcond = (Condition.M.empty, Condition.M.empty);
     args = [];
@@ -205,18 +219,6 @@ module ClassInfo = struct
   type info = { class_type : class_type }
 
   type t = info M.t
-end
-
-module FieldSet = Set.Make (struct
-  type t = string [@@deriving compare]
-end)
-
-module UseFieldMap = struct
-  module M = Map.Make (struct
-    type t = Condition.rh [@@deriving compare]
-  end)
-
-  type t = FieldSet.t M.t
 end
 
 module SetterMap = struct
@@ -657,6 +659,7 @@ module AST = struct
     {
       relation = org_summary.relation;
       value = org_summary.value;
+      usage_field = org_summary.usage_field;
       precond = (org_summary.precond |> fst, new_mem);
       postcond = (org_summary.postcond |> fst, new_mem);
       args = org_summary.args;
@@ -666,6 +669,7 @@ module AST = struct
     {
       relation = org_summary.relation;
       value = org_summary.value;
+      usage_field = org_summary.usage_field;
       precond = (new_var, new_mem);
       postcond = (new_var, new_mem);
       args = org_summary.args;

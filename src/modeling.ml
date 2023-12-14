@@ -405,6 +405,7 @@ let map_put_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (map_put_var, map_put_premem);
     postcond = (map_put_var, map_put_postmem);
     args = [];
@@ -414,6 +415,7 @@ let array_list_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (array_list_var, array_list_premem);
     postcond = (array_list_var, array_list_postmem);
     args = [];
@@ -423,6 +425,7 @@ let file_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (file_var, file_premem);
     postcond = (file_var, file_postmem);
     args = [];
@@ -432,6 +435,7 @@ let image_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (image_var, image_premem);
     postcond = (image_var, image_postmem);
     args = [];
@@ -441,6 +445,7 @@ let image_create_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (image_create_var, image_create_premem);
     postcond = (image_create_var, image_create_postmem);
     args = [];
@@ -450,6 +455,7 @@ let class_get_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (class_get_var, class_get_premem);
     postcond = (class_get_var, class_get_postmem);
     args = [];
@@ -459,6 +465,7 @@ let print_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (print_var, print_premem);
     postcond = (print_var, print_postmem);
     args = [];
@@ -468,6 +475,7 @@ let file_input_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (file_input_var, file_input_premem);
     postcond = (file_input_var, file_input_postmem);
     args = [];
@@ -477,6 +485,7 @@ let obj_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (obj_var, obj_premem);
     postcond = (obj_var, obj_postmem);
     args = [];
@@ -486,6 +495,7 @@ let string_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (string_var, string_premem);
     postcond = (string_var, string_postmem);
     args = [];
@@ -495,6 +505,7 @@ let array_summary =
   {
     relation = Relation.M.empty;
     value = array_value;
+    usage_field = UseFieldMap.M.empty;
     precond = (array_var, array_premem);
     postcond = (array_var, array_postmem);
     args = [];
@@ -504,6 +515,7 @@ let array_set_summary =
   {
     relation = Relation.M.empty;
     value = array_set_value;
+    usage_field = UseFieldMap.M.empty;
     precond = (array_set_var, array_set_premem);
     postcond = (array_set_var, array_set_postmem);
     args = [];
@@ -513,6 +525,7 @@ let point_summary =
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
+    usage_field = UseFieldMap.M.empty;
     precond = (point_var, point_premem);
     postcond = (point_var, point_postmem);
     args = [];
