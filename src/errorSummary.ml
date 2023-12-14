@@ -59,9 +59,7 @@ let add_use_field value_map field_set =
 let get_use_field { precond = pre_var, pre_mem; _ } =
   Condition.M.fold
     (fun sym _ ufset ->
-      match
-        Condition.M.find_opt (Utils.get_next_symbol sym pre_mem) pre_mem
-      with
+      match Condition.M.find_opt (AST.get_next_symbol sym pre_mem) pre_mem with
       | Some value_map ->
           UseFieldMap.M.add sym (add_use_field value_map FieldSet.empty) ufset
       | _ -> ufset)

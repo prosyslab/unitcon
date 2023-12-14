@@ -6,14 +6,6 @@ module TailsSet = Set.Make (struct
   let compare = compare
 end)
 
-let get_this_symbol variable =
-  Condition.M.fold
-    (fun symbol id this_symbol ->
-      match id with
-      | Condition.RH_Var v when v = "this" -> symbol
-      | _ -> this_symbol)
-    variable Condition.RH_Any
-
 let rec get_tail_set symbol memory tails =
   match Condition.M.find_opt symbol memory with
   | Some sym ->
@@ -56,15 +48,14 @@ let get_change_field post_key pre_mem post_mem field_set =
 
 let get_change_fields { precond = _, pre_mem; postcond = post_var, post_mem; _ }
     =
-  let post_this = Utils.get_next_symbol (get_this_symbol post_var) post_mem in
+  let post_this =
+    AST.get_next_symbol (AST.get_id_symbol post_var "this") post_mem
+  in
   (* e.g., post_this = v3 *)
   get_change_field post_this pre_mem post_mem FieldSet.empty
 
-let get_class_name method_name =
-  Regexp.global_rm ("\\.[^\\.]+(.*)" |> Str.regexp) method_name
-
 let find_setter m_name m_summarys m_infos mmap =
-  let class_name = get_class_name m_name in
+  let class_name = Utils.get_class_name m_name in
   let change_fields =
     List.fold_left
       (fun field_set summary ->

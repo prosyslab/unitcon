@@ -371,35 +371,9 @@ module AST = struct
 
   and count_texp = function Exp -> 0 | _ -> 1
 
-  let is_array_init f =
-    let fname = (get_func f).method_name in
-    let arr =
-      [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
-    in
-    let rec check arr =
-      match arr with
-      | h :: t ->
-          if Str.string_match (h ^ "Array\\.<init>" |> Str.regexp) fname 0 then
-            true
-          else check t
-      | [] -> false
-    in
-    check arr
+  let is_array_init f = (get_func f).method_name |> Utils.is_array_init
 
-  let is_array_set f =
-    let fname = (get_func f).method_name in
-    let arr =
-      [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
-    in
-    let rec check arr =
-      match arr with
-      | h :: t ->
-          if Str.string_match (h ^ "Array\\.set" |> Str.regexp) fname 0 then
-            true
-          else check t
-      | [] -> false
-    in
-    check arr
+  let is_array_set f = (get_func f).method_name |> Utils.is_array_set
 
   let is_file f =
     let fname = (get_func f).method_name in
@@ -563,10 +537,28 @@ module AST = struct
     | Void (x, func, _) -> Seq (arg_seq, Void (x, func, arg))
     | _ -> s
 
-  (* functions for 5 *)
+  let get_rh_name ?(is_var = false) rh =
+    if is_var then match rh with Condition.RH_Var v -> v | _ -> ""
+    else match rh with Condition.RH_Symbol s -> s | _ -> ""
+
+  let get_next_symbol symbol memory =
+    match Condition.M.find_opt symbol memory with
+    | Some sym -> (
+        match Condition.M.find_opt Condition.RH_Any sym with
+        | Some s -> s
+        | None -> symbol)
+    | None -> symbol
+
+  let get_id_symbol vars id =
+    Condition.M.fold
+      (fun symbol symbol_id find ->
+        match symbol_id with
+        | Condition.RH_Var v when v = id -> symbol
+        | _ -> find)
+      vars Condition.RH_Any
+
   let rec get_tail_symbol field_name symbol memory =
-    let next_symbol = Condition.M.find_opt symbol memory in
-    match next_symbol with
+    match Condition.M.find_opt symbol memory with
     | Some sym -> (
         match Condition.M.find_opt (Condition.RH_Var field_name) sym with
         | Some s -> get_tail_symbol field_name s memory
@@ -576,8 +568,6 @@ module AST = struct
             | None -> symbol))
     | None -> symbol
 
-  let get_rh_name rh = match rh with Condition.RH_Symbol s -> s | _ -> ""
-
   let get_index_value v =
     match v with
     | Value.Eq (Int i) -> i |> string_of_int
@@ -585,16 +575,8 @@ module AST = struct
     | Value.Gt (Int i) -> i + 1 |> string_of_int
     | _ -> ""
 
-  let org_symbol id summary =
-    let variable, memory = summary.precond in
-    let id_symbol =
-      Condition.M.fold
-        (fun symbol symbol_id id_symbol ->
-          match symbol_id with
-          | Condition.RH_Var v when v = id -> symbol |> get_rh_name
-          | _ -> id_symbol)
-        variable ""
-    in
+  let org_symbol id { precond = pre_var, pre_mem; _ } =
+    let id_symbol = get_id_symbol pre_var id |> get_rh_name in
     Condition.M.fold
       (fun symbol symbol_trace find_variable ->
         let symbol = get_rh_name symbol in
@@ -604,7 +586,7 @@ module AST = struct
               match tail with Condition.RH_Symbol s -> s | _ -> trace_find_var)
             symbol_trace find_variable
         else find_variable)
-      memory ""
+      pre_mem ""
 
   let get_array_index array summary =
     let _, memory = summary.precond in
@@ -848,13 +830,10 @@ module AST = struct
           |> Regexp.first_rm (Str.regexp "Array")
           |> String.cat "new "
         else if is_array_set func then ""
-        else if Str.string_match (".*\\.<init>" |> Str.regexp) f.method_name 0
-        then
+        else if Utils.is_init_method f.method_name then
           get_short_class_name f.method_name
-          |> Str.global_replace Regexp.dollar "."
-          |> String.cat "new "
-        else
-          get_method_name f.method_name |> Str.global_replace Regexp.dollar "."
+          |> Utils.replace_nested_symbol |> String.cat "new "
+        else get_method_name f.method_name |> Utils.replace_nested_symbol
     | _ -> "Func"
 
   let is_var = function Variable _ -> true | _ -> false
@@ -877,7 +856,7 @@ module AST = struct
     | Char -> "char " ^ (v |> snd)
     | String -> "String " ^ (v |> snd)
     | Object name ->
-        (name |> get_short_class_name |> Str.global_replace Regexp.dollar ".")
+        (name |> get_short_class_name |> Utils.replace_nested_symbol)
         ^ " " ^ (v |> snd)
     | Array typ -> (
         match typ with
@@ -900,8 +879,7 @@ module AST = struct
         | Var (_, id), Some idx -> id ^ (idx |> string_of_int) ^ "."
         | _ -> "")
     | ClassName c ->
-        (c |> get_short_class_name |> Str.global_replace Regexp.dollar ".")
-        ^ "."
+        (c |> get_short_class_name |> Utils.replace_nested_symbol) ^ "."
     | _ -> "ID."
 
   let id_code = function
@@ -926,7 +904,7 @@ module AST = struct
   let exp_code exp x =
     match exp with
     | Primitive p -> primitive_code p x
-    | GlobalConstant g -> (g |> Str.global_replace Regexp.dollar ".") ^ ";\n"
+    | GlobalConstant g -> Utils.replace_nested_symbol g ^ ";\n"
     | Null -> "null;\n"
     | Exp -> "Exp;\n"
 
@@ -936,11 +914,7 @@ module AST = struct
         if is_var x1 then
           id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
           ^ arg_code func arg ^ ";\n"
-        else if
-          Str.string_match
-            (".*\\.<init>" |> Str.regexp)
-            (get_func func).method_name 0
-        then
+        else if Utils.is_init_method (get_func func).method_name then
           let code =
             id_code x0 ^ " = " ^ func_code func ^ arg_code func arg ^ ";\n"
           in
@@ -951,11 +925,8 @@ module AST = struct
           id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
           ^ arg_code func arg ^ ";\n"
     | Void (x, func, arg) ->
-        if
-          Str.string_match
-            (".*\\.<init>" |> Str.regexp)
-            (get_func func).method_name 0
-        then func_code func ^ arg_code func arg ^ ";\n"
+        if Utils.is_init_method (get_func func).method_name then
+          func_code func ^ arg_code func arg ^ ";\n"
         else recv_name_code x func ^ func_code func ^ arg_code func arg ^ ";\n"
     | Seq (s1, s2) -> code s1 ^ code s2
     | Skip -> ""

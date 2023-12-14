@@ -99,61 +99,20 @@ let rec find_relation given_symbol relation =
   | Some find_symbol -> find_relation find_symbol relation
   | None -> given_symbol
 
-let get_rh_name ?(is_var = false) rh =
-  if is_var then match rh with Condition.RH_Var v -> v | _ -> ""
-  else match rh with Condition.RH_Symbol s -> s | _ -> ""
-
-let rec get_tail_symbol field_name symbol memory =
-  let next_symbol = Condition.M.find_opt symbol memory in
-  match next_symbol with
-  | Some sym -> (
-      match Condition.M.find_opt (field_name |> mk_var) sym with
-      | Some s -> get_tail_symbol field_name s memory
-      | None -> (
-          match Condition.M.find_opt Condition.RH_Any sym with
-          | Some any_sym -> get_tail_symbol field_name any_sym memory
-          | None -> symbol))
-  | None -> symbol
-
-let find_this_symbol sym condition =
-  Condition.M.fold
-    (fun symbol symbol_id this_symbol ->
-      match symbol_id with
-      | Condition.RH_Var v when v = "this" -> symbol
-      | _ -> this_symbol)
-    condition sym
-
-let find_return_symbol sym condition =
-  Condition.M.fold
-    (fun symbol symbol_id return_symbol ->
-      match symbol_id with
-      | Condition.RH_Var v when v = "return" -> symbol
-      | _ -> return_symbol)
-    condition sym
-
-let get_id_symbol id variable memory =
-  let this_symbol = find_this_symbol Condition.RH_Any variable in
-  let this_tail_symbol = get_tail_symbol "this" this_symbol memory in
-  match Condition.M.find_opt this_tail_symbol memory with
+let get_target_symbol id { precond = pre_var, pre_mem; _ } =
+  let this_symbol = AST.get_id_symbol pre_var "this" in
+  let this_tail_symbol = AST.get_tail_symbol "this" this_symbol pre_mem in
+  match Condition.M.find_opt this_tail_symbol pre_mem with
   | None -> this_symbol
   | Some mem -> (
       let if_field_symbol = Condition.M.find_opt (id |> mk_var) mem in
       match if_field_symbol with
       | Some field_symbol -> field_symbol
-      | None ->
-          let symbol =
-            Condition.M.fold
-              (fun symbol symbol_id this_tail_symbol ->
-                match symbol_id with
-                | Condition.RH_Var v when v = id -> symbol
-                | _ -> this_tail_symbol)
-              variable Condition.RH_Any
-          in
-          symbol)
+      | None -> AST.get_id_symbol pre_var id)
 
 let find_variable head_symbol variables =
   match Condition.M.find_opt (head_symbol |> mk_symbol) variables with
-  | Some var -> get_rh_name ~is_var:true var
+  | Some var -> AST.get_rh_name ~is_var:true var
   | None -> ""
 
 let more_find_head_symbol head_symbol _ memory =
@@ -185,7 +144,7 @@ let rec find_real_head head_symbol memory =
 let get_head_symbol symbol mem =
   Condition.M.fold
     (fun hd_symbol trace hd_list ->
-      let hd = find_real_head (get_rh_name hd_symbol) mem in
+      let hd = find_real_head (AST.get_rh_name hd_symbol) mem in
       Condition.M.fold
         (fun trace_hd trace_tl hd_list ->
           match trace_tl with
@@ -194,7 +153,8 @@ let get_head_symbol symbol mem =
               match trace_hd with
               | Condition.RH_Index i when symbol = i ->
                   ( symbol,
-                    Utils.get_next_symbol trace_tl mem |> get_rh_name |> mk_some,
+                    AST.get_next_symbol trace_tl mem
+                    |> AST.get_rh_name |> mk_some,
                     hd )
                   :: hd_list
               | _ -> hd_list))
@@ -255,7 +215,9 @@ let get_caller_value_symbol_list caller_prop callee_param_index_list =
   |> List.rev
 
 let get_field_symbol id symbol mem =
-  get_tail_symbol (id |> get_rh_name ~is_var:true) (symbol |> mk_symbol) mem
+  AST.get_tail_symbol
+    (id |> AST.get_rh_name ~is_var:true)
+    (symbol |> mk_symbol) mem
 
 let get_value_symbol key sym c t_mem c_mem =
   let c_sym =
@@ -266,9 +228,13 @@ let get_value_symbol key sym c t_mem c_mem =
         | Some s -> s
         | None -> Condition.RH_Any (*fail to match*))
   in
-  let field_name = get_rh_name ~is_var:true key in
-  let tail_t_symbol = get_tail_symbol field_name sym t_mem |> get_rh_name in
-  let tail_c_symbol = get_tail_symbol field_name c_sym c_mem |> get_rh_name in
+  let field_name = AST.get_rh_name ~is_var:true key in
+  let tail_t_symbol =
+    AST.get_tail_symbol field_name sym t_mem |> AST.get_rh_name
+  in
+  let tail_c_symbol =
+    AST.get_tail_symbol field_name c_sym c_mem |> AST.get_rh_name
+  in
   (tail_t_symbol, tail_c_symbol)
 
 let get_value_symbol_list ~is_init t_summary c_summary vs_list =
@@ -668,11 +634,10 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
     [] vs_list
   |> List.rev
 
-(* value_symbol_list: (caller, callee) list
+(* value_sym_list: (caller, callee) list
    callee_sym_list: (symbol, value, head) list --> value is set only when symbol is index
 *)
-let combine_memory base_summary value_symbol_list callee_sym_list =
-  let _, memory = base_summary.precond in
+let combine_memory { precond = _, pre_mem; _ } value_sym_list callee_sym_list =
   let combine r s value trace org_mem =
     Condition.M.add (r |> mk_symbol)
       (Condition.M.add (s |> mk_index) (value |> mk_symbol) trace)
@@ -685,14 +650,14 @@ let combine_memory base_summary value_symbol_list callee_sym_list =
           match v with
           | Some value -> (
               match Condition.M.find_opt (r |> mk_symbol) mem with
-              | Some m when find_real_head r memory = head ->
+              | Some m when find_real_head r pre_mem = head ->
                   combine r s value m mem
-              | None when find_real_head r memory = head ->
+              | None when find_real_head r pre_mem = head ->
                   combine r s value Condition.M.empty mem
               | _ -> mem)
           | _ -> mem)
         mem callee_sym_list)
-    memory value_symbol_list
+    pre_mem value_sym_list
 
 let combine_value base_value vc_list =
   List.fold_left
@@ -747,8 +712,6 @@ let new_mem_summary old_summary new_mem =
     postcond = (old_summary.postcond |> fst, new_mem);
     args = old_summary.args;
   }
-
-let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 
 let is_primitive x =
   match AST.get_vinfo x |> fst with
@@ -805,38 +768,6 @@ let is_public m_name m_info =
       | Public when is_test_file info.MethodInfo.filename |> not -> true
       | _ -> false)
 
-let is_init_method method_name =
-  Str.string_match (".*\\.<init>" |> Str.regexp) method_name 0
-
-let is_array_init m =
-  let arr =
-    [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
-  in
-  let rec check arr =
-    match arr with
-    | h :: t ->
-        if Str.string_match (h ^ "Array\\.<init>" |> Str.regexp) m 0 then true
-        else check t
-    | [] -> false
-  in
-  check arr
-
-let is_array_set m =
-  let arr =
-    [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
-  in
-  let rec check arr =
-    match arr with
-    | h :: t ->
-        if Str.string_match (h ^ "Array\\.set" |> Str.regexp) m 0 then true
-        else check t
-    | [] -> false
-  in
-  check arr
-
-let get_class_name_from_m method_name =
-  Regexp.global_rm ("\\.[^\\.]+(.*)" |> Str.regexp) method_name
-
 let get_package_from_v v =
   let typ = match v with This typ -> typ | Var (typ, _) -> typ in
   match typ with
@@ -876,13 +807,13 @@ let is_new_loc summary =
       mem []
   in
   let post_var, post_mem = summary.postcond in
-  let return_var = find_return_symbol Condition.RH_Any post_var in
+  let return_var = AST.get_id_symbol post_var "return" in
   let new_loc_list =
     (match Condition.M.find_opt return_var post_mem with
     | Some m -> collect_symbol m
     | _ -> [])
     |> List.filter (fun x -> contains_symbol x (summary.precond |> snd) |> not)
-    |> List.filter (fun x -> is_null (get_rh_name x) |> not)
+    |> List.filter (fun x -> is_null (AST.get_rh_name x) |> not)
   in
   if new_loc_list = [] then false else true
 
@@ -891,7 +822,7 @@ let is_method_with_memory_effect m_name summary =
   List.filter is_new_loc sum_list = [] |> not
 
 let is_void_method m_name s_map =
-  let c_name = get_class_name_from_m m_name in
+  let c_name = Utils.get_class_name m_name in
   let slist = try SetterMap.M.find c_name s_map with _ -> [] in
   let rec check lst =
     match lst with
@@ -1163,8 +1094,7 @@ let calc_value id value =
             [ (prec, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
       | _ -> failwith "not implemented outside")
 
-let find_target_value id summary =
-  let variables, mem = summary.precond in
+let find_target_value id { precond = pre_var, pre_mem; value; _ } =
   let target_variable =
     Condition.M.fold
       (fun symbol variable find_variable ->
@@ -1172,12 +1102,12 @@ let find_target_value id summary =
         | Condition.RH_Var var when var = id -> (
             match symbol with Condition.RH_Symbol s -> s | _ -> find_variable)
         | _ -> find_variable)
-      variables ""
+      pre_var ""
   in
   let target_variable =
     Condition.M.fold
       (fun symbol symbol_trace find_variable ->
-        let symbol = get_rh_name symbol in
+        let symbol = AST.get_rh_name symbol in
         if symbol = target_variable then
           Condition.M.fold
             (fun _ trace_tl trace_find_var ->
@@ -1186,13 +1116,12 @@ let find_target_value id summary =
               | _ -> trace_find_var)
             symbol_trace find_variable
         else find_variable)
-      mem target_variable
+      pre_mem target_variable
   in
-  let values = summary.value in
   Value.M.fold
     (fun symbol value find_value ->
       if symbol = target_variable then value else find_value)
-    values
+    value
     Value.{ from_error = false; value = Value.Eq NonValue }
 
 let get_value typ id summary =
@@ -1236,18 +1165,16 @@ let get_same_precond_param summary param_sets =
         | _ -> failwith "Fail: find the target value"
       in
       let new_set =
-        let x =
-          VarSet.fold
-            (fun p new_set ->
-              let v = get_p_value p summary in
-              VarSet.fold
-                (fun op_p new_set ->
-                  if v = get_p_value op_p summary then VarSet.add op_p new_set
-                  else new_set)
-                set (VarSet.add p new_set))
-            set VarSet.empty
-        in
-        x |> filter_singleton
+        VarSet.fold
+          (fun p new_set ->
+            let v = get_p_value p summary in
+            VarSet.fold
+              (fun op_p new_set ->
+                if v = get_p_value op_p summary then VarSet.add op_p new_set
+                else new_set)
+              set (VarSet.add p new_set))
+          set VarSet.empty
+        |> filter_singleton
       in
       VarSets.add new_set sets)
     param_sets VarSets.empty
@@ -1260,10 +1187,8 @@ let get_same_params_set summary params =
 let satisfied_c m_summary id candidate_constructor summary =
   let c_summarys = SummaryMap.M.find candidate_constructor summary in
   let target_symbol =
-    get_id_symbol
-      (if is_receiver id then "this" else id)
-      (m_summary.precond |> fst) (m_summary.precond |> snd)
-    |> get_rh_name
+    get_target_symbol (if is_receiver id then "this" else id) m_summary
+    |> AST.get_rh_name
   in
   if target_symbol = "" then [ (true, c_summarys |> List.hd) ]
   else
@@ -1271,8 +1196,8 @@ let satisfied_c m_summary id candidate_constructor summary =
       (fun lst c_summary ->
         ( [
             ( find_relation target_symbol m_summary.relation,
-              find_this_symbol Condition.RH_Any (c_summary.postcond |> fst)
-              |> get_rh_name );
+              AST.get_id_symbol (c_summary.postcond |> fst) "this"
+              |> AST.get_rh_name );
           ]
           |> check_intersect ~is_init:true m_summary c_summary,
           c_summary )
@@ -1386,7 +1311,7 @@ let global_var_list class_name t_summary summary m_info e_info =
         match var with
         | Condition.RH_Var var ->
             if Str.string_match (".*\\." ^ class_name |> Str.regexp) var 0 then
-              get_rh_name symbol |> mk_some
+              AST.get_rh_name symbol |> mk_some
             else find_var
         | _ -> find_var)
       vars None
@@ -1401,7 +1326,7 @@ let global_var_list class_name t_summary summary m_info e_info =
       let target_variable =
         Condition.M.fold
           (fun symbol symbol_trace find_variable ->
-            if get_rh_name symbol = x then
+            if AST.get_rh_name symbol = x then
               Condition.M.fold
                 (fun trace_hd _ trace_find_var ->
                   match trace_hd with
@@ -1487,7 +1412,7 @@ let get_field_map ret s_map =
 let error_entry_func ee es m_info c_info =
   let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
   let f_arg_list = mk_arg ~is_s:(is_s_method ee m_info) param es in
-  let c_name = get_class_name_from_m ee in
+  let c_name = Utils.get_class_name ee in
   let typ_list =
     if is_private_class c_name c_info then
       try IG.succ (c_info |> snd) c_name |> List.cons c_name
@@ -1518,7 +1443,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
         (try SetterMap.M.find class_name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
                is_private s m_info |> not
-               && (FieldSet.subset var.field fields || is_array_set s))
+               && (FieldSet.subset var.field fields || Utils.is_array_set s))
       in
       List.fold_left
         (fun lst (s, _) ->
@@ -1551,12 +1476,10 @@ let get_ret_obj class_name m_info (c_info, ig) s_map =
         (fun init_list class_name_to_find ->
           if
             match_return_object class_name_to_find method_name m_info
-            && is_private_class
-                 (method_name |> get_class_name_from_m)
-                 (c_info, ig)
+            && is_private_class (Utils.get_class_name method_name) (c_info, ig)
                |> not
             && is_private method_name m_info |> not
-            && is_init_method method_name |> not
+            && Utils.is_init_method method_name |> not
             && is_void_method method_name s_map |> not
           then method_name :: init_list
           else init_list)
@@ -1637,7 +1560,7 @@ let satisfied_c_list id t_summary summary summary_list =
         let pick =
           (List.fold_left (fun pick (check, summary) ->
                if check then
-                 if is_array_init constructor then
+                 if Utils.is_array_init constructor then
                    ( is_from_error summary,
                      constructor,
                      modify_summary id t_summary summary )
@@ -1652,7 +1575,7 @@ let satisfied_c_list id t_summary summary summary_list =
 
 let get_cfunc constructor m_info =
   let cost, c, s = constructor in
-  let t = get_class_name_from_m c in
+  let t = Utils.get_class_name c in
   let func = AST.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
     mk_arg ~is_s:(is_s_method c m_info)
@@ -1747,8 +1670,8 @@ let cname_condition m_name m_info =
   match MethodInfo.M.find_opt m_name m_info with
   | Some info ->
       (info.MethodInfo.return <> "" && is_s_method m_name m_info)
-      || is_init_method m_name
-  | _ -> is_init_method m_name
+      || Utils.is_init_method m_name
+  | _ -> Utils.is_init_method m_name
 
 let get_cname f = AST.ClassName (AST.get_func f).AST.typ
 
@@ -1764,11 +1687,9 @@ let get_arg_seq (args : AST.id list) =
         in
         if is_primitive arg then x
         else
-          x
-          |> List.rev_append
-               (List.fold_left
-                  (fun lst x -> AST.mk_assign_arg x arg :: lst)
-                  [] s)))
+          List.rev_append
+            (List.fold_left (fun lst x -> AST.mk_assign_arg x arg :: lst) [] s)
+            x))
     [ AST.Skip ] args
 
 let const_unroll p summary m_info e_info =
@@ -1821,7 +1742,7 @@ let recv_in_assign_unroll (prec, p) m_info c_info =
       if
         is_nested_class (AST.get_func f).import
         && is_s_class (AST.get_func f).import c_info |> not
-        && is_init_method (AST.get_func f).method_name
+        && Utils.is_init_method (AST.get_func f).method_name
       then (
         let recv, f, arg = get_inner_func f arg in
         let r2 = AST.recv_in_assign_rule2_1 p recv f arg in
@@ -2108,7 +2029,6 @@ let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
       ee_set caller_list
 
 let pretty_format p =
-  let i_format i = Str.replace_first Regexp.dollar "." i in
   let rec imports s set =
     let add_import import set =
       (if is_nested_class import then
@@ -2135,8 +2055,8 @@ let pretty_format p =
   let import =
     ImportSet.fold
       (fun i s ->
-        if i = "" || Str.string_match (Str.regexp ".*Array$") i 0 then s
-        else s ^ "import " ^ (i |> i_format) ^ ";\n")
+        if i = "" || Utils.is_array i then s
+        else s ^ "import " ^ (i |> Utils.replace_nested_symbol) ^ ";\n")
       (imports p ImportSet.empty)
       ""
   in
