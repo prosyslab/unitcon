@@ -3,6 +3,8 @@ module JsonUtil = Yojson.Safe.Util
 
 let compare_string = String.compare
 
+let compare_bool = Bool.compare
+
 let compare_list = List.compare
 
 type method_name = string [@@deriving compare]
@@ -163,9 +165,11 @@ module Condition = struct
   type t = var * mem
 end
 
-module FieldSet = Set.Make (struct
-  type t = string [@@deriving compare]
-end)
+module Field = struct
+  type t = { used_in_error : bool; name : string } [@@deriving compare]
+end
+
+module FieldSet = Set.Make (Field)
 
 module UseFieldMap = struct
   module M = Map.Make (struct
@@ -570,12 +574,15 @@ module AST = struct
             | None -> symbol))
     | None -> symbol
 
-  let get_index_value v =
-    match v with
-    | Value.Eq (Int i) -> i |> string_of_int
-    | Value.Ge (Int i) -> i |> string_of_int
-    | Value.Gt (Int i) -> i + 1 |> string_of_int
-    | _ -> ""
+  let get_index_value (v : Value.v) : Field.t =
+    match v.value with
+    | Value.Eq (Int i) ->
+        { used_in_error = v.from_error; name = i |> string_of_int }
+    | Value.Ge (Int i) ->
+        { used_in_error = v.from_error; name = i |> string_of_int }
+    | Value.Gt (Int i) ->
+        { used_in_error = v.from_error; name = i + 1 |> string_of_int }
+    | _ -> { used_in_error = false; name = "" }
 
   let org_symbol id { precond = pre_var, pre_mem; _ } =
     let id_symbol = get_id_symbol pre_var id |> get_rh_name in
@@ -702,16 +709,11 @@ module AST = struct
     let arr_id = x0 |> get_vinfo |> snd in
     let new_idx, new_elem = get_array_index arr_id (x0 |> get_v).summary in
     (* remove setter of duplicate index *)
-    if
-      FieldSet.mem
-        ((new_idx |> snd).value |> get_index_value)
-        (x0 |> get_v).field
-    then []
+    if FieldSet.mem (new_idx |> snd |> get_index_value) (x0 |> get_v).field then
+      []
     else
       let nfield =
-        FieldSet.add
-          ((new_idx |> snd).value |> get_index_value)
-          (x0 |> get_v).field
+        FieldSet.add (new_idx |> snd |> get_index_value) (x0 |> get_v).field
       in
       let new_next_summary =
         next_summary_in_void (x0 |> get_v).summary

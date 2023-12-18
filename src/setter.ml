@@ -39,7 +39,10 @@ let get_change_field post_key pre_mem post_mem field_set =
                     let pre = get_tail_set value pre_mem TailsSet.empty in
                     let post = get_tail_set value post_mem TailsSet.empty in
                     let change_field = if pre = post then false else true in
-                    if change_field then FieldSet.add id field_set
+                    if change_field then
+                      FieldSet.add
+                        { used_in_error = false; name = id }
+                        field_set
                     else field_set
                 | _ -> field_set
               in

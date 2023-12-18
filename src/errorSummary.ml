@@ -6,7 +6,8 @@ let add_use_field value_map field_set =
   Condition.M.fold
     (fun field _ field_set ->
       match field with
-      | Condition.RH_Var id -> FieldSet.add id field_set
+      | Condition.RH_Var id ->
+          FieldSet.add { used_in_error = true; name = id } field_set
       | _ -> field_set)
     value_map field_set
 
