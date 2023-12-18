@@ -286,6 +286,11 @@ let is_from_error summary =
     (fun _ v check -> if v.Value.from_error then 1 else check)
     summary.value 0
 
+let is_used_in_error fieldset =
+  FieldSet.fold
+    (fun f check -> if f.used_in_error then true else check)
+    fieldset false
+
 let check_intersect ~is_init caller_prop callee_summary vs_list =
   let vmap_maker symbol target_vmap from_error =
     let value = Value.M.find symbol target_vmap in
@@ -1454,11 +1459,14 @@ let error_entry_func ee es m_info c_info =
   List.fold_left
     (fun lst typ ->
       if VarListSet.cardinal f_arg_list = 0 then
-        (AST.F { typ; method_name = ee; import = typ; summary = es }, []) :: lst
+        (0, AST.F { typ; method_name = ee; import = typ; summary = es }, [])
+        :: lst
       else
         VarListSet.fold
           (fun f_arg acc ->
-            (AST.F { typ; method_name = ee; import = typ; summary = es }, f_arg)
+            ( 0,
+              AST.F { typ; method_name = ee; import = typ; summary = es },
+              f_arg )
             :: acc)
           f_arg_list lst)
     [] typ_list
@@ -1478,11 +1486,12 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
                && (FieldSet.subset var.field fields || Utils.is_array_set s))
       in
       List.fold_left
-        (fun lst (s, _) ->
+        (fun lst (s, fields) ->
           let f_arg_list =
             mk_arg ~is_s:(is_s_method s m_info)
               (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary
           in
+          let prec = if is_used_in_error fields then 1 else -1 in
           let f =
             AST.F
               {
@@ -1492,9 +1501,11 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
                 summary = var.summary;
               }
           in
-          if VarListSet.cardinal f_arg_list = 0 then (f, []) :: lst
+          if VarListSet.cardinal f_arg_list = 0 then (prec, f, []) :: lst
           else
-            VarListSet.fold (fun f_arg acc -> (f, f_arg) :: acc) f_arg_list lst)
+            VarListSet.fold
+              (fun f_arg acc -> (prec, f, f_arg) :: acc)
+              f_arg_list lst)
         [] setter_list
 
 let get_ret_obj class_name m_info (c_info, ig) s_map =
@@ -1814,8 +1825,8 @@ let fcall_in_void_unroll p m_info c_info s_map =
       if lst = [] then raise Not_found_setter
       else
         List.fold_left
-          (fun lst (f, arg) ->
-            (0, AST.fcall_in_void_rule p f (AST.Arg arg)) :: lst)
+          (fun lst (prec, f, arg) ->
+            (prec, AST.fcall_in_void_rule p f (AST.Arg arg)) :: lst)
           [] lst
   | _ -> failwith "Fail: fcall_in_void_unroll"
 
@@ -2125,7 +2136,7 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
     (cg, summary, call_prop_map, m_info, c_info, s_map, e_info) =
   let apply_rule list =
     List.fold_left
-      (fun lst (f, arg) ->
+      (fun lst (_, f, arg) ->
         AST.fcall_in_void_rule (AST.Void (Id, Func, Arg [])) f (AST.Arg arg)
         :: lst)
       [] list
