@@ -291,6 +291,16 @@ let is_used_in_error fieldset =
     (fun f check -> if f.used_in_error then true else check)
     fieldset false
 
+let is_subset f1 f2 =
+  FieldSet.fold
+    (fun f check ->
+      if
+        FieldSet.mem { used_in_error = false; name = f.name } f2
+        || FieldSet.mem { used_in_error = true; name = f.name } f2
+      then true && check
+      else false)
+    f1 true
+
 let check_intersect ~is_init caller_prop callee_summary vs_list =
   let vmap_maker symbol target_vmap from_error =
     let value = Value.M.find symbol target_vmap in
@@ -1506,7 +1516,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
         (try SetterMap.M.find class_name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
                is_private s m_info |> not
-               && (FieldSet.subset var.field fields || Utils.is_array_set s))
+               && (is_subset var.field fields || Utils.is_array_set s))
       in
       List.fold_left
         (fun lst (s, fields) ->
@@ -1514,7 +1524,17 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
             mk_arg ~is_s:(is_s_method s m_info)
               (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary
           in
-          let prec = if is_used_in_error fields then 1 else -1 in
+          let expected_field =
+            AST.get_field_from_ufmap "this"
+              (var.summary.precond |> fst)
+              var.summary.use_field
+          in
+          let prec =
+            if
+              is_subset expected_field fields && is_used_in_error expected_field
+            then 0
+            else -1
+          in
           let f =
             AST.F
               {
