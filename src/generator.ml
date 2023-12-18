@@ -1751,7 +1751,7 @@ let get_arg_seq (args : AST.id list) =
 
 let const_unroll p summary m_info e_info =
   match p with
-  | AST.Const (x, _) when AST.const p ->
+  | AST.Const (x, _) ->
       let typ, id = AST.get_vinfo x in
       if is_primitive x then
         List.fold_left
@@ -1782,7 +1782,7 @@ let const_unroll p summary m_info e_info =
 
 let fcall_in_assign_unroll p summary cg m_info c_info s_map =
   match p with
-  | AST.Assign (x0, _, _, _) when AST.fcall_in_assign p ->
+  | AST.Assign (x0, _, _, _) ->
       let field_set = get_field_set x0 s_map in
       List.rev_append
         (get_c x0 summary cg m_info c_info)
@@ -1835,15 +1835,12 @@ let rec arg_in_assign_unroll (prec, p) =
   | _ -> failwith "Fail: arg_in_assign_unroll"
 
 let void_unroll p =
-  match p with
-  | AST.Seq _ when AST.void p ->
-      (0, AST.void_rule1 p)
-      :: List.fold_left (fun lst x -> (0, x) :: lst) [] (AST.void_rule2 p)
-  | _ -> failwith "Fail: void_unroll"
+  (0, AST.void_rule1 p)
+  :: List.fold_left (fun lst x -> (0, x) :: lst) [] (AST.void_rule2 p)
 
 let fcall_in_void_unroll p m_info c_info s_map =
   match p with
-  | AST.Void (x, _, _) when AST.fcall1_in_void p || AST.fcall2_in_void p ->
+  | AST.Void (x, _, _) ->
       let lst = get_void_func x m_info c_info s_map in
       if lst = [] then raise Not_found_setter
       else
