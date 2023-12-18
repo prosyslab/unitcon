@@ -475,6 +475,17 @@ module AST = struct
     | _ -> s
 
   (* 3 *)
+  let get_field_from_ufmap target var ufmap =
+    let symbol =
+      Condition.M.fold
+        (fun sym id find ->
+          match id with Condition.RH_Var i when i = target -> sym | _ -> find)
+        var Condition.RH_Any
+    in
+    match UseFieldMap.M.find_opt symbol ufmap with
+    | Some f -> f
+    | _ -> FieldSet.empty
+
   let recv_in_assign_rule1 s c =
     match s with
     | Assign (x0, _, func, arg) -> Assign (x0, c, func, arg)
@@ -489,7 +500,12 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
-              field = FieldSet.empty;
+              field =
+                (match func with
+                | Func -> FieldSet.empty
+                | F f ->
+                    get_field_from_ufmap "this" (f.summary.precond |> fst)
+                      f.summary.use_field);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -506,7 +522,12 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
-              field = FieldSet.empty;
+              field =
+                (match func with
+                | Func -> FieldSet.empty
+                | F f ->
+                    get_field_from_ufmap "this" (f.summary.precond |> fst)
+                      f.summary.use_field);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -767,7 +788,12 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
-              field = FieldSet.empty;
+              field =
+                (match func with
+                | Func -> FieldSet.empty
+                | F f ->
+                    get_field_from_ufmap "this" (f.summary.precond |> fst)
+                      f.summary.use_field);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }
@@ -784,7 +810,12 @@ module AST = struct
             {
               import = (match func with Func -> "" | F f -> f.import);
               variable = (Var (Object typ, id), Some idx);
-              field = FieldSet.empty;
+              field =
+                (match func with
+                | Func -> FieldSet.empty
+                | F f ->
+                    get_field_from_ufmap "this" (f.summary.precond |> fst)
+                      f.summary.use_field);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
             }

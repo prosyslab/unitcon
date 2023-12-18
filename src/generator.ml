@@ -1390,13 +1390,27 @@ let mk_params_list summary params_set org_param =
       (fun params v ->
         match v with
         | Var (typ, _) when typ = NonType -> params
-        | _ ->
+        | This _ ->
             incr new_var;
             AST.
               {
                 import = get_package_from_v v;
                 variable = (v, !new_var |> mk_some);
-                field = FieldSet.empty;
+                field =
+                  AST.get_field_from_ufmap "this" (summary.precond |> fst)
+                    summary.use_field;
+                summary;
+              }
+            :: params
+        | Var (_, id) ->
+            incr new_var;
+            AST.
+              {
+                import = get_package_from_v v;
+                variable = (v, !new_var |> mk_some);
+                field =
+                  AST.get_field_from_ufmap id (summary.precond |> fst)
+                    summary.use_field;
                 summary;
               }
             :: params)
@@ -1439,12 +1453,21 @@ let mk_arg ~is_s param s =
     (fun arg_set lst -> VarListSet.add (lst |> List.rev) arg_set)
     VarListSet.empty params_list
 
-let get_field_map ret s_map =
+let get_field_set ret s_map =
   let c_name = AST.get_vinfo ret |> fst |> get_class_name in
-  List.fold_left
-    (fun fm (_, fields) -> FieldSet.union fields fm)
-    FieldSet.empty
-    (try SetterMap.M.find c_name s_map with _ -> [])
+  let fields =
+    List.fold_left
+      (fun fm (_, fields) -> FieldSet.union fields fm)
+      (ret |> AST.get_v).field
+      (try SetterMap.M.find c_name s_map with _ -> [])
+  in
+  FieldSet.fold
+    (fun x new_fields ->
+      let dup = Field.{ used_in_error = false; name = x.name } in
+      if x.used_in_error && FieldSet.mem dup new_fields then
+        FieldSet.remove dup new_fields
+      else new_fields)
+    fields fields
 
 let error_entry_func ee es m_info c_info =
   let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
@@ -1760,13 +1783,13 @@ let const_unroll p summary m_info e_info =
 let fcall_in_assign_unroll p summary cg m_info c_info s_map =
   match p with
   | AST.Assign (x0, _, _, _) when AST.fcall_in_assign p ->
-      let field_map = get_field_map x0 s_map in
+      let field_set = get_field_set x0 s_map in
       List.rev_append
         (get_c x0 summary cg m_info c_info)
         (get_ret_c x0 summary m_info c_info s_map)
       |> List.fold_left
            (fun lst (prec, (f, arg)) ->
-             (prec, AST.fcall_in_assign_rule p field_map f arg) :: lst)
+             (prec, AST.fcall_in_assign_rule p field_set f arg) :: lst)
            []
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
