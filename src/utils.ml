@@ -45,3 +45,6 @@ let is_array package =
     | [] -> false
   in
   check arr
+
+let is_modeling_set fname =
+  is_array_set fname || Str.string_match ("java.util.Map.put" |> Str.regexp) fname 0

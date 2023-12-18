@@ -286,10 +286,12 @@ let is_from_error summary =
     (fun _ v check -> if v.Value.from_error then 1 else check)
     summary.value 0
 
-let is_used_in_error fieldset =
+let contains_used_in_error base_set target_set =
   FieldSet.fold
-    (fun f check -> if f.used_in_error then true else check)
-    fieldset false
+    (fun f check ->
+      if FieldSet.mem { name = f.name; used_in_error = true } base_set then true
+      else check)
+    target_set false
 
 let is_subset f1 f2 =
   FieldSet.fold
@@ -1524,14 +1526,9 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
             mk_arg ~is_s:(is_s_method s m_info)
               (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary
           in
-          let expected_field =
-            AST.get_field_from_ufmap "this"
-              (var.summary.precond |> fst)
-              var.summary.use_field
-          in
           let prec =
             if
-              is_subset expected_field fields && is_used_in_error expected_field
+              contains_used_in_error var.field fields || Utils.is_modeling_set s
             then 0
             else -1
           in
