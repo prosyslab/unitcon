@@ -16,6 +16,7 @@ type t = {
   call_prop_file : string;
   inheritance_file : string;
   enum_file : string;
+  constant_file : string;
   extra_callee_file : string;
   compile_command : string;
   test_command : string;
@@ -74,8 +75,17 @@ let parse_class_info filename =
   (info |> fst, info |> snd |> Modeling.add_java_package_inheritance)
 
 let parse_enum_info filename =
-  if not (Sys.file_exists filename) then EnumInfo.M.empty
-  else Json.from_file filename |> Enum.of_json
+  if not (Sys.file_exists filename) then InstanceInfo.M.empty
+  else Json.from_file filename |> Constant.of_enum_json
+
+let parse_instance_info filename inst_info =
+  if not (Sys.file_exists filename) then inst_info
+  else Json.from_file filename |> Constant.of_ginstance_json inst_info
+
+let parse_primitive_info filename =
+  let default = Constant.default_primitive in
+  if not (Sys.file_exists filename) then default
+  else Json.from_file filename |> Constant.of_primitive_json default
 
 let parse_extra_callee filename minfo callgraph =
   if not (Sys.file_exists filename) then callgraph
@@ -204,6 +214,7 @@ let init program_dir =
     call_prop_file = cons con_path "call_proposition.json" |> cons program_dir;
     inheritance_file = cons con_path "inheritance_info.json" |> cons program_dir;
     enum_file = cons con_path "enum_info.json" |> cons program_dir;
+    constant_file = cons con_path "extra_constant.json" |> cons program_dir;
     extra_callee_file = cons con_path "extra_callee.json" |> cons program_dir;
     compile_command = cons con_path "compile_command" |> cons program_dir;
     test_command = cons con_path "test_command" |> cons program_dir;
@@ -256,7 +267,10 @@ let run program_dir =
   in
   let setter_map = get_setter summary method_info in
   let class_info = parse_class_info info.inheritance_file in
-  let enum_info = parse_enum_info info.enum_file in
+  let instance_info =
+    parse_enum_info info.enum_file |> parse_instance_info info.constant_file
+  in
+  let primitive_info = parse_primitive_info info.constant_file in
   let call_prop_map = parse_callprop info.call_prop_file in
   let error_method_info = parse_error_summary info.error_summary_file in
   run_test ~is_start:true "FIXME" info [] error_method_info
@@ -266,5 +280,5 @@ let run program_dir =
       method_info,
       class_info,
       setter_map,
-      enum_info )
+      instance_info )
   |> snd |> print_endline

@@ -235,14 +235,31 @@ module SetterMap = struct
   type t = setter list M.t
 end
 
-module EnumInfo = struct
+module InstanceInfo = struct
   module M = Map.Make (struct
     type t = string [@@deriving compare]
   end)
 
   type const = string
 
-  type t = const list M.t (* key: enum name, value: enum const list *)
+  (* enum name -> enum const list || class name -> pre-created instance list*)
+  type t = const list M.t
+end
+
+module PrimitiveInfo = struct
+  module TypeMap = Map.Make (struct
+    type t = typ [@@deriving compare]
+  end)
+
+  module ClassMap = Map.Make (struct
+    (* default class name: "" *)
+    type t = class_name [@@deriving compare]
+  end)
+
+  type const = string
+
+  (* type -> class name -> const list*)
+  type t = const list ClassMap.t TypeMap.t
 end
 
 module AST = struct

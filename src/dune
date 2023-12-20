@@ -11,7 +11,7 @@
   callProposition
   inheritance
   setter
-  enum
+  constant
   modeling
   parser
   regexp

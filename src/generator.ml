@@ -1297,12 +1297,12 @@ let find_class_file =
     [ "unitcon_interface"; "unitcon_enum" ]
 
 let find_enum_var_list c_name e_info =
-  if EnumInfo.M.mem c_name e_info then
+  if InstanceInfo.M.mem c_name e_info then
     List.fold_left
       (fun gvar_list const ->
         (0, AST.GlobalConstant (c_name ^ "." ^ const)) :: gvar_list)
       []
-      (EnumInfo.M.find c_name e_info)
+      (InstanceInfo.M.find c_name e_info)
   else []
 
 let find_global_var_list c_name t_var mem summary m_info =
