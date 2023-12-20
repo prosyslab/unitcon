@@ -133,7 +133,7 @@ def main():
         "project",
         type=pathlib.Path,
         default=None,
-        help='Project directory where need to create build command files')
+        help='Project directory where need to obtain enum information')
     parser.add_argument("--encoding",
                         type=str,
                         default="utf-8",
