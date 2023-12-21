@@ -9,8 +9,8 @@ let default_value typ =
       [ "1.0"; "0.0"; "-1.0"; "100.0"; "-100.0"; "1000.0"; "-1000.0" ]
   | Bool -> [ "false"; "true" ]
   | Char -> [ "x" ]
-  | String -> [ "null"; ""; "string" ]
-  | _ -> [ "null" ]
+  | String -> [ "NULL"; ""; "string" ]
+  | _ -> [ "NULL" ]
 
 let default_primitive =
   (* default value of Object, Array, NonType is null *)

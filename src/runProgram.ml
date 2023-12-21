@@ -280,5 +280,6 @@ let run program_dir =
       method_info,
       class_info,
       setter_map,
-      instance_info )
+      instance_info,
+      primitive_info )
   |> snd |> print_endline

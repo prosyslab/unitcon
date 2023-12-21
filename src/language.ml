@@ -265,6 +265,7 @@ end
 module AST = struct
   type var = {
     import : import;
+        (* if var is primitive type then import is class of method *)
     variable : variable * int option;
     field : FieldSet.t;
     summary : summary;
@@ -303,7 +304,7 @@ module AST = struct
       summary = empty_summary;
     }
 
-  (* id -> var*)
+  (* id -> var *)
   let rec get_v id =
     match id with Variable v -> v | _ -> failwith "get_v: not supported"
 
@@ -349,6 +350,9 @@ module AST = struct
     | Seq (s1, s2) -> assign_ground s1 && assign_ground s2
     | Skip -> true
     | Stmt -> true
+
+  let modify_import import v =
+    { import; variable = v.variable; field = v.field; summary = v.summary }
 
   let rec last_code p = match p with Seq (_, s) -> last_code s | _ -> p
 
