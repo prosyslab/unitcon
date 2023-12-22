@@ -55,17 +55,14 @@ let collect_primitive assoc mmap =
   in
   PrimitiveInfo.ClassMap.add class_name new_const_list mmap
 
-let collect_primitive_by_type typ const_info mmap =
-  let ret_type typ =
-    if typ = "int" then Int
-    else if typ = "long" then Long
-    else if typ = "float" then Float
-    else if typ = "double" then Double
-    else if typ = "char" then Char
-    else if typ = "String" then String
-    else NonType
-  in
-  PrimitiveInfo.TypeMap.add (ret_type typ) const_info mmap
+let str_to_typ typ =
+  if typ = "int" then Int
+  else if typ = "long" then Long
+  else if typ = "float" then Float
+  else if typ = "double" then Double
+  else if typ = "char" then Char
+  else if typ = "String" then String
+  else NonType
 
 let of_enum_json json =
   let enum_info = json |> JsonUtil.to_list in
@@ -81,11 +78,14 @@ let of_primitive_json mmap json =
   let typ_list = [ "int"; "long"; "float"; "double"; "char"; "String" ] in
   List.fold_left
     (fun mmap typ ->
+      let cmap =
+        match PrimitiveInfo.TypeMap.find_opt (str_to_typ typ) mmap with
+        | Some m -> m
+        | _ -> PrimitiveInfo.ClassMap.empty
+      in
       let const_info =
         JsonUtil.member typ json |> JsonUtil.to_list
-        |> List.fold_left
-             (fun tmap const -> collect_primitive const tmap)
-             PrimitiveInfo.ClassMap.empty
+        |> List.fold_left (fun tmap const -> collect_primitive const tmap) cmap
       in
-      collect_primitive_by_type typ const_info mmap)
+      PrimitiveInfo.TypeMap.add (str_to_typ typ) const_info mmap)
     mmap typ_list

@@ -901,7 +901,10 @@ let calc_z3 id z3exp =
 let default_value_list typ import p_info =
   let default =
     match PrimitiveInfo.TypeMap.find_opt typ p_info with
-    | Some map -> PrimitiveInfo.ClassMap.find "" map
+    | Some map -> (
+        match PrimitiveInfo.ClassMap.find_opt "" map with
+        | Some value -> value
+        | _ -> [ "NULL" ])
     | _ -> [ "NULL" ]
   in
   let extra =
