@@ -5,6 +5,7 @@ module JsonUtil = Yojson.Safe.Util
 let default_value typ =
   match typ with
   | Int | Long -> [ "1"; "0"; "-1"; "100"; "-100"; "1000"; "-1000" ]
+  | Byte -> [ "1"; "0"; "-1"; "-128"; "127" ]
   | Float | Double ->
       [ "1.0"; "0.0"; "-1.0"; "100.0"; "-100.0"; "1000.0"; "-1000.0" ]
   | Bool -> [ "false"; "true" ]
@@ -14,7 +15,7 @@ let default_value typ =
 
 let default_primitive =
   (* default value of Object, Array, NonType is null *)
-  let typ_list = [ Int; Long; Float; Double; Bool; Char; String ] in
+  let typ_list = [ Int; Long; Byte; Float; Double; Bool; Char; String ] in
   List.fold_left
     (fun mmap typ ->
       PrimitiveInfo.TypeMap.add typ

@@ -679,6 +679,18 @@ let long_array_info =
       filename = "";
     }
 
+  let byte_array_info =
+  let this = This (Array Byte) in
+  let arg = Var (Int, "size") in
+  MethodInfo.
+    {
+      modifier = Public;
+      is_static = false;
+      formal_params = [ this; arg ];
+      return = "";
+      filename = "";
+    }
+
 let float_array_info =
   let this = This (Array Float) in
   let arg = Var (Int, "size") in
@@ -770,6 +782,19 @@ let long_array_set_info =
   let this = This (Array Long) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Long, "elem") in
+  MethodInfo.
+    {
+      modifier = Public;
+      is_static = false;
+      formal_params = [ this; arg1; arg2 ];
+      return = "void";
+      filename = "";
+    }
+
+  let byte_array_set_info =
+  let this = This (Array Char) in
+  let arg1 = Var (Int, "index") in
+  let arg2 = Var (Byte, "elem") in
   MethodInfo.
     {
       modifier = Public;
@@ -889,6 +914,7 @@ let add_java_package_summary mmap =
        [ string_summary ]
   |> SummaryMap.M.add "IntArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "LongArray.<init>(int)" [ array_summary ]
+  |> SummaryMap.M.add "ByteArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "FloatArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "DoubleArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "BoolArray.<init>(int)" [ array_summary ]
@@ -897,6 +923,7 @@ let add_java_package_summary mmap =
   |> SummaryMap.M.add "ObjectArray.<init>(int)" [ array_summary ]
   |> SummaryMap.M.add "IntArray.set(int,int)" [ array_set_summary ]
   |> SummaryMap.M.add "LongArray.set(int,long)" [ array_set_summary ]
+  |> SummaryMap.M.add "ByteArray.set(int,byte)" [ array_set_summary ]
   |> SummaryMap.M.add "FloatArray.set(int,float)" [ array_set_summary ]
   |> SummaryMap.M.add "DoubleArray.set(int,double)" [ array_set_summary ]
   |> SummaryMap.M.add "BoolArray.set(int,boolean)" [ array_set_summary ]
@@ -924,6 +951,7 @@ let add_java_package_method mmap =
   |> MethodInfo.M.add "java.lang.String.<init>(java.lang.String)" string_info
   |> MethodInfo.M.add "IntArray.<init>(int)" int_array_info
   |> MethodInfo.M.add "LongArray.<init>(int)" long_array_info
+  |> MethodInfo.M.add "ByteArray.<init>(int)" byte_array_info
   |> MethodInfo.M.add "FloatArray.<init>(int)" float_array_info
   |> MethodInfo.M.add "DoubleArray.<init>(int)" double_array_info
   |> MethodInfo.M.add "BoolArray.<init>(int)" bool_array_info
@@ -932,6 +960,7 @@ let add_java_package_method mmap =
   |> MethodInfo.M.add "ObjectArray.<init>(int)" object_array_info
   |> MethodInfo.M.add "IntArray.set(int,int)" int_array_set_info
   |> MethodInfo.M.add "LongArray.set(int,long)" long_array_set_info
+  |> MethodInfo.M.add "ByteArray.set(int,byte)" byte_array_set_info
   |> MethodInfo.M.add "FloatArray.set(int,float)" float_array_set_info
   |> MethodInfo.M.add "DoubleArray.set(int,double)" double_array_set_info
   |> MethodInfo.M.add "BoolArray.set(int,boolean)" bool_array_set_info

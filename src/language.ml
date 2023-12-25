@@ -27,6 +27,7 @@ type class_type =
 type typ =
   | Int
   | Long
+  | Byte
   | Float
   | Double
   | Bool
@@ -53,6 +54,7 @@ let get_class_name = function
       match typ with
       | Int -> "IntArray"
       | Long -> "LongArray"
+      | Byte -> "ByteArray"
       | Float -> "FloatArray"
       | Double -> "DoubleArray"
       | Bool -> "BoolArray"
@@ -99,6 +101,7 @@ module Value = struct
   type const =
     | Int of int
     | Long of int
+    | Byte of int
     | Float of float
     | Double of float
     | Bool of bool
@@ -886,7 +889,7 @@ module AST = struct
           Str.split Regexp.dot f.method_name
           |> List.hd
           |> Regexp.first_rm (Str.regexp "Array")
-          |> String.cat "new "
+          |> Utils.get_array_class_name |> String.cat "new "
         else if is_array_set func then ""
         else if Utils.is_init_method f.method_name then
           get_short_class_name f.method_name
@@ -908,6 +911,7 @@ module AST = struct
     match v |> fst with
     | Int -> "int " ^ (v |> snd)
     | Long -> "long " ^ (v |> snd)
+    | Byte -> "byte " ^ (v |> snd)
     | Float -> "float " ^ (v |> snd)
     | Double -> "double " ^ (v |> snd)
     | Bool -> "boolean " ^ (v |> snd)
@@ -920,6 +924,7 @@ module AST = struct
         match typ with
         | Int -> "int[] " ^ (v |> snd)
         | Long -> "long[] " ^ (v |> snd)
+        | Byte -> "byte[] " ^ (v |> snd)
         | Float -> "float[] " ^ (v |> snd)
         | Double -> "double[] " ^ (v |> snd)
         | Char -> "char[] " ^ (v |> snd)

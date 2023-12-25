@@ -6,9 +6,23 @@ let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 let is_init_method m_name =
   Str.string_match (".*\\.<init>" |> Str.regexp) m_name 0
 
+let get_array_class_name name =
+  if name = "String" || name = "Object" then name
+  else String.lowercase_ascii name
+
 let is_array_init fname =
   let arr =
-    [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
+    [
+      "Int";
+      "Long";
+      "Byte";
+      "Float";
+      "Double";
+      "Bool";
+      "Char";
+      "String";
+      "Object";
+    ]
   in
   let rec check arr =
     match arr with
@@ -22,7 +36,17 @@ let is_array_init fname =
 
 let is_array_set fname =
   let arr =
-    [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
+    [
+      "Int";
+      "Long";
+      "Byte";
+      "Float";
+      "Double";
+      "Bool";
+      "Char";
+      "String";
+      "Object";
+    ]
   in
   let rec check arr =
     match arr with
@@ -35,7 +59,17 @@ let is_array_set fname =
 
 let is_array package =
   let arr =
-    [ "Int"; "Long"; "Float"; "Double"; "Bool"; "Char"; "String"; "Object" ]
+    [
+      "Int";
+      "Long";
+      "Byte";
+      "Float";
+      "Double";
+      "Bool";
+      "Char";
+      "String";
+      "Object";
+    ]
   in
   let rec check arr =
     match arr with
@@ -47,4 +81,5 @@ let is_array package =
   check arr
 
 let is_modeling_set fname =
-  is_array_set fname || Str.string_match ("java.util.Map.put" |> Str.regexp) fname 0
+  is_array_set fname
+  || Str.string_match ("java.util.Map.put" |> Str.regexp) fname 0

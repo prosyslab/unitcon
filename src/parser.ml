@@ -19,10 +19,11 @@ let parse_param param =
     match t with
     | "int" | "signed short" -> Int
     | "long" -> Long
+    | "byte" | "signed char" -> Byte
     | "float" -> Float
     | "double" -> Double
     | "_Bool" | "boolean" -> Bool
-    | "unsigned short" | "signed char" | "unsigned char" -> Char
+    | "unsigned short" | "unsigned char" -> Char
     | "java.lang.String*" | "java.lang.String" -> String
     | "" -> NonType
     | _ when Str.string_match Regexp.array t 0 ->
