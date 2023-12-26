@@ -47,7 +47,12 @@ let collect_ginstance assoc mmap =
 
 let collect_primitive assoc mmap =
   let class_name = JsonUtil.member "name" assoc |> JsonUtil.to_string in
-  let const = JsonUtil.member "value" assoc |> JsonUtil.to_string in
+  let const =
+    JsonUtil.member "value" assoc
+    |> JsonUtil.to_string
+    |> Regexp.first_rm (Str.regexp "^\"")
+    |> Regexp.first_rm (Str.regexp "\"$")
+  in
   let new_const_list =
     if PrimitiveInfo.ClassMap.mem class_name mmap then
       let old_list = PrimitiveInfo.ClassMap.find class_name mmap in

@@ -281,9 +281,10 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
               t [])
   else vs_list
 
-let is_from_error summary =
+let is_from_error from_func summary =
   Value.M.fold
-    (fun _ v check -> if v.Value.from_error then 1 else check)
+    (fun _ v check ->
+      if v.Value.from_error then if from_func then 3 else 2 else check)
     summary.value 0
 
 let contains_used_in_error base_set target_set =
@@ -970,11 +971,13 @@ let default_value_list typ import p_info =
 let not_found_value v =
   match v.Value.value with Value.Eq NonValue -> true | _ -> false
 
-let calc_value_list org_list default =
-  List.fold_left (fun lst x -> (0, x) :: lst) org_list default
+let calc_value_list from_error org_list default =
+  (* default value have a penalty *)
+  let prec = if from_error then -2 else 0 in
+  List.fold_left (fun lst x -> (prec, x) :: lst) org_list default
 
 let calc_value id value default =
-  let prec = if value.Value.from_error then 1 else 0 in
+  let prec = if value.Value.from_error then 2 else 0 in
   let filter_size lst =
     if id = "size" || id = "index" then
       List.filter
@@ -992,7 +995,7 @@ let calc_value id value default =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
             |> Z3.Boolean.mk_eq z3ctx var
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
             default
           |> filter_size
@@ -1002,14 +1005,23 @@ let calc_value id value default =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
             |> Z3.Boolean.mk_eq z3ctx var
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [
               (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
             ]
             default
-      | Bool b -> calc_value_list [ (prec, AST.Primitive (B b)) ] default
-      | Char c -> calc_value_list [ (prec, AST.Primitive (C c)) ] default
-      | String s -> calc_value_list [ (prec, AST.Primitive (S s)) ] default
+      | Bool b ->
+          calc_value_list value.Value.from_error
+            [ (prec, AST.Primitive (B b)) ]
+            default
+      | Char c ->
+          calc_value_list value.Value.from_error
+            [ (prec, AST.Primitive (C c)) ]
+            default
+      | String s ->
+          calc_value_list value.Value.from_error
+            [ (prec, AST.Primitive (S s)) ]
+            default
       | Null -> [ (prec, AST.Null) ]
       | _ -> failwith "not implemented eq")
   | Neq v -> (
@@ -1020,7 +1032,7 @@ let calc_value id value default =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
             |> Z3.Boolean.mk_eq z3ctx var |> Z3.Boolean.mk_not z3ctx
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
             default
       | Float f | Double f ->
@@ -1029,20 +1041,24 @@ let calc_value id value default =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
             |> Z3.Boolean.mk_eq z3ctx var |> Z3.Boolean.mk_not z3ctx
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [
               (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
             ]
             default
       | Bool b ->
-          calc_value_list [ (prec, AST.Primitive (B (b |> not))) ] default
+          calc_value_list value.Value.from_error
+            [ (prec, AST.Primitive (B (b |> not))) ]
+            default
       | String s ->
-          calc_value_list [ (prec, AST.Primitive (S ("not_" ^ s))) ] default
+          calc_value_list value.Value.from_error
+            [ (prec, AST.Primitive (S ("not_" ^ s))) ]
+            default
       | Null ->
           (* Among the const, only the string can be defined as null *)
           List.fold_left
             (fun lst x ->
-              if x = AST.Null then (0, x) :: lst else (prec, x) :: lst)
+              if x = AST.Null then (-2, x) :: lst else (prec, x) :: lst)
             [] default
       | _ -> failwith "not implemented neq")
   | Le v -> (
@@ -1053,7 +1069,7 @@ let calc_value id value default =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
             |> Z3.Arithmetic.mk_le z3ctx var
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
             default
       | Float f | Double f ->
@@ -1062,7 +1078,7 @@ let calc_value id value default =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
             |> Z3.Arithmetic.mk_le z3ctx var
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [
               (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
             ]
@@ -1076,7 +1092,7 @@ let calc_value id value default =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
             |> Z3.Arithmetic.mk_lt z3ctx var
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
             default
       | Float f | Double f ->
@@ -1085,7 +1101,7 @@ let calc_value id value default =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
             |> Z3.Arithmetic.mk_lt z3ctx var
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [
               (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
             ]
@@ -1099,7 +1115,7 @@ let calc_value id value default =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
             |> Z3.Arithmetic.mk_ge z3ctx var
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
             default
           |> filter_size
@@ -1109,7 +1125,7 @@ let calc_value id value default =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
             |> Z3.Arithmetic.mk_ge z3ctx var
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [
               (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
             ]
@@ -1123,7 +1139,7 @@ let calc_value id value default =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
             |> Z3.Arithmetic.mk_gt z3ctx var
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (Z (calc_z3 var [ exp ] |> int_of_string))) ]
             default
       | Float f | Double f ->
@@ -1132,7 +1148,7 @@ let calc_value id value default =
             Z3.Arithmetic.Real.mk_numeral_s z3ctx (f |> string_of_float)
             |> Z3.Arithmetic.mk_gt z3ctx var
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [
               (prec, AST.Primitive (R (calc_z3 var [ exp ] |> float_of_string)));
             ]
@@ -1150,7 +1166,7 @@ let calc_value id value default =
               |> Z3.Arithmetic.mk_le z3ctx var;
             ]
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (Z (calc_z3 var exp |> int_of_string))) ]
             default
       | Float f1, Float f2
@@ -1166,7 +1182,7 @@ let calc_value id value default =
               |> Z3.Arithmetic.mk_le z3ctx var;
             ]
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
             default
       | _ -> failwith "not implemented between")
@@ -1182,7 +1198,7 @@ let calc_value id value default =
               |> Z3.Arithmetic.mk_gt z3ctx var;
             ]
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (Z (calc_z3 var exp |> int_of_string))) ]
             default
       | Float f1, Float f2
@@ -1198,7 +1214,7 @@ let calc_value id value default =
               |> Z3.Arithmetic.mk_gt z3ctx var;
             ]
           in
-          calc_value_list
+          calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
             default
       | _ -> failwith "not implemented outside")
@@ -1400,7 +1416,7 @@ let find_global_var_list c_name t_var mem summary m_info =
             (Condition.M.fold (fun _ s_trace list ->
                  match compare_var v s_trace with
                  | Some gv ->
-                     ( is_from_error (init_summary |> List.hd),
+                     ( is_from_error false (init_summary |> List.hd),
                        AST.GlobalConstant gv )
                      :: list
                  | None -> list))
@@ -1698,12 +1714,12 @@ let satisfied_c_list id t_summary summary summary_list =
           (List.fold_left (fun pick (check, summary) ->
                if check then
                  if Utils.is_array_init constructor then
-                   ( is_from_error summary,
+                   ( is_from_error true summary,
                      constructor,
                      modify_summary id t_summary summary )
-                 else (is_from_error summary, constructor, summary)
+                 else (is_from_error true summary, constructor, summary)
                else if pick = (0, "", empty_summary) then
-                 (0, constructor, empty_summary)
+                 (-3, constructor, empty_summary)
                else pick))
             init lst
         in

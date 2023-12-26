@@ -365,23 +365,14 @@ module AST = struct
     | Assign _ when ground p -> Skip
     | _ -> p
 
-  let rec count_dist_arg arg =
-    match arg with
-    | hd :: tl ->
-        count_dist_arg tl
-        + List.fold_left (fun cnt x -> if hd = x then 0 else cnt) 1 tl
-    | _ -> 0
-
   let rec count_nt = function
     | Const (x, exp) -> count_id x + count_exp exp
-    | Assign (x0, x1, func, arg) ->
-        count_id x0 + count_id x1 + count_func func + count_arg arg
-    | Void (x, func, arg) -> count_id x + count_func func + count_arg arg
+    | Assign (x0, x1, func, _) ->
+        count_id x0 + count_id x1 + count_func func
+    | Void (x, func, _) -> count_id x + count_func func
     | Seq (s1, s2) -> count_nt s1 + count_nt s2
     | Skip -> 0
     | Stmt -> 0
-
-  and count_arg = function Arg a -> count_dist_arg a | _ -> 0
 
   and count_func = function Func -> 1 | _ -> 0
 
@@ -391,11 +382,13 @@ module AST = struct
 
   let rec count_t = function
     | Const (x, exp) -> count_tid x + count_texp exp
-    | Assign (x0, x1, _, _) -> count_tid x0 + count_tid x1
-    | Void (x, _, _) -> count_tid x
+    | Assign (x0, x1, f, _) -> count_tid x0 + count_tid x1 + count_tf f
+    | Void (x, f, _) -> count_tid x + count_tf f
     | Seq (s1, s2) -> count_t s1 + count_t s2
     | Skip -> 0
     | Stmt -> 0
+
+  and count_tf = function Func -> 0 | _ -> 1
 
   and count_tid = function Id -> 0 | _ -> 1
 
