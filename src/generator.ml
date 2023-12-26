@@ -910,9 +910,14 @@ let default_value_list typ import p_info =
   let extra =
     match PrimitiveInfo.TypeMap.find_opt typ p_info with
     | Some map -> (
-        match PrimitiveInfo.ClassMap.find_opt import map with
-        | Some value -> value
-        | _ -> [])
+        let file = Regexp.first_rm ("\\$.*$" |> Str.regexp) import in
+        match
+          ( PrimitiveInfo.ClassMap.find_opt import map,
+            PrimitiveInfo.ClassMap.find_opt file map )
+        with
+        | Some value, _ -> value
+        | None, Some value -> value
+        | _, _ -> [])
     | _ -> []
   in
   let total lst =
