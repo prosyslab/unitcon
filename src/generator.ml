@@ -71,7 +71,6 @@ let solver = Z3.Solver.mk_solver z3ctx None
 (* non-terminal cost for p, terminal cost for p, precision for p *)
 let get_cost p =
   if !Cmdline.syn_priority then (p.nt_cost, p.t_cost, 0)
-  else if !Cmdline.sem_priority then (0, 0, p.prec)
   else if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec)
   else (0, 0, 0)
 
@@ -1597,7 +1596,9 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
         (try SetterMap.M.find class_name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
                is_private s m_info |> not
-               && (is_subset var.field fields || Utils.is_array_set s))
+               &&
+               if !Cmdline.basic_mode || !Cmdline.syn_priority then true
+               else is_subset var.field fields || Utils.is_array_set s)
       in
       List.fold_left
         (fun lst (s, fields) ->
@@ -1774,7 +1775,7 @@ let get_ret_c ret summary m_info c_info s_map =
              is_recursive_param class_name c m_info |> not)
     in
     let memory_effect_filtering list =
-      if !Cmdline.syn_priority then list
+      if !Cmdline.basic_mode || !Cmdline.syn_priority then list
       else
         List.filter
           (fun (_, c, _) -> is_method_with_memory_effect c summary)
@@ -2227,6 +2228,15 @@ let pretty_format p =
   let code = start ^ AST.code p ^ "}\n\n" in
   (import, code)
 
+let syn_priority_q queue =
+  List.stable_sort
+    (fun p1 p2 ->
+      let nt1, t1, _ = get_cost p1 in
+      let nt2, t2, _ = get_cost p2 in
+      if compare (nt1 + t1) (nt2 + t2) <> 0 then compare (nt1 + t1) (nt2 + t2)
+      else compare nt1 nt2)
+    queue
+
 let priority_q queue =
   List.stable_sort
     (fun p1 p2 ->
@@ -2239,7 +2249,11 @@ let priority_q queue =
     queue
 
 let rec mk_testcase summary cg m_info c_info s_map i_info p_info queue =
-  let queue = if !Cmdline.basic_mode then queue else priority_q queue in
+  let queue =
+    if !Cmdline.basic_mode then queue
+    else if !Cmdline.syn_priority then syn_priority_q queue
+    else priority_q queue
+  in
   match queue with
   | p :: tl ->
       if AST.ground p.tc then [ (pretty_format p.tc, tl) ]
