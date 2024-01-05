@@ -1989,6 +1989,12 @@ let rec arg_in_void_unroll (prec, p) =
            []
   | _ -> failwith "Fail: arg_in_void_unroll"
 
+let rec append l1 l2 =
+  match (l1, l2) with
+  | h1 :: t1, h2 :: t2 -> h1 :: h2 :: append t1 t2
+  | l1, [] -> l1
+  | [], l2 -> l2
+
 let one_unroll p summary cg m_info c_info s_map i_info p_info =
   match p with
   | AST.Seq _ when AST.void p -> void_unroll p
@@ -1998,35 +2004,34 @@ let one_unroll p summary cg m_info c_info s_map i_info p_info =
       fcall_in_assign_unroll p summary cg m_info c_info s_map
       |> List.fold_left
            (fun acc_lst x ->
-             List.rev_append (recv_in_assign_unroll x m_info c_info) acc_lst)
+             recv_in_assign_unroll x m_info c_info |> append acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x -> List.rev_append (arg_in_assign_unroll x) acc_lst)
+           (fun acc_lst x -> arg_in_assign_unroll x |> append acc_lst)
            []
       |> List.rev
   | Void _ when AST.fcall1_in_void p ->
       (* fcall1_in_void --> recv_in_void --> arg_in_void *)
       fcall_in_void_unroll p m_info c_info s_map
       |> List.fold_left
-           (fun acc_lst x ->
-             List.rev_append (recv_in_void_unroll x m_info) acc_lst)
+           (fun acc_lst x -> recv_in_void_unroll x m_info |> append acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x -> List.rev_append (arg_in_void_unroll x) acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
            []
       |> List.rev
   | Void _ when AST.fcall2_in_void p ->
       (* fcall2_in_void --> arg_in_void *)
       fcall_in_void_unroll p m_info c_info s_map
       |> List.fold_left
-           (fun acc_lst x -> List.rev_append (arg_in_void_unroll x) acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
            []
       |> List.rev
   | Void _ when AST.recv_in_void p ->
       (* unroll error entry *)
       recv_in_void_unroll (0, p) m_info
       |> List.fold_left
-           (fun acc_lst x -> List.rev_append (arg_in_void_unroll x) acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
            []
       |> List.rev
   | _ -> failwith "Fail: one_unroll"
@@ -2120,7 +2125,7 @@ let combinate (prec, p) stmt_map =
              []
          | Some new_s_list ->
              List.fold_left
-               (fun l _p -> List.rev_append (combinate_stmt _p s new_s_list) l)
+               (fun l _p -> combinate_stmt _p s new_s_list |> append l)
                [] lst
          | _ -> lst)
        [ (prec, p) ]
