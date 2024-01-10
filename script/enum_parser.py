@@ -71,8 +71,11 @@ def get_parent_class_name(node, src, name):
                     lambda x: x[1] == 'interface-name',
                     [i
                      for i in extract_interface_name_query.captures(parent)]))
-        parent_name = get_text(parent_name[0], src)
-        return get_parent_class_name(parent, src, parent_name + '$' + name)
+        if not parent_name:
+            return name
+        else:
+            parent_name = get_text(parent_name[0], src)
+            return get_parent_class_name(parent, src, parent_name + '$' + name)
 
 
 def get_enum(node, src):

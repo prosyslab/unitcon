@@ -8,24 +8,26 @@ manifest_file_name = "Manifest"
 dependency_jar = "with_dependency.jar"
 test_file_name = "UnitconTest"
 
+
 def make_java_files(project_dir):
     java_files = os.path.join(project_dir, "java_files")
     unitcon_files = os.path.join(project_dir, "unitcon_files")
     if os.path.isfile(java_files):
         lines = []
-        with open (java_files, 'r') as f:
+        with open(java_files, 'r') as f:
             lines = f.readlines()
         with open(unitcon_files, 'w') as f:
             for line in lines:
-                if "Main.java" in line:
+                if line.startswith("Main.java"):
                     f.write(line.replace("Main.java", "UnitconTest.java"))
                 else:
                     f.write(line)
 
+
 def copy_build_cmd(project_dir):
     file_path = os.path.join(project_dir, "unitcon_properties")
     lines = []
-    with open (os.path.join(file_path, "unitcon_build_command"), 'r') as f:
+    with open(os.path.join(file_path, "unitcon_build_command"), 'r') as f:
         lines = f.readlines()
     with open(os.path.join(file_path, "compile_command"), 'w') as f:
         for line in lines:
@@ -34,10 +36,11 @@ def copy_build_cmd(project_dir):
             else:
                 f.write(line)
 
+
 def modify_test_cmd(project_dir):
     file_path = os.path.join(project_dir, "unitcon_properties")
     lines = []
-    with open (os.path.join(file_path, "test_command"), 'r') as f:
+    with open(os.path.join(file_path, "test_command"), 'r') as f:
         lines = f.readlines()
     with open(os.path.join(file_path, "test_command"), 'w') as f:
         for line in lines:
@@ -119,13 +122,12 @@ def main():
         type=pathlib.Path,
         default=None,
         help='Project directory where need to create build command files')
-    parser.add_argument(
-        "build_type",
-        type=str,
-        default=None,
-        help='maven or javac')
+    parser.add_argument("build-type",
+                        type=str,
+                        default=None,
+                        help='[maven | javac]')
     args = parser.parse_args()
-    
+
     if args.build_type == "maven":
         execute_build_cmd(args.project)
         make_build_command(args.project)
