@@ -823,6 +823,19 @@ let is_public m_name m_info =
       | Public when is_test_file info.MethodInfo.filename |> not -> true
       | _ -> false)
 
+let is_same_summary s1 s2 =
+  let all_equal std op =
+    Condition.M.fold
+      (fun k v eq ->
+        match Condition.M.find_opt k op with
+        | Some v2 when v = v2 -> eq
+        | _ -> false)
+      std true
+  in
+  let equal v1 v2 = all_equal v1 v2 && all_equal v2 v1 in
+  if Condition.M.equal equal (s1.postcond |> snd) (s2.postcond |> snd) then true
+  else false
+
 let get_package_from_v v =
   match get_type v with
   | Int | Long | Byte | Float | Double | Bool | Char | Array _ | NonType -> ""
@@ -1747,20 +1760,32 @@ let get_cfuncs list m_info =
       List.rev_append (get_cfunc (cost, c, s) m_info) lst)
     [] list
 
+let summary_filtering name m_info list =
+  List.filter (fun (_, c, _) -> is_public c m_info) list
+  |> List.filter (fun (_, c, _) -> is_recursive_param name c m_info |> not)
+
+let check_dup_summary lst =
+  let rec collect_dup lst =
+    match lst with
+    | (_, _, h) :: t ->
+        List.filter (fun (_, _, x) -> is_same_summary h x) t
+        |> List.rev_append (collect_dup t)
+    | _ -> []
+  in
+  List.fold_left
+    (fun l s -> if collect_dup lst |> List.mem s then l else s :: l)
+    [] lst
+
 let get_c ret summary _ m_info c_info =
   let class_name = AST.get_vinfo ret |> fst |> get_class_name in
   if class_name = "" then []
   else
     let id = AST.get_vinfo ret |> snd in
-    let summary_filtering list =
-      List.filter (fun (_, c, _) -> is_public c m_info) list
-      |> List.filter (fun (_, c, _) ->
-             is_recursive_param class_name c m_info |> not)
-    in
     let s_list =
       get_clist class_name m_info c_info
       |> satisfied_c_list id (AST.get_v ret).summary summary
-      |> summary_filtering
+      |> summary_filtering class_name m_info
+      |> check_dup_summary
     in
     get_cfuncs s_list m_info
 
@@ -1769,11 +1794,6 @@ let get_ret_c ret summary m_info c_info s_map =
   if class_name = "" then []
   else
     let id = AST.get_vinfo ret |> snd in
-    let summary_filtering list =
-      List.filter (fun (_, c, _) -> is_public c m_info) list
-      |> List.filter (fun (_, c, _) ->
-             is_recursive_param class_name c m_info |> not)
-    in
     let memory_effect_filtering list =
       if !Cmdline.basic_mode || !Cmdline.syn_priority then list
       else
@@ -1784,7 +1804,8 @@ let get_ret_c ret summary m_info c_info s_map =
     let s_list =
       get_ret_obj class_name m_info c_info s_map
       |> satisfied_c_list id (AST.get_v ret).summary summary
-      |> summary_filtering |> memory_effect_filtering
+      |> summary_filtering class_name m_info
+      |> memory_effect_filtering |> check_dup_summary
     in
     get_cfuncs s_list m_info
 
