@@ -25,7 +25,7 @@ def make_java_files(project_dir):
 def copy_build_cmd(project_dir):
     file_path = os.path.join(project_dir, "unitcon_properties")
     lines = []
-    with open (os.path.join(file_path, "build_command"), 'r') as f:
+    with open (os.path.join(file_path, "unitcon_build_command"), 'r') as f:
         lines = f.readlines()
     with open(os.path.join(file_path, "compile_command"), 'w') as f:
         for line in lines:
