@@ -130,7 +130,7 @@ def main():
         execute_build_cmd(args.project)
         make_build_command(args.project)
     elif args.build_type == "javac":
-        path = os.path.join(args.project)
+        path = os.path.join(args.project, 'source')
         make_java_files(path)
         copy_build_cmd(path)
         modify_test_cmd(path)
