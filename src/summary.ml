@@ -102,6 +102,7 @@ let mapping_method_info method_info mmap =
     Str.string_match (".*access\\$.*" |> Str.regexp) method_name 0
     || Str.string_match (".*access_.*" |> Str.regexp) method_name 0
     || Str.string_match (".*\\.clone()$" |> Str.regexp) method_name 0
+    || Str.string_match (".*\\[specialized with aliases\\]" |> Str.regexp) method_name 0
     || is_unnes_method formal_params
   then mmap
   else MethodInfo.M.add method_name info mmap
@@ -119,6 +120,7 @@ let mapping_summary method_summarys minfo mmap =
     Str.string_match (".*access\\$.*" |> Str.regexp) method_name 0
     || Str.string_match (".*access_.*" |> Str.regexp) method_name 0
     || Str.string_match (".*\\.clone()$" |> Str.regexp) method_name 0
+    || Str.string_match (".*\\[specialized with aliases\\]" |> Str.regexp) method_name 0
     || MethodInfo.M.mem method_name minfo |> not
   then mmap
   else SummaryMap.M.add method_name summarys mmap
