@@ -151,6 +151,7 @@ def run_unitcon(project_dir):
         out, _ = process.communicate()
         with open(result_file, "wb") as f:
             f.write(out)
+        error_count += 1
 
 
 def main():
