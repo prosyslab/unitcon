@@ -160,7 +160,7 @@ def main():
                         type=pathlib.Path,
                         default=None,
                         help='Project directory where need to execute UnitCon')
-    parser.add_argument("--infer-path",
+    parser.add_argument("--infer_path",
                         type=pathlib.Path,
                         default="/infer/infer/bin/infer",
                         help="Path of infer's executable file")
@@ -168,7 +168,7 @@ def main():
                         type=str,
                         default="utf-8",
                         help='Encoding type of project')
-    parser.add_argument("--build-type",
+    parser.add_argument("--build_type",
                         type=str,
                         default="maven",
                         help='[maven | javac]')

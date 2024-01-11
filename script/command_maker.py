@@ -122,7 +122,7 @@ def main():
         type=pathlib.Path,
         default=None,
         help='Project directory where need to create build command files')
-    parser.add_argument("build-type",
+    parser.add_argument("build_type",
                         type=str,
                         default=None,
                         help='[maven | javac]')

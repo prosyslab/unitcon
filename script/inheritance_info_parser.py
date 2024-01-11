@@ -63,9 +63,12 @@ def remove_generic(name):
         if name[i] == '<':
             index_stack.append(i)
         elif name[i] == '>':
-            prev_brk = index_stack.pop()
-            add_space = ' ' * (i + 1 - prev_brk)
-            rename = rename[0:prev_brk] + add_space + rename[i + 1:]
+            if not index_stack:
+                rename = rename[i + 1:]
+            else:
+                prev_brk = index_stack.pop()
+                add_space = ' ' * (i + 1 - prev_brk)
+                rename = rename[0:prev_brk] + add_space + rename[i + 1:]
     return rename
 
 
