@@ -65,7 +65,8 @@ let get_array_class_name = function
       | Bool -> "BoolArray" ^ (get_array_dim typ |> string_of_int)
       | Char -> "CharArray" ^ (get_array_dim typ |> string_of_int)
       | String -> "StringArray" ^ (get_array_dim typ |> string_of_int)
-      | Object _ -> "ObjectArray" ^ (get_array_dim typ |> string_of_int)
+      | Object class_name ->
+          "Object" ^ class_name ^ "Array" ^ (get_array_dim typ |> string_of_int)
       | _ -> "")
   | _ -> ""
 
@@ -907,9 +908,9 @@ module AST = struct
     match func with
     | F f ->
         if is_array_init func then
-          Str.split Regexp.dot f.method_name
-          |> List.hd
-          |> Regexp.first_rm (Str.regexp "Array")
+          Utils.get_object_array_import f.typ
+          |> Str.split Regexp.dot |> List.rev |> List.hd
+          |> Regexp.first_rm (Str.regexp "Array[0-9]*")
           |> Utils.get_array_class_name |> String.cat "new "
         else if is_array_set func then ""
         else if Utils.is_init_method f.method_name then
@@ -952,8 +953,10 @@ module AST = struct
         | Char -> "char" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
         | String ->
             "String" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
-        | Object _ ->
-            "Object" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
+        | Object name ->
+            (name |> get_short_class_name |> Utils.replace_nested_symbol)
+            ^ array_code (get_array_dim typ) ""
+            ^ " " ^ (v |> snd)
         | _ -> "")
     | _ -> ""
 

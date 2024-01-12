@@ -837,10 +837,16 @@ let is_same_summary s1 s2 =
   else false
 
 let get_package_from_v v =
-  match get_type v with
-  | Int | Long | Byte | Float | Double | Bool | Char | Array _ | NonType -> ""
-  | String -> "java.lang.String"
-  | Object t -> t
+  let rec get_object_from_array array =
+    match array with Array a -> get_object_from_array a | _ -> array
+  in
+  let rec get_package = function
+    | Int | Long | Byte | Float | Double | Bool | Char | NonType -> ""
+    | String -> "java.lang.String"
+    | Array a -> get_object_from_array a |> get_package
+    | Object t -> t
+  in
+  get_package (get_type v)
 
 let is_recursive_param parent_class method_name m_info =
   let info = MethodInfo.M.find method_name m_info in
@@ -1747,18 +1753,11 @@ let satisfied_c_list id t_summary summary summary_list =
 let get_cfunc id constructor m_info =
   let cost, c, s = constructor in
   let t = Utils.get_class_name c in
-  let func =
-    AST.F
-      {
-        typ =
-          (if Utils.is_array t then
-             AST.get_vinfo id |> fst |> get_array_class_name
-           else t);
-        method_name = c;
-        import = t;
-        summary = s;
-      }
+  let t =
+    if Utils.is_array t then AST.get_vinfo id |> fst |> get_array_class_name
+    else t
   in
+  let func = AST.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
     mk_arg ~is_s:(is_s_method c m_info)
       (MethodInfo.M.find c m_info).MethodInfo.formal_params s
@@ -2260,7 +2259,8 @@ let pretty_format p =
   let import =
     ImportSet.fold
       (fun i s ->
-        if i = "" || Utils.is_array i then s
+        let array_path = Utils.get_object_array_import i in
+        if i = "" || (Utils.is_array i && array_path = i) then s
         else s ^ "import " ^ (i |> Utils.replace_nested_symbol) ^ ";\n")
       (imports p ImportSet.empty)
       ""

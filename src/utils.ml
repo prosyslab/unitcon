@@ -7,8 +7,8 @@ let is_init_method m_name =
   Str.string_match (".*\\.<init>" |> Str.regexp) m_name 0
 
 let get_array_class_name name =
-  if name = "String" || name = "Object" then name
-  else String.lowercase_ascii name
+  let arr = [ "Int"; "Long"; "Byte"; "Float"; "Double"; "Bool"; "Char" ] in
+  if List.mem name arr then String.lowercase_ascii name else name
 
 let is_array_init fname =
   let arr =
@@ -21,7 +21,7 @@ let is_array_init fname =
       "Bool";
       "Char";
       "String";
-      "Object";
+      "Object.*";
     ]
   in
   let rec check arr =
@@ -45,7 +45,7 @@ let is_array_set fname =
       "Bool";
       "Char";
       "String";
-      "Object";
+      "Object.*";
     ]
   in
   let rec check arr =
@@ -69,7 +69,7 @@ let is_array package =
       "Bool";
       "Char";
       "String";
-      "Object";
+      "Object.*";
     ]
   in
   let rec check arr =
@@ -82,9 +82,14 @@ let is_array package =
   in
   check arr
 
+let get_object_array_import i =
+  if Str.string_match ("Object.+Array[0-9]*$" |> Str.regexp) i 0 then
+    Regexp.first_rm (Str.regexp "Object") i
+    |> Regexp.first_rm (Str.regexp "Array[0-9]*$")
+  else i
+
 let get_array_dim_from_class_name f =
-  Regexp.first_rm (Str.regexp ".*Array") f
-  |> int_of_string
+  Regexp.first_rm (Str.regexp ".*Array") f |> int_of_string
 
 let is_modeling_set fname =
   is_array_set fname
