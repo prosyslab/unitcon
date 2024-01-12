@@ -48,10 +48,31 @@ type params = variable list [@@deriving compare]
 
 type symbol = string (*e.g. v1 *) [@@deriving compare]
 
+let rec get_array_typ typ =
+  match typ with Array t -> get_array_typ t | _ -> typ
+
+let rec get_array_dim typ =
+  match typ with Array t -> get_array_dim t + 1 | _ -> 1
+
+let get_array_class_name = function
+  | Array typ -> (
+      match get_array_typ typ with
+      | Int -> "IntArray" ^ (get_array_dim typ |> string_of_int)
+      | Long -> "LongArray" ^ (get_array_dim typ |> string_of_int)
+      | Byte -> "ByteArray" ^ (get_array_dim typ |> string_of_int)
+      | Float -> "FloatArray" ^ (get_array_dim typ |> string_of_int)
+      | Double -> "DoubleArray" ^ (get_array_dim typ |> string_of_int)
+      | Bool -> "BoolArray" ^ (get_array_dim typ |> string_of_int)
+      | Char -> "CharArray" ^ (get_array_dim typ |> string_of_int)
+      | String -> "StringArray" ^ (get_array_dim typ |> string_of_int)
+      | Object _ -> "ObjectArray" ^ (get_array_dim typ |> string_of_int)
+      | _ -> "")
+  | _ -> ""
+
 let get_class_name = function
   | Object n -> n
   | Array typ -> (
-      match typ with
+      match get_array_typ typ with
       | Int -> "IntArray"
       | Long -> "LongArray"
       | Byte -> "ByteArray"
@@ -367,8 +388,7 @@ module AST = struct
 
   let rec count_nt = function
     | Const (x, exp) -> count_id x + count_exp exp
-    | Assign (x0, x1, func, _) ->
-        count_id x0 + count_id x1 + count_func func
+    | Assign (x0, x1, func, _) -> count_id x0 + count_id x1 + count_func func
     | Void (x, func, _) -> count_id x + count_func func
     | Seq (s1, s2) -> count_nt s1 + count_nt s2
     | Skip -> 0
@@ -852,6 +872,10 @@ module AST = struct
     Regexp.first_rm ("\\.<init>(.*)" |> Str.regexp) c
     |> Str.split Regexp.dot |> List.rev |> List.hd
 
+  let array_code dim content =
+    let rec code d = if d = 0 then "" else "[" ^ content ^ "]" ^ code (d - 1) in
+    code dim
+
   let arg_code f arg =
     let cc code x idx = code ^ ", " ^ x ^ (idx |> string_of_int) in
     match arg with
@@ -865,12 +889,16 @@ module AST = struct
             "" p
           |> Regexp.rm_first_rest
         in
-        if is_array_init f then "[" ^ param ^ "]"
+        if is_array_init f then
+          array_code
+            (Utils.get_array_dim_from_class_name (get_func f).typ)
+            param
         else if is_array_set f then
           let lst = param |> Str.split Regexp.bm in
-          "["
-          ^ (lst |> List.hd |> Regexp.rm_space)
-          ^ "] = "
+          array_code
+            (Utils.get_array_dim_from_class_name (get_func f).typ)
+            (lst |> List.hd |> Regexp.rm_space)
+          ^ " = "
           ^ (lst |> List.tl |> List.hd |> Regexp.rm_space)
         else "(" ^ param ^ ")"
     | Arg x -> "Arg(" ^ (x |> List.length |> string_of_int) ^ ")"
@@ -914,15 +942,18 @@ module AST = struct
         (name |> get_short_class_name |> Utils.replace_nested_symbol)
         ^ " " ^ (v |> snd)
     | Array typ -> (
-        match typ with
-        | Int -> "int[] " ^ (v |> snd)
-        | Long -> "long[] " ^ (v |> snd)
-        | Byte -> "byte[] " ^ (v |> snd)
-        | Float -> "float[] " ^ (v |> snd)
-        | Double -> "double[] " ^ (v |> snd)
-        | Char -> "char[] " ^ (v |> snd)
-        | String -> "String[] " ^ (v |> snd)
-        | Object _ -> "Object[] " ^ (v |> snd)
+        match get_array_typ typ with
+        | Int -> "int" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
+        | Long -> "long" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
+        | Byte -> "byte" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
+        | Float -> "float" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
+        | Double ->
+            "double" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
+        | Char -> "char" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
+        | String ->
+            "String" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
+        | Object _ ->
+            "Object" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
         | _ -> "")
     | _ -> ""
 

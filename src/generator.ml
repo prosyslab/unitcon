@@ -1628,7 +1628,10 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
           let f =
             AST.F
               {
-                typ = class_name;
+                typ =
+                  (if Utils.is_array class_name then
+                     AST.get_vinfo id |> fst |> get_array_class_name
+                   else class_name);
                 method_name = s;
                 import = var.import;
                 summary = var.summary;
@@ -1740,10 +1743,21 @@ let satisfied_c_list id t_summary summary summary_list =
         if pick = init then list else pick :: list)
       [] summary_list
 
-let get_cfunc constructor m_info =
+let get_cfunc id constructor m_info =
   let cost, c, s = constructor in
   let t = Utils.get_class_name c in
-  let func = AST.F { typ = t; method_name = c; import = t; summary = s } in
+  let func =
+    AST.F
+      {
+        typ =
+          (if Utils.is_array t then
+             AST.get_vinfo id |> fst |> get_array_class_name
+           else t);
+        method_name = c;
+        import = t;
+        summary = s;
+      }
+  in
   let arg_list =
     mk_arg ~is_s:(is_s_method c m_info)
       (MethodInfo.M.find c m_info).MethodInfo.formal_params s
@@ -1754,10 +1768,10 @@ let get_cfunc constructor m_info =
       (fun arg cfuncs -> (cost, (func, AST.Arg arg)) :: cfuncs)
       arg_list []
 
-let get_cfuncs list m_info =
+let get_cfuncs id list m_info =
   List.fold_left
     (fun lst (cost, c, s) ->
-      List.rev_append (get_cfunc (cost, c, s) m_info) lst)
+      List.rev_append (get_cfunc id (cost, c, s) m_info) lst)
     [] list
 
 let summary_filtering name m_info list =
@@ -1787,7 +1801,7 @@ let get_c ret summary _ m_info c_info =
       |> summary_filtering class_name m_info
       |> check_dup_summary
     in
-    get_cfuncs s_list m_info
+    get_cfuncs ret s_list m_info
 
 let get_ret_c ret summary m_info c_info s_map =
   let class_name = AST.get_vinfo ret |> fst |> get_class_name in
@@ -1807,7 +1821,7 @@ let get_ret_c ret summary m_info c_info s_map =
       |> summary_filtering class_name m_info
       |> memory_effect_filtering |> check_dup_summary
     in
-    get_cfuncs s_list m_info
+    get_cfuncs ret s_list m_info
 
 let get_inner_func f arg =
   let fname =
