@@ -1197,6 +1197,7 @@ let calc_value id value default =
           calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (R (calc_z3 var exp |> float_of_string))) ]
             default
+      | MinusInf, PlusInf -> calc_value_list value.Value.from_error [] default
       | _ -> failwith "not implemented between")
   | Outside (v1, v2) -> (
       match (v1, v2) with
