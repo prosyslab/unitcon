@@ -2257,13 +2257,19 @@ let pretty_format p =
     | _ -> set
   in
   let import =
-    ImportSet.fold
-      (fun i s ->
-        let array_path = Utils.get_object_array_import i in
-        if i = "" || (Utils.is_array i && array_path = i) then s
-        else s ^ "import " ^ (i |> Utils.replace_nested_symbol) ^ ";\n")
-      (imports p ImportSet.empty)
-      ""
+    let str_set =
+      ImportSet.fold
+        (fun i s ->
+          let path = Utils.rm_object_array_import i in
+          if i = "" || (Utils.is_array i && path = i) then s
+          else
+            ImportSet.add
+              ("import " ^ (path |> Utils.replace_nested_symbol) ^ ";\n")
+              s)
+        (imports p ImportSet.empty)
+        ImportSet.empty
+    in
+    ImportSet.fold (fun i s -> s ^ i) str_set ""
   in
   let start = "\npublic static void main(String args[]) throws Exception {\n" in
   let code = start ^ AST.code p ^ "}\n\n" in

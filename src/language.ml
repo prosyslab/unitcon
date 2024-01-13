@@ -908,7 +908,7 @@ module AST = struct
     match func with
     | F f ->
         if is_array_init func then
-          Utils.get_object_array_import f.typ
+          Utils.rm_object_array_import f.typ
           |> Str.split Regexp.dot |> List.rev |> List.hd
           |> Regexp.first_rm (Str.regexp "Array[0-9]*")
           |> Utils.get_array_class_name |> String.cat "new "

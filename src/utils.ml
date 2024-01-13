@@ -82,9 +82,9 @@ let is_array package =
   in
   check arr
 
-let get_object_array_import i =
+let rm_object_array_import i =
   if Str.string_match ("Object.+Array[0-9]*$" |> Str.regexp) i 0 then
-    Regexp.first_rm (Str.regexp "Object") i
+    Regexp.first_rm (Str.regexp "^Object") i
     |> Regexp.first_rm (Str.regexp "Array[0-9]*$")
   else i
 
