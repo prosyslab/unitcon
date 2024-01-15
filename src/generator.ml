@@ -1669,8 +1669,7 @@ let get_ret_obj class_name m_info (c_info, ig) s_map =
         (fun init_list class_name_to_find ->
           if
             match_return_object class_name_to_find method_name m_info
-            && is_private_class (Utils.get_class_name method_name) (c_info, ig)
-               |> not
+            && is_normal_class (Utils.get_class_name method_name) c_info
             && is_private method_name m_info |> not
             && Utils.is_init_method method_name |> not
             && is_void_method method_name s_map |> not
