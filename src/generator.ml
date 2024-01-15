@@ -939,7 +939,8 @@ let default_value_list typ import p_info =
         | _, _ -> [])
     | _ -> []
   in
-  let total lst =
+  let total default extra =
+    let lst = List.rev_append default extra in
     match typ with
     | Int | Long ->
         List.fold_left
@@ -975,16 +976,20 @@ let default_value_list typ import p_info =
             if String.length x = 1 then AST.Primitive (C x.[0]) :: acc else acc)
           [] lst
     | String ->
-        List.fold_left
-          (fun acc x ->
-            if x = "NULL" then AST.Null :: acc else AST.Primitive (S x) :: acc)
-          [] lst
+        if extra = [] then
+          List.fold_left
+            (fun acc x ->
+              if x = "NULL" then AST.Null :: acc else AST.Primitive (S x) :: acc)
+            [] default
+        else
+          List.fold_left (fun acc x -> AST.Primitive (S x) :: acc) [] extra
+          |> List.rev_append [ AST.Null; AST.Primitive (S "") ]
     | _ ->
         List.fold_left
           (fun acc x -> if x = "NULL" then AST.Null :: acc else acc)
           [] lst
   in
-  total (List.rev_append default extra)
+  total default extra
 
 let not_found_value v =
   match v.Value.value with Value.Eq NonValue -> true | _ -> false
