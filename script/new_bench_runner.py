@@ -46,16 +46,19 @@ def split_error_summary(dirpath, summary):
     src_lines = []
     buf = ""
     error_count = 0
-    with open(src, 'r') as f:
+    with open(summary, 'r') as f:
         src_lines = f.readlines()
     for i in src_lines:
         if "\"Procname\"" in i and "\"BoItv\"" in i:
+            buf = i
             mk_error_summary_file(dirpath, error_count, buf)
             error_count += 1
+            buf = ""
         elif "\"BoItv\"" in i:
             buf += i
             mk_error_summary_file(dirpath, error_count, buf)
             error_count += 1
+            buf = ""
         else:
             buf += i
 
@@ -174,7 +177,7 @@ def main():
                         help='[maven | javac]')
     args = parser.parse_args()
     abspath = os.path.abspath(args.project)
-    run_infer(abspath, args.infer_path)
+    run_infer(abspath, str(args.infer_path))
     run_parser(abspath, args.encoding)
     run_command_maker(abspath, args.build_type)
     run_unitcon(abspath)
