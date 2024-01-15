@@ -95,22 +95,15 @@ def run_infer(project_dir, infer_path):
 
 
 def run_parser(project_dir, encoding):
-    venv = ' '.join(['source', 'venv/bin/active'])
-    subprocess.run(venv, cwd=os.getcwd(), shell=True, capture_output=True)
     script_list = [
         'constant_collector.py', 'enum_parser.py', 'inheritance_info_parser.py'
     ]
     for script in script_list:
         cmd = ' '.join([
-            'python3',
-            os.path.join('script', script), project_dir, "--encoding", encoding
+            'source', 'venv/bin/activate;', 'python3',
+            os.path.join('script', script), project_dir, '--encoding', encoding
         ])
-        subprocess.run(cmd, cwd=os.getcwd(), shell=True, capture_output=True)
-    # The end of executing parsers
-    subprocess.run('deactivate',
-                   cwd=os.getcwd(),
-                   shell=True,
-                   capture_output=True)
+        os.system("bash -c " + "\"" + cmd + "\"")
 
 
 def run_command_maker(project_dir, build_type):
