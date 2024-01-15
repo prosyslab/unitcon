@@ -1382,6 +1382,7 @@ let get_clist class_name m_info (c_info, ig) =
             is_normal_class class_name_to_find c_info
             && is_private method_name m_info |> not
             && match_constructor_name class_name_to_find method_name
+            && Utils.is_anonymous method_name |> not
           then method_name :: init_list
           else init_list)
         method_list class_to_find)
@@ -1616,6 +1617,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
         (try SetterMap.M.find class_name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
                is_private s m_info |> not
+               && Utils.is_anonymous s |> not
                &&
                if !Cmdline.basic_mode || !Cmdline.syn_priority then true
                else is_subset var.field fields || Utils.is_array_set s)
@@ -1667,6 +1669,7 @@ let get_ret_obj class_name m_info (c_info, ig) s_map =
             && is_private method_name m_info |> not
             && Utils.is_init_method method_name |> not
             && is_void_method method_name s_map |> not
+            && Utils.is_anonymous method_name |> not
           then method_name :: init_list
           else init_list)
         method_list class_to_find)

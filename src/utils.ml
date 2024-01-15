@@ -6,6 +6,15 @@ let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 let is_init_method m_name =
   Str.string_match (".*\\.<init>" |> Str.regexp) m_name 0
 
+let is_anonymous m_name =
+  let check_int name =
+    match int_of_string_opt name with Some _ -> true | _ -> false
+  in
+  let rec check lst =
+    match lst with hd :: tl -> check_int hd || check tl | _ -> false
+  in
+  get_class_name m_name |> String.split_on_char '$' |> check
+
 let get_array_class_name name =
   let arr = [ "Int"; "Long"; "Byte"; "Float"; "Double"; "Bool"; "Char" ] in
   if List.mem name arr then String.lowercase_ascii name else name
