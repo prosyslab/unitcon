@@ -58,3 +58,6 @@ __pycache__/
 
 unitcon
 unitcon-out
+
+# Analysis result
+*-result/
