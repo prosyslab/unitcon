@@ -976,14 +976,19 @@ let default_value_list typ import p_info =
             if String.length x = 1 then AST.Primitive (C x.[0]) :: acc else acc)
           [] lst
     | String ->
-        if extra = [] then
+        let def_lst =
           List.fold_left
             (fun acc x ->
               if x = "NULL" then AST.Null :: acc else AST.Primitive (S x) :: acc)
             [] default
-        else
-          List.fold_left (fun acc x -> AST.Primitive (S x) :: acc) [] extra
-          |> List.rev_append [ AST.Null; AST.Primitive (S "") ]
+        in
+        List.fold_left
+          (fun acc x -> if x = "" then acc else AST.Primitive (S x) :: acc)
+          [] extra
+        |> List.rev_append
+             (if List.filter (fun x -> String.length x > 0) extra = [] then
+                def_lst
+              else [ AST.Null; AST.Primitive (S "") ])
     | _ ->
         List.fold_left
           (fun acc x -> if x = "NULL" then AST.Null :: acc else acc)
