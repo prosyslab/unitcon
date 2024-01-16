@@ -293,15 +293,15 @@ let contains_used_in_error base_set target_set =
       else check)
     target_set false
 
-let is_subset f1 f2 =
+let is_intersect f1 f2 =
   FieldSet.fold
     (fun f check ->
       if
         FieldSet.mem { used_in_error = false; name = f.name } f2
         || FieldSet.mem { used_in_error = true; name = f.name } f2
-      then true && check
-      else false)
-    f1 true
+      then true
+      else check)
+    f1 false
 
 let check_intersect ~is_init caller_prop callee_summary vs_list =
   let vmap_maker symbol target_vmap from_error =
@@ -1630,7 +1630,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
                && Utils.is_anonymous s |> not
                &&
                if !Cmdline.basic_mode || !Cmdline.syn_priority then true
-               else is_subset var.field fields || Utils.is_array_set s)
+               else is_intersect var.field fields || Utils.is_array_set s)
       in
       List.fold_left
         (fun lst (s, fields) ->
