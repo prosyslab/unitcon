@@ -87,7 +87,7 @@ def execute_summary_maker(project_dir: str, infer_path: str) -> None:
     ).stdout
     with open(summary_file, "wb") as f:
         debug(f"Writing result to {summary_file}...")
-        f.write(result.stdout)
+        f.write(result)
 
 
 def mk_error_summary_file(dirpath: str, error_count: int, buf: str) -> None:
@@ -327,7 +327,7 @@ def run_unitcon(project_dir: str) -> None:
         out, _ = process.communicate()
         with open(result_file, "wb") as f:
             debug(f"Writing results to {result_file}...")
-            f.write(out)
+            f.write(bytes(out, encoding="utf-8"))
         error_count += 1
 
 
