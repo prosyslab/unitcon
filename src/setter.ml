@@ -16,6 +16,9 @@ let rec get_tail_set symbol memory tails =
         sym tails
   | None -> tails
 
+let is_tail_symbol symbol memory =
+  match Condition.M.find_opt symbol memory with Some _ -> false | None -> true
+
 let equal_value v1 v2 =
   let normalize v =
     match v with
@@ -43,6 +46,7 @@ let get_value symbol vmap =
   | _ -> Value.Eq NonValue
 
 let equal_values set1 set2 vmap =
+  let filter (set, mem) = TailsSet.filter (fun x -> is_tail_symbol x mem) set in
   let inner_equal v set =
     if Value.Eq NonValue = v then false
     else
@@ -52,8 +56,9 @@ let equal_values set1 set2 vmap =
         set false
   in
   TailsSet.fold
-    (fun v equal -> if inner_equal (get_value v vmap) set2 then true else equal)
-    set1 false
+    (fun v equal ->
+      if inner_equal (get_value v vmap) (filter set2) then true else equal)
+    (filter set1) false
 
 let get_change_field post_key pre_mem post_mem vmap field_set =
   match Condition.M.find_opt post_key post_mem with
@@ -69,7 +74,9 @@ let get_change_field post_key pre_mem post_mem vmap field_set =
                 | Condition.RH_Var id ->
                     let pre = get_tail_set value pre_mem TailsSet.empty in
                     let post = get_tail_set value post_mem TailsSet.empty in
-                    let compare_value = equal_values pre post vmap in
+                    let compare_value =
+                      equal_values (pre, pre_mem) (post, post_mem) vmap
+                    in
                     let change_field =
                       if pre = post || compare_value then false else true
                     in
