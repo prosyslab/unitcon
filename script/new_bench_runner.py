@@ -33,11 +33,12 @@ def run_with_debug(cmd: str, *args, **kwargs) -> None:
     debug(f"Output:\n{output}")
 
 
-def execute_build_cmd(project_dir: str, infer_path: str) -> None:
+def execute_build_cmd(project_dir: str, infer_path: str, version: int) -> None:
     """Perform `infer capture` on the target project.
 
     :param project_dir: Main directory path of the target project
     :param infer_path: Path of the infer executable
+    :param version: Java version of the target project
     """
     debug(f"Executing build cmd: {project_dir=} {infer_path=}")
     build_cmd_file: str = os.path.join(
@@ -50,7 +51,7 @@ def execute_build_cmd(project_dir: str, infer_path: str) -> None:
             if cmd.startswith("mvn dependency"):
                 continue
             if cmd.startswith("mvn clean"):
-                cmd = " ".join([infer_path, "capture", "--", cmd])
+                cmd = " ".join([infer_path, "capture", "--java-version", str(version), "--", cmd])
                 run_with_debug(cmd, cwd=project_dir, shell=True)
             else:
                 run_with_debug(cmd, cwd=project_dir, shell=True)
@@ -199,14 +200,15 @@ def copy_summary(project_dir: str) -> None:
         print(f"Failed to build {project_dir}")
 
 
-def run_infer(project_dir: str, infer_path: str) -> None:
+def run_infer(project_dir: str, infer_path: str, version: int) -> None:
     """Wrapper function for Infer analysis and summarizing the results for Unitcon.
 
     :param project_dir: Main directory path of the target project
     :param infer_path: Path of the infer executable
+    :param version: Java version of the target project
     """
     debug("Running infer...")
-    execute_build_cmd(project_dir, infer_path)
+    execute_build_cmd(project_dir, infer_path, version)
     execute_analyzer(project_dir, infer_path)
     execute_summary_maker(project_dir, infer_path)
     copy_summary(project_dir)
@@ -288,15 +290,18 @@ def copy_error_summary(project_dir: str, error_count: int) -> bool:
     return False
 
 
-def run_unitcon(project_dir: str) -> None:
+def run_unitcon(project_dir: str, unitcon_path: str) -> None:
     """Wrapper function for main Unitcon sequence.
     Iterate over each error summary file to run Unitcon and save the results.
-    
+
     :param project_dir: Main directory path of the target project
+    :param unitcon_path: Path of the unitcon executable
     """
     debug("Running unitcon...")
     error_count: int = 0
-    result_dir: str = os.path.join(os.getcwd(), os.path.basename(project_dir) + "-result")
+    result_dir: str = os.path.join(
+        os.getcwd(), os.path.basename(project_dir) + "-result"
+    )
 
     if os.path.isdir(result_dir):
         debug(f"{result_dir} already exists. Deleting...")
@@ -305,8 +310,8 @@ def run_unitcon(project_dir: str) -> None:
     os.mkdir(result_dir)
 
     while copy_error_summary(project_dir, error_count):
-        result_file: str = os.path.join(result_dir, "-" + str(error_count))
-        cmd: str = " ".join(["unitcon", project_dir])
+        result_file: str = os.path.join(result_dir, "result-" + str(error_count))
+        cmd: str = " ".join([unitcon_path, project_dir])
 
         debug(f"Running command: {cmd}")
         debug("args=()")
@@ -361,22 +366,33 @@ def main() -> None:
         help="Path of infer's executable file",
     )
     parser.add_argument(
+        "--unitcon_path",
+        type=pathlib.Path,
+        default="unitcon",  # Assumes `unitcon` is on PATH
+        help="Path of unitcon's executable file",
+    )
+    parser.add_argument(
         "--encoding", type=str, default="utf-8", help="Encoding type of project"
     )
     parser.add_argument(
         "--build_type", type=str, default="maven", help="[maven | javac]"
     )
-    parser.add_argument("--verbose", type=bool, default=False, help="Print debug lines")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Print debug lines"
+    )
+    parser.add_argument(
+        "--version", type=int, default=8, help="Version of Java used in the project"
+    )
     args = parser.parse_args()
     abspath = os.path.abspath(args.project)
 
     global VERBOSE
     VERBOSE = args.verbose
 
-    run_infer(abspath, str(args.infer_path))
+    run_infer(abspath, str(args.infer_path), args.version)
     run_parser(abspath, args.encoding)
     run_command_maker(abspath, args.build_type)
-    run_unitcon(abspath)
+    run_unitcon(abspath, str(args.unitcon_path))
 
 
 if __name__ == "__main__":
