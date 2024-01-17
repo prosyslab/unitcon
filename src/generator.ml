@@ -783,6 +783,31 @@ let is_normal_class class_name c_info =
       match typ.ClassInfo.class_type with Static | Normal -> true | _ -> false)
   | None -> true (* modeling class *)
 
+let is_abstract_class class_name (c_info, _) =
+  match ClassInfo.M.find_opt class_name c_info with
+  | Some typ -> (
+      match typ.ClassInfo.class_type with
+      | Abstract | Abstract_and_Static -> true
+      | _ -> false)
+  | _ -> false
+
+let is_abstract_method method_name class_name_list m_info c_info =
+  let target_class = Utils.get_class_name method_name in
+  let m_name =
+    Regexp.first_rm
+      ("^" ^ (target_class |> Str.global_replace (Str.regexp ".") "\\.")
+      |> Str.regexp)
+      method_name
+  in
+  if is_abstract_class target_class c_info |> not then false
+  else
+    List.fold_left
+      (fun check class_name ->
+        if class_name = target_class then check
+        else if MethodInfo.M.mem (class_name ^ m_name) m_info then true
+        else check)
+      false class_name_list
+
 let is_s_class name (c_info, _) =
   let name =
     Regexp.global_rm (Str.regexp "\\.<.*>(.*)$") name
@@ -1663,9 +1688,9 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
               f_arg_list lst)
         [] setter_list
 
-let get_ret_obj class_name m_info (c_info, ig) s_map =
+let get_ret_obj class_name m_info c_info s_map =
   let class_to_find =
-    try IG.succ ig class_name |> List.cons class_name
+    try IG.succ (c_info |> snd) class_name |> List.cons class_name
     with Invalid_argument _ -> [ class_name ]
   in
   MethodInfo.M.fold
@@ -1674,7 +1699,8 @@ let get_ret_obj class_name m_info (c_info, ig) s_map =
         (fun init_list class_name_to_find ->
           if
             match_return_object class_name_to_find method_name m_info
-            && is_normal_class (Utils.get_class_name method_name) c_info
+            && is_private_class (Utils.get_class_name method_name) c_info |> not
+            && is_abstract_method method_name class_to_find m_info c_info |> not
             && is_private method_name m_info |> not
             && Utils.is_init_method method_name |> not
             && is_void_method method_name s_map |> not
