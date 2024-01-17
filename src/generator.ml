@@ -1111,7 +1111,7 @@ let calc_value id value default =
           (* Among the const, only the string can be defined as null *)
           List.fold_left
             (fun lst x ->
-              if x = AST.Null then (-2, x) :: lst else (prec, x) :: lst)
+              if x = AST.Null then (-prec, x) :: lst else (prec, x) :: lst)
             [] default
       | _ -> failwith "not implemented neq")
   | Le v -> (
@@ -1273,16 +1273,7 @@ let calc_value id value default =
             default
       | _ -> failwith "not implemented outside")
 
-let find_target_value id { precond = pre_var, pre_mem; value; _ } =
-  let target_variable =
-    Condition.M.fold
-      (fun symbol variable find_variable ->
-        match variable with
-        | Condition.RH_Var var when var = id -> (
-            match symbol with Condition.RH_Symbol s -> s | _ -> find_variable)
-        | _ -> find_variable)
-      pre_var ""
-  in
+let find_value_from_variable memory value target_variable =
   let target_variable =
     Condition.M.fold
       (fun symbol symbol_trace find_variable ->
@@ -1295,7 +1286,7 @@ let find_target_value id { precond = pre_var, pre_mem; value; _ } =
               | _ -> trace_find_var)
             symbol_trace find_variable
         else find_variable)
-      pre_mem target_variable
+      memory target_variable
   in
   Value.M.fold
     (fun symbol value find_value ->
@@ -1303,13 +1294,44 @@ let find_target_value id { precond = pre_var, pre_mem; value; _ } =
     value
     Value.{ from_error = false; value = Value.Eq NonValue }
 
+let find_target_value id { precond = pre_var, pre_mem; value; _ } =
+  Condition.M.fold
+    (fun symbol variable find_variable ->
+      match variable with
+      | Condition.RH_Var var when var = id -> (
+          match symbol with Condition.RH_Symbol s -> s | _ -> find_variable)
+      | _ -> find_variable)
+    pre_var ""
+  |> find_value_from_variable pre_mem value
+
+let find_target_value_from_this id summary =
+  let this_sym default =
+    match
+      Condition.M.find_opt
+        (AST.org_symbol "this" summary |> mk_symbol)
+        (summary.precond |> snd)
+    with
+    | Some this_mem ->
+        Condition.M.fold
+          (fun field symbol find_variable ->
+            match field with
+            | Condition.RH_Var v when v = id -> AST.get_rh_name symbol
+            | _ -> find_variable)
+          this_mem default
+    | _ -> default
+  in
+  this_sym "" |> find_value_from_variable (summary.precond |> snd) summary.value
+
 let get_value v p_info =
   let typ, id = AST.get_vinfo v in
-  let find_value = find_target_value id (AST.get_v v).summary in
+  let find_value1 = find_target_value id (AST.get_v v).summary in
+  let find_value2 = find_target_value_from_this id (AST.get_v v).summary in
   let default = default_value_list typ (AST.get_v v).import p_info in
-  if not_found_value find_value then
-    List.fold_left (fun lst x -> (0, x) :: lst) [] default
-  else calc_value id find_value default
+  if not_found_value find_value1 then
+    if not_found_value find_value2 then
+      List.fold_left (fun lst x -> (0, x) :: lst) [] default
+    else calc_value id find_value2 default
+  else calc_value id find_value1 default
 
 let get_array_size array summary =
   let _, memory = summary.precond in
@@ -1521,6 +1543,203 @@ let global_var_list class_name t_summary summary m_info i_info =
       in
       find_global_var_list class_name target_variable mem summary m_info
 
+let get_symbol_num symbol =
+  match
+    Regexp.first_rm ("^[av]" |> Str.regexp) (symbol |> AST.get_rh_name)
+    |> int_of_string_opt
+  with
+  | Some i -> i
+  | _ -> 0
+
+let get_fresh_num ?(prev_num = 1) post_mem =
+  let get_num map std_num =
+    Condition.M.fold
+      (fun _ value num ->
+        let sym_num = get_symbol_num value in
+        if sym_num > num then sym_num else num)
+      map std_num
+  in
+  Condition.M.fold
+    (fun _ value num ->
+      let new_num = get_num value num in
+      if new_num > num then new_num else num)
+    post_mem prev_num
+
+let n_forward n start start_map =
+  let key_compare k1 k2 =
+    match (k1, k2) with
+    | Condition.RH_Symbol _, Condition.RH_Symbol _ ->
+        get_symbol_num k1 < get_symbol_num k2
+    | _ -> false
+  in
+  let collect_key org_key map =
+    Condition.M.fold
+      (fun field k lst ->
+        if key_compare org_key k then (org_key, field, k) :: lst else lst)
+      map []
+  in
+  let find_key key map =
+    match Condition.M.find_opt key map with
+    | Some value -> collect_key key value
+    | _ -> []
+  in
+  let rec forwards count key_list =
+    if count >= n then key_list
+    else
+      let keys =
+        List.fold_left
+          (fun lst (_, _, k) -> find_key k start_map |> List.rev_append lst)
+          [] key_list
+      in
+      forwards (count + 1) keys
+  in
+  forwards 1 (find_key start start_map)
+
+let modify_summary id t_summary c_summary =
+  let check_new_value symbol vmap memory =
+    match Condition.M.find_opt symbol memory with
+    | Some x ->
+        Condition.M.fold
+          (fun field value check ->
+            let tail_sym =
+              AST.get_tail_symbol
+                (AST.get_rh_name ~is_var:true field)
+                value memory
+            in
+            match Value.M.find_opt (AST.get_rh_name tail_sym) vmap with
+            | Some _ -> true
+            | _ -> check)
+          x false
+    | _ -> false
+  in
+  let add_new_mmap f1 f2 org_key field map =
+    match Condition.M.find_opt org_key map with
+    | Some x ->
+        Condition.M.add org_key
+          (Condition.M.add (AST.get_rh_name ~is_var:true field |> mk_var) f1 x)
+          map
+        |> Condition.M.add f1 (Condition.M.add RH_Any f2 Condition.M.empty)
+    | _ ->
+        Condition.M.add org_key
+          (Condition.M.add
+             (AST.get_rh_name ~is_var:true field |> mk_var)
+             f1 Condition.M.empty)
+          map
+        |> Condition.M.add f1 (Condition.M.add RH_Any f2 Condition.M.empty)
+  in
+  let id = if id = "con_recv" then "this" else id in
+  let var_symbol = AST.org_symbol id t_summary |> mk_symbol in
+  let this_symbol = AST.org_symbol "this" c_summary |> mk_symbol in
+  let rec forward count new_memory =
+    let t_key_list = n_forward count var_symbol (t_summary.precond |> snd) in
+    let c_key_list = n_forward count this_symbol (c_summary.postcond |> snd) in
+    if t_key_list = [] then new_memory
+    else if List.length t_key_list = List.length c_key_list then
+      forward (count + 1) new_memory
+    else
+      let c_org_key =
+        if count = 1 then this_symbol
+        else
+          let c_org_key, _, _ =
+            n_forward (count - 1) this_symbol (c_summary.postcond |> snd)
+            |> List.hd
+          in
+          c_org_key
+      in
+      List.fold_left
+        (fun (sym, value, new_pre_mem, new_post_mem) (_, field, key) ->
+          let field_name = AST.get_rh_name ~is_var:true field in
+          if field_name = "" then (sym, value, new_pre_mem, new_post_mem)
+          else
+            let fn1 = get_fresh_num (c_summary.postcond |> snd) in
+            let fn2 = get_fresh_num ~prev_num:fn1 (c_summary.postcond |> snd) in
+            let fv1 = fn1 |> string_of_int |> String.cat "v" |> mk_symbol in
+            let fv2 = fn2 |> string_of_int |> String.cat "v" |> mk_symbol in
+            let new_value =
+              Value.M.find
+                (AST.get_tail_symbol "" key (t_summary.precond |> snd)
+                |> AST.get_rh_name)
+                t_summary.value
+            in
+            let new_pre_mem =
+              add_new_mmap fv1 fv2 c_org_key field new_pre_mem
+            in
+            let new_post_mem =
+              add_new_mmap fv1 fv2 c_org_key field new_post_mem
+            in
+            (fv2, new_value, new_pre_mem, new_post_mem))
+        new_memory t_key_list
+  in
+  if
+    check_new_value var_symbol t_summary.value (t_summary.precond |> snd) |> not
+  then c_summary
+  else
+    let symbol, value, pre_mem, post_mem =
+      forward 1
+        ( RH_Any,
+          Value.{ from_error = false; value = Value.Eq Value.NonValue },
+          c_summary.precond |> snd,
+          c_summary.postcond |> snd )
+    in
+    {
+      relation = c_summary.relation;
+      value =
+        (if AST.get_rh_name symbol = "" then c_summary.value
+         else Value.M.add (AST.get_rh_name symbol) value c_summary.value);
+      use_field = c_summary.use_field;
+      precond = (c_summary.precond |> fst, pre_mem);
+      postcond = (c_summary.postcond |> fst, post_mem);
+      args = c_summary.args;
+    }
+
+let modify_array_summary id t_summary a_summary =
+  let from_error, value = get_array_size id t_summary in
+  let new_value =
+    Value.M.add
+      (AST.org_symbol "size" a_summary)
+      Value.{ from_error; value = Value.Ge (Int value) }
+      a_summary.value
+  in
+  let new_this_summary old_summary values =
+    let this_symbol = AST.org_symbol "this" old_summary |> mk_symbol in
+    let new_mem mem =
+      Condition.M.find this_symbol mem
+      |> Condition.M.add
+           (values |> fst |> fst |> mk_index)
+           (values |> snd |> fst |> mk_symbol)
+    in
+    let new_premem = new_mem (old_summary.precond |> snd) in
+    let new_postmem = new_mem (old_summary.postcond |> snd) in
+    {
+      relation = old_summary.relation;
+      value =
+        Value.M.add
+          (values |> fst |> fst)
+          (values |> fst |> snd)
+          old_summary.value
+        |> Value.M.add (values |> snd |> fst) (values |> snd |> snd);
+      use_field = old_summary.use_field;
+      precond =
+        ( old_summary.precond |> fst,
+          Condition.M.add this_symbol new_premem (old_summary.precond |> snd) );
+      postcond =
+        ( old_summary.postcond |> fst,
+          Condition.M.add this_symbol new_postmem (old_summary.postcond |> snd)
+        );
+      args = old_summary.args;
+    }
+  in
+  let rec mk_new_summary new_summary summary =
+    let tmp = AST.get_array_index id summary in
+    if tmp |> fst |> fst = "" then (new_summary, summary)
+    else
+      let new_mem = AST.remove_array_index id (tmp |> fst |> fst) summary in
+      mk_new_summary
+        (new_this_summary new_summary tmp)
+        (new_mem_summary new_mem summary)
+  in
+  mk_new_summary (new_value_summary new_value a_summary) t_summary |> fst
+
 let mk_params_list summary params_set org_param =
   let fst_param set = VarSet.elements set |> List.hd in
   let find_same_param target =
@@ -1710,58 +1929,6 @@ let get_ret_obj class_name m_info c_info s_map =
         method_list class_to_find)
     m_info []
 
-let modify_summary id t_summary a_summary =
-  let from_error, value = get_array_size id t_summary in
-  let new_value =
-    Value.M.add
-      (AST.org_symbol "size" a_summary)
-      Value.{ from_error; value = Value.Ge (Int value) }
-      a_summary.value
-  in
-  let new_this_summary old_summary values =
-    let this_symbol = AST.org_symbol "this" old_summary |> mk_symbol in
-    let new_premem =
-      Condition.M.find this_symbol (old_summary.precond |> snd)
-      |> Condition.M.add
-           (values |> fst |> fst |> mk_index)
-           (values |> snd |> fst |> mk_symbol)
-    in
-    let new_postmem =
-      Condition.M.find this_symbol (old_summary.postcond |> snd)
-      |> Condition.M.add
-           (values |> fst |> fst |> mk_index)
-           (values |> snd |> fst |> mk_symbol)
-    in
-    {
-      relation = old_summary.relation;
-      value =
-        Value.M.add
-          (values |> fst |> fst)
-          (values |> fst |> snd)
-          old_summary.value
-        |> Value.M.add (values |> snd |> fst) (values |> snd |> snd);
-      use_field = old_summary.use_field;
-      precond =
-        ( old_summary.precond |> fst,
-          Condition.M.add this_symbol new_premem (old_summary.precond |> snd) );
-      postcond =
-        ( old_summary.postcond |> fst,
-          Condition.M.add this_symbol new_postmem (old_summary.postcond |> snd)
-        );
-      args = old_summary.args;
-    }
-  in
-  let rec mk_new_summary new_summary summary =
-    let tmp = AST.get_array_index id summary in
-    if tmp |> fst |> fst = "" then (new_summary, summary)
-    else
-      let new_mem = AST.remove_array_index id (tmp |> fst |> fst) summary in
-      mk_new_summary
-        (new_this_summary new_summary tmp)
-        (new_mem_summary new_mem summary)
-  in
-  mk_new_summary (new_value_summary new_value a_summary) t_summary |> fst
-
 let satisfied_c_list id t_summary summary summary_list =
   if !Cmdline.basic_mode || !Cmdline.syn_priority then
     List.fold_left
@@ -1776,10 +1943,13 @@ let satisfied_c_list id t_summary summary summary_list =
           (List.fold_left (fun pick (check, summary) ->
                if check then
                  if Utils.is_array_init constructor then
-                   ( is_from_error true summary,
-                     constructor,
-                     modify_summary id t_summary summary )
-                 else (is_from_error true summary, constructor, summary)
+                   let new_summary =
+                     modify_array_summary id t_summary summary
+                   in
+                   (is_from_error true new_summary, constructor, new_summary)
+                 else
+                   let new_summary = modify_summary id t_summary summary in
+                   (is_from_error true new_summary, constructor, new_summary)
                else if pick = (0, "", empty_summary) then
                  (-3, constructor, empty_summary)
                else pick))
