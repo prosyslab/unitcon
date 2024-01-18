@@ -1545,25 +1545,13 @@ let global_var_list class_name t_summary summary m_info i_info =
 
 let get_symbol_num symbol =
   match
-    Regexp.first_rm ("^[av]" |> Str.regexp) (symbol |> AST.get_rh_name)
+    Regexp.first_rm Regexp.symbol (symbol |> AST.get_rh_name)
     |> int_of_string_opt
   with
   | Some i -> i
   | _ -> 0
 
-let get_fresh_num ?(prev_num = 1) post_mem =
-  let get_num map std_num =
-    Condition.M.fold
-      (fun _ value num ->
-        let sym_num = get_symbol_num value in
-        if sym_num > num then sym_num else num)
-      map std_num
-  in
-  Condition.M.fold
-    (fun _ value num ->
-      let new_num = get_num value num in
-      if new_num > num then new_num else num)
-    post_mem prev_num
+let get_fresh_num prev_num = prev_num + 1
 
 let n_forward n start start_map =
   let key_compare k1 k2 =
@@ -1651,15 +1639,17 @@ let modify_summary id t_summary c_summary =
           let field_name = AST.get_rh_name ~is_var:true field in
           if field_name = "" then (sym, value, new_pre_mem, new_post_mem)
           else
-            let fn1 = get_fresh_num (c_summary.postcond |> snd) in
-            let fn2 = get_fresh_num ~prev_num:fn1 (c_summary.postcond |> snd) in
-            let fv1 = fn1 |> string_of_int |> String.cat "v" |> mk_symbol in
-            let fv2 = fn2 |> string_of_int |> String.cat "v" |> mk_symbol in
+            let fn1 = get_fresh_num 1 in
+            let fn2 = get_fresh_num fn1 in
+            let fv1 = fn1 |> string_of_int |> String.cat "u" |> mk_symbol in
+            let fv2 = fn2 |> string_of_int |> String.cat "u" |> mk_symbol in
             let new_value =
-              Value.M.find
-                (AST.get_tail_symbol "" key (t_summary.precond |> snd)
-                |> AST.get_rh_name)
-                t_summary.value
+              try
+                Value.M.find
+                  (AST.get_tail_symbol "" key (t_summary.precond |> snd)
+                  |> AST.get_rh_name)
+                  t_summary.value
+              with _ -> value
             in
             let new_pre_mem =
               add_new_mmap fv1 fv2 c_org_key field new_pre_mem
@@ -1674,17 +1664,18 @@ let modify_summary id t_summary c_summary =
     check_new_value var_symbol t_summary.value (t_summary.precond |> snd) |> not
   then c_summary
   else
+    let default_value = Value.{ from_error = false; value = Eq NonValue } in
     let symbol, value, pre_mem, post_mem =
       forward 1
         ( RH_Any,
-          Value.{ from_error = false; value = Value.Eq Value.NonValue },
+          default_value,
           c_summary.precond |> snd,
           c_summary.postcond |> snd )
     in
     {
       relation = c_summary.relation;
       value =
-        (if AST.get_rh_name symbol = "" then c_summary.value
+        (if value = default_value then c_summary.value
          else Value.M.add (AST.get_rh_name symbol) value c_summary.value);
       use_field = c_summary.use_field;
       precond = (c_summary.precond |> fst, pre_mem);

@@ -50,9 +50,9 @@ let o_bk = Str.regexp "{"
 
 let c_bk = Str.regexp "}"
 
-let symbol = Str.regexp "^[av][0-9]+$"
+let symbol = Str.regexp "^[avu][0-9]+$"
 
-let index = Str.regexp "^\\[[av][0-9]+\\]$"
+let index = Str.regexp "^\\[[avu][0-9]+\\]$"
 
 let any = Str.regexp "\\*"
 
