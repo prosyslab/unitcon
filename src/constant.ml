@@ -24,6 +24,28 @@ let default_primitive =
         mmap)
     PrimitiveInfo.TypeMap.empty typ_list
 
+let expand_string_value m_name p_info =
+  let method_name = Regexp.first_rm ("(.*)" |> Str.regexp) m_name in
+  let default_map, default =
+    match PrimitiveInfo.TypeMap.find_opt String p_info with
+    | Some map -> (
+        match PrimitiveInfo.ClassMap.find_opt "" map with
+        | Some value -> (map, value)
+        | _ -> (PrimitiveInfo.ClassMap.empty, []))
+    | _ -> (PrimitiveInfo.ClassMap.empty, [])
+  in
+  let extra =
+    match PrimitiveInfo.TypeMap.find_opt String p_info with
+    | Some map -> (
+        match PrimitiveInfo.ClassMap.find_opt method_name map with
+        | Some value -> value
+        | _ -> [])
+    | _ -> []
+  in
+  PrimitiveInfo.TypeMap.add String
+    (PrimitiveInfo.ClassMap.add "" (List.rev_append default extra) default_map)
+    p_info
+
 let collect_enum_const assoc mmap =
   let enum_name = JsonUtil.member "enum" assoc |> JsonUtil.to_string in
   let const = JsonUtil.member "const" assoc |> JsonUtil.to_string in

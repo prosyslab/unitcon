@@ -1001,19 +1001,13 @@ let default_value_list typ import p_info =
             if String.length x = 1 then AST.Primitive (C x.[0]) :: acc else acc)
           [] lst
     | String ->
-        let def_lst =
-          List.fold_left
-            (fun acc x ->
-              if x = "NULL" then AST.Null :: acc else AST.Primitive (S x) :: acc)
-            [] default
-        in
+        (* String constant is already expanded when finding error entries *)
         List.fold_left
-          (fun acc x -> if x = "" then acc else AST.Primitive (S x) :: acc)
-          [] extra
-        |> List.rev_append
-             (if List.filter (fun x -> String.length x > 0) extra = [] then
-                def_lst
-              else [ AST.Null; AST.Primitive (S "") ])
+          (fun acc x ->
+            if List.mem (AST.Primitive (S x)) acc then acc
+            else if x = "NULL" then AST.Null :: acc
+            else AST.Primitive (S x) :: acc)
+          [] default
     | _ ->
         List.fold_left
           (fun acc x -> if x = "NULL" then AST.Null :: acc else acc)
@@ -2528,19 +2522,20 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
         :: lst)
       [] list
   in
-  let init =
+  let p_info, init =
     if is_start then (
       pkg := pkg_name;
       ErrorEntrySet.fold
-        (fun (ee, ee_s) init_list ->
-          apply_rule (get_void_func AST.Id ~ee ~es:ee_s m_info c_info s_map)
-          |> List.fold_left
-               (fun lst new_tc -> mk_cost empty_p new_tc 0 :: lst)
-               []
-          |> List.rev_append init_list)
+        (fun (ee, ee_s) (p_info_init, init_list) ->
+          ( Constant.expand_string_value ee p_info_init,
+            apply_rule (get_void_func AST.Id ~ee ~es:ee_s m_info c_info s_map)
+            |> List.fold_left
+                 (fun lst new_tc -> mk_cost empty_p new_tc 0 :: lst)
+                 []
+            |> List.rev_append init_list ))
         (find_ee e_method error_summary cg summary call_prop_map m_info c_info)
-        [])
-    else queue
+        (p_info, []))
+    else (p_info, queue)
   in
   let result = mk_testcase summary cg m_info c_info s_map i_info p_info init in
   if result = [] then (("", ""), []) else List.hd result

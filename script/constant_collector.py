@@ -17,6 +17,13 @@ extract_class_name_query = J_LANGUAGE.query("""
 )
 """)
 
+extract_method_name_query = J_LANGUAGE.query("""
+(method_declaration
+  name: (identifier) @method-name
+  body: (block) @method-body
+)
+""")
+
 extract_create_object_query = J_LANGUAGE.query("""
 (field_declaration
   (modifiers) @variable-modifier
@@ -131,14 +138,25 @@ def get_assign_primitive(node, src, class_name):
                 })
 
 
-def get_if_primitive(node, src, class_name):
+def get_if_primitive(node, src, type_name):
     lst = extract_if_primitive_query.captures(node)
     for i in lst:
         text = get_text(i, src)
         if "\"" not in text:
             continue
-        if i[1] == 'String':
-            constant['String'].append({'name': class_name, 'value': text})
+        elif i[1] == 'String':
+            constant['String'].append({'name': type_name, 'value': text})
+
+
+def get_if_primitive_from_method(node, src, class_name):
+    lst = extract_method_name_query.captures(node)
+    method_name = ''
+    for i in lst:
+        text = get_text(i, src)
+        if i[1] == 'method-name':
+            method_name = re.sub("\(.*", "", text)
+        elif i[1] == 'method-body':
+            get_if_primitive(i[0], src, class_name + "." + method_name)
 
 
 def get_parent_class_name(node, src, name):
@@ -173,7 +191,7 @@ def get_class_name(node, src):
                 continue
             get_object(i[0], src, class_name)
             get_assign_primitive(i[0], src, class_name)
-            get_if_primitive(i[0], src, class_name)
+            get_if_primitive_from_method(i[0], src, class_name)
 
 
 def one_file_collector(src, encoding):
