@@ -4,9 +4,15 @@ import pathlib
 import os
 import shutil
 import subprocess
+import datetime
 
 
 VERBOSE: bool = False
+
+
+######################################################
+#             Debugging helper functions             #
+######################################################
 
 
 def debug(msg: str) -> None:
@@ -33,6 +39,20 @@ def run_with_debug(cmd: str, *args, **kwargs) -> None:
     debug(f"Output:\n{output}")
 
 
+def print_curr_time() -> None:
+    """Prints the current time for debugging purposes.
+    Only when verbose option is set.
+    """
+
+    if VERBOSE:
+        debug(datetime.datetime.now().strftime("%m/%d %H:%M:%S"))
+
+
+######################################################
+#                Infer analysis step                 #
+######################################################
+
+
 def execute_build_cmd(project_dir: str, infer_path: str, version: int) -> None:
     """Perform `infer capture` on the target project.
 
@@ -51,7 +71,9 @@ def execute_build_cmd(project_dir: str, infer_path: str, version: int) -> None:
             if cmd.startswith("mvn dependency"):
                 continue
             if cmd.startswith("mvn clean"):
-                cmd = " ".join([infer_path, "capture", "--java-version", str(version), "--", cmd])
+                cmd = " ".join(
+                    [infer_path, "capture", "--java-version", str(version), "--", cmd]
+                )
                 run_with_debug(cmd, cwd=project_dir, shell=True)
             else:
                 run_with_debug(cmd, cwd=project_dir, shell=True)
@@ -214,6 +236,11 @@ def run_infer(project_dir: str, infer_path: str, version: int) -> None:
     copy_summary(project_dir)
 
 
+######################################################
+#               Unicon preprocessing                 #
+######################################################
+
+
 def run_parser(project_dir: str, encoding: str) -> None:
     """Wrapper function for Unitcon preprocessing procedures.
     Executes the following scripts:
@@ -258,6 +285,11 @@ def run_command_maker(project_dir: str, build_type: str) -> None:
     run_with_debug(cmd, cwd=os.getcwd(), shell=True)
 
 
+######################################################
+#               Unicon main program                  #
+######################################################
+
+
 def copy_error_summary(project_dir: str, error_count: int) -> bool:
     """Copies the denoted error summary to unitcon_properties directory.
 
@@ -299,11 +331,15 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
     """
     debug("Running unitcon...")
     error_count: int = 0
+    all_results_dir: str = os.path.join(os.getcwd(), "results")
     result_dir: str = os.path.join(
-        os.getcwd(), os.path.basename(project_dir) + "-result"
+        all_results_dir, os.path.basename(project_dir) + "-result"
     )
 
-    if os.path.isdir(result_dir):
+    if not os.path.isdir(all_results_dir):
+        debug(f"{all_results_dir} does not exits. Creating...")
+        os.mkdir(all_results_dir)
+    elif os.path.isdir(result_dir):
         debug(f"{result_dir} already exists. Deleting...")
         shutil.rmtree(result_dir)
     debug(f"Creating directory {result_dir}...")
@@ -311,8 +347,9 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
 
     while copy_error_summary(project_dir, error_count):
         result_file: str = os.path.join(result_dir, "result-" + str(error_count))
-        cmd: str = " ".join([unitcon_path, project_dir])
+        cmd: str = " ".join([unitcon_path, project_dir, "-until-time-out"])
 
+        print_curr_time()
         debug(f"Running command: {cmd}")
         debug("args=()")
         debug(
@@ -334,6 +371,11 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
             debug(f"Writing results to {result_file}...")
             f.write(bytes(out, encoding="utf-8"))
         error_count += 1
+
+
+######################################################
+#                   Main Function                    #
+######################################################
 
 
 def main() -> None:
