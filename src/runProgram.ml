@@ -257,7 +257,6 @@ let rec run_test ~is_start pkg info queue e_method_info p_info =
     run_test ~is_start:false pkg info tc_list e_method_info p_info)
 
 let run program_dir =
-  time := Unix.time ();
   let info = init program_dir in
   let method_info = parse_method_info info.summary_file in
   let summary = parse_summary info.summary_file method_info in
@@ -273,6 +272,8 @@ let run program_dir =
   let primitive_info = parse_primitive_info info.constant_file in
   let call_prop_map = parse_callprop info.call_prop_file in
   let error_method_info = parse_error_summary info.error_summary_file in
+  time := Unix.time ();
+  ignore (Unix.alarm !Cmdline.time_out);
   run_test ~is_start:true "FIXME" info [] error_method_info
     ( callgraph,
       summary,
