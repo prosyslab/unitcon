@@ -1972,16 +1972,18 @@ let summary_filtering name m_info list =
   |> List.filter (fun (_, c, _) -> is_recursive_param name c m_info |> not)
 
 let check_dup_summary lst =
-  let rec collect_dup lst =
-    match lst with
-    | (_, _, h) :: t ->
-        List.filter (fun (_, _, x) -> is_same_summary h x) t
-        |> List.rev_append (collect_dup t)
-    | _ -> []
-  in
-  List.fold_left
-    (fun l s -> if collect_dup lst |> List.mem s then l else s :: l)
-    [] lst
+  if !Cmdline.basic_mode || !Cmdline.syn_priority then lst
+  else
+    let rec collect_dup lst =
+      match lst with
+      | (_, _, h) :: t ->
+          List.filter (fun (_, _, x) -> is_same_summary h x) t
+          |> List.rev_append (collect_dup t)
+      | _ -> []
+    in
+    List.fold_left
+      (fun l s -> if collect_dup lst |> List.mem s then l else s :: l)
+      [] lst
 
 let get_c ret summary _ m_info c_info =
   let class_name = AST.get_vinfo ret |> fst |> get_class_name in
