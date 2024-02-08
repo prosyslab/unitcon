@@ -1,4 +1,5 @@
 """Runs Unitcon on a new benchmark"""
+
 import argparse
 import pathlib
 import os
@@ -44,8 +45,7 @@ def print_curr_time() -> None:
     Only when verbose option is set.
     """
 
-    if VERBOSE:
-        debug(datetime.datetime.now().strftime("%m/%d %H:%M:%S"))
+    debug(datetime.datetime.now().strftime("%m/%d %H:%M:%S"))
 
 
 ######################################################
@@ -237,6 +237,63 @@ def run_infer(project_dir: str, infer_path: str, version: int) -> None:
 
 
 ######################################################
+#             Error summary filtering                #
+######################################################
+
+
+def file_content_hash(file_path: str, encoding: str) -> int:
+    """Calculates the hash value of the provided file's content.
+
+    :param file_path: Path to the error summary file
+    """
+    with open(file_path, "r", encoding=encoding) as f:
+        return hash(f.read())
+
+
+def remove_duplicate_summaries(project_dir: str, encoding: str) -> None:
+    """Removes error summaries of identical contents.
+
+    :param file_path: Main directory path of the target project
+    """
+    debug("Checking for duplicate summaries...")
+    hash_file_dict: dict[int, list[str]] = {}
+    error_summary_dir: str = os.path.join(
+        project_dir, "unitcon_properties", "error_summarys"
+    )
+    for summary in os.listdir(error_summary_dir):
+        if summary.endswith(".json"):
+            summary_path: str = os.path.join(error_summary_dir, summary)
+            print(summary_path)
+            hash_val: int = file_content_hash(summary_path, encoding)
+            if hash_val in hash_file_dict:
+                hash_file_dict[hash_val].append(summary_path)
+            else:
+                hash_file_dict.update({hash_val: [summary_path]})
+
+    for possible_duplicates in hash_file_dict.values():
+        cnt: int = len(possible_duplicates)
+        if cnt > 1:
+            duplicate: list[bool] = [False for _ in range(cnt)]
+            for i in range(cnt - 1):
+                for j in range(i + 1, cnt):
+                    if not duplicate[i] and not duplicate[j]:
+                        with open(possible_duplicates[i], "r", encoding=encoding) as f:
+                            contents1: str = f.read()
+                        with open(possible_duplicates[j], "r", encoding=encoding) as f:
+                            contents2: str = f.read()
+                        if contents1 == contents2:
+                            debug(
+                                f"Summary {possible_duplicates[j]} is a duplicate of summary {possible_duplicates[i]}!"
+                            )
+                            duplicate[j] = True
+
+            for idx in range(cnt):
+                if duplicate[idx]:
+                    debug(f"Removing file {possible_duplicates[idx]}...")
+                    os.remove(possible_duplicates[idx])
+
+
+######################################################
 #               Unicon preprocessing                 #
 ######################################################
 
@@ -330,10 +387,9 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
     :param unitcon_path: Path of the unitcon executable
     """
     debug("Running unitcon...")
-    error_count: int = 0
     all_results_dir: str = os.path.join(os.getcwd(), "results")
     result_dir: str = os.path.join(
-        all_results_dir, os.path.basename(project_dir) + "-result"
+        all_results_dir, os.path.basename(project_dir) + "_result"
     )
 
     if not os.path.isdir(all_results_dir):
@@ -345,32 +401,36 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
     debug(f"Creating directory {result_dir}...")
     os.mkdir(result_dir)
 
-    while copy_error_summary(project_dir, error_count):
-        result_file: str = os.path.join(result_dir, "result-" + str(error_count))
-        cmd: str = " ".join([unitcon_path, project_dir, "-until-time-out"])
+    # while copy_error_summary(project_dir, error_count):
+    error_summarys_dir = os.path.join(
+        project_dir, "unitcon_properties", "error_summarys"
+    )
+    for summary in os.listdir(error_summarys_dir):
+        if summary.endswith(".json"):
+            result_file: str = os.path.join(result_dir, "result-" + summary[:-5])
+            cmd: str = " ".join([unitcon_path, project_dir, "-until-time-out"])
 
-        print_curr_time()
-        debug(f"Running command: {cmd}")
-        debug("args=()")
-        debug(
-            f"kwargs={{'cwd': {os.getcwd()}, 'shell': True, 'stdout': {subprocess.PIPE}, 'universal_newlines': True}}"
-        )
-        process: subprocess.Popen = subprocess.Popen(
-            cmd,
-            cwd=os.getcwd(),
-            shell=True,
-            stdout=subprocess.PIPE,
-            universal_newlines=True,
-        )
-        # Wait for ending of UnitCon
-        process.wait()
+            print_curr_time()
+            debug(f"Running command: {cmd}")
+            debug("args=()")
+            debug(
+                f"kwargs={{'cwd': {os.getcwd()}, 'shell': True, 'stdout': {subprocess.PIPE}, 'universal_newlines': True}}"
+            )
+            process: subprocess.Popen = subprocess.Popen(
+                cmd,
+                cwd=os.getcwd(),
+                shell=True,
+                stdout=subprocess.PIPE,
+                universal_newlines=True,
+            )
+            # Wait for ending of UnitCon
+            process.wait()
 
-        debug("Unitcon ended!")
-        out, _ = process.communicate()
-        with open(result_file, "wb") as f:
-            debug(f"Writing results to {result_file}...")
-            f.write(bytes(out, encoding="utf-8"))
-        error_count += 1
+            debug("Unitcon ended!")
+            out, _ = process.communicate()
+            with open(result_file, "wb") as f:
+                debug(f"Writing results to {result_file}...")
+                f.write(bytes(out, encoding="utf-8"))
 
 
 ######################################################
@@ -389,6 +449,8 @@ def main() -> None:
        |  |- execute_analyzer()
        |  |- execute_summary_maker()
        |  `- copy_summary()
+       |- remove_duplicate_summaries()
+       |  `- file_coontent_hash()
        |- run_parser()
        |- run_command_maker()
        `- run_unitcon()
@@ -432,6 +494,7 @@ def main() -> None:
     VERBOSE = args.verbose
 
     run_infer(abspath, str(args.infer_path), args.version)
+    remove_duplicate_summaries(abspath, args.encoding)
     run_parser(abspath, args.encoding)
     run_command_maker(abspath, args.build_type)
     run_unitcon(abspath, str(args.unitcon_path))
