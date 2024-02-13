@@ -117,6 +117,18 @@ let parse_extra_callee filename minfo callgraph =
    run program
  * ************************************** *)
 
+let my_really_read_string in_chan =
+  let res = Buffer.create 1024 in
+  let rec loop () =
+    match input_line in_chan with
+    | line ->
+        Buffer.add_string res line;
+        Buffer.add_string res "\n";
+        loop ()
+    | exception End_of_file -> Buffer.contents res
+  in
+  loop ()
+
 let compile_command_of_file file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
   let ic = open_in file in
@@ -161,19 +173,21 @@ let simple_compiler program_dir command =
     Unix.open_process_full command (Unix.environment ())
   in
   let pid = Unix.process_full_pid (stdout, stdin, stderr) in
+  Sys.chdir current_dir;
+  close_out stdin;
   match run_type command with
   | Compile ->
+      let str = my_really_read_string stdout in
       Unix.waitpid [] pid |> ignore;
-      Sys.chdir current_dir;
-      close_out stdin;
       close_in stderr;
-      stdout
-  | Test ->
-      Unix.waitpid [ Unix.WNOHANG ] pid |> ignore;
-      Sys.chdir current_dir;
-      close_out stdin;
       close_in stdout;
-      stderr
+      str
+  | Test ->
+      let str = my_really_read_string stderr in
+      Unix.waitpid [] pid |> ignore;
+      close_in stdout;
+      close_in stderr;
+      str
 
 let get_test_method num body =
   let method_name = "test" ^ string_of_int num ^ "()" in
@@ -243,23 +257,9 @@ let add_testcase test_file =
   else ();
   insert_test test_file
 
-let my_really_read_string in_chan =
-  let res = Buffer.create 1024 in
-  let rec loop () =
-    match input_line in_chan with
-    | line ->
-        Buffer.add_string res line;
-        Buffer.add_string res "\n";
-        loop ()
-    | exception End_of_file -> Buffer.contents res
-  in
-  loop ()
-
 let checking_bug_presence ic expected_bug =
   (* print_endline "checking ..."; *)
-  let data = my_really_read_string ic in
-  close_in ic;
-  let check_bug bug = find bug data in
+  let check_bug bug = find bug ic in
   check_bug (string_of_expected_bug expected_bug)
 
 let init program_dir =
@@ -295,7 +295,7 @@ let build_program info =
   let test_cmd = test_command_of_file info.test_command in
   add_testcase info.test_file;
   (* javac *)
-  simple_compiler info.program_dir compile_cmd |> close_in;
+  simple_compiler info.program_dir compile_cmd |> ignore;
   simple_compiler info.program_dir test_cmd
 
 (* queue: (testcase * list(partial testcase)) *)
@@ -336,9 +336,8 @@ let run program_dir =
 
 let run_testfile () =
   let result_ic = build_program !info in
-  if checking_bug_presence result_ic !info.expected_bug then (
-    close_in result_ic |> ignore;
-    "true" |> print_endline)
-  else (
-    close_in result_ic |> ignore;
-    "false" |> print_endline)
+  if checking_bug_presence result_ic !info.expected_bug then
+    (* close_in result_ic |> ignore; *)
+    "true" |> print_endline
+  else (* close_in result_ic |> ignore; *)
+    "false" |> print_endline
