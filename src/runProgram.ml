@@ -204,13 +204,15 @@ let get_imports i_set =
   ImportSet.fold (fun i s -> s ^ i) str_set ""
 
 let insert_test test_file =
-  let need_default_class tc =
+  let need_default_interface tc =
     match Str.search_forward ("unitcon_interface" |> Str.regexp) tc 0 with
-    | exception _ -> (
-        match Str.search_forward ("unitcon_enum" |> Str.regexp) tc 0 with
-        | exception _ -> None
-        | _ -> Some "unitcon_enum")
+    | exception _ -> None
     | _ -> Some "unitcon_interface"
+  in
+  let need_default_enum tc =
+    match Str.search_forward ("unitcon_enum" |> Str.regexp) tc 0 with
+    | exception _ -> None
+    | _ -> Some "unitcon_enum"
   in
   let insert_default_class c =
     match c with
@@ -224,9 +226,11 @@ let insert_test test_file =
     in
     let _, method_names, m_bodies = get_test_methods (!codes |> List.rev) in
     get_imports !imports ^ "\n" |> output_string oc;
-    insert_default_class (m_bodies |> need_default_class) |> output_string oc;
+    insert_default_class (m_bodies |> need_default_interface)
+    |> output_string oc;
+    insert_default_class (m_bodies |> need_default_enum) |> output_string oc;
     "public class UnitconTest {\n" |> output_string oc;
-    start ^ method_names ^ "}" ^ m_bodies ^ "}" |> output_string oc;
+    start ^ method_names ^ "}\n\n" ^ m_bodies ^ "}" |> output_string oc;
     flush oc;
     close_out oc
   in
