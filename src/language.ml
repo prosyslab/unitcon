@@ -15,13 +15,22 @@ type file_name = string [@@deriving compare]
 
 type modifier = Public | Private | Protected | Default [@@deriving compare]
 
+(* class_type is only allowed to be public or default *)
 type class_type =
-  | Abstract
-  | Static
+  | Public
   | Private
-  | Abstract_and_Static
-  | Normal
-  | Interface
+  | Default (* including protected *)
+  | Public_Static
+  | Public_Abstract
+  | Public_Static_Abstract
+  | Private_Static
+  | Private_Abstract
+  | Private_Static_Abstract
+  | Default_Static
+  | Default_Abstract
+  | Default_Static_Abstract
+  | Public_Interface
+  | Default_Interface
 [@@deriving compare]
 
 type typ =
@@ -87,11 +96,11 @@ let get_class_name = function
   | NonType -> ""
   | _ -> failwith "get_class_name: not supported"
 
-let modifier_of_json json =
+let modifier_of_json json : modifier =
   JsonUtil.to_string json |> function
+  | "Protected" -> Protected
   | "Public" -> Public
   | "Private" -> Private
-  | "Protected" -> Protected
   | "Default" -> Default
   | s -> failwith ("Unknown modifier " ^ s)
 

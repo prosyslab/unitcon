@@ -1,6 +1,6 @@
+open Language
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
-module ClassInfo = Language.ClassInfo
 
 module Node = struct
   include String
@@ -87,32 +87,29 @@ module Graphviz = Graph.Graphviz.Dot (G)
 include G
 
 let parse_type type_list =
-  let is_static =
-    List.fold_left
-      (fun result typ -> if typ = "static" then true else result)
-      false type_list
+  let contains_type typ lst =
+    List.fold_left (fun result t -> if t = typ then true else result) false lst
   in
-  let is_abstract =
-    List.fold_left
-      (fun result typ -> if typ = "abstract" then true else result)
-      false type_list
-  in
-  let is_private =
-    List.fold_left
-      (fun result typ -> if typ = "private" then true else result)
-      false type_list
-  in
-  let is_interface =
-    List.fold_left
-      (fun result typ -> if typ = "interface" then true else result)
-      false type_list
-  in
-  if is_private then Language.Private
-  else if is_static && is_abstract then Language.Abstract_and_Static
-  else if is_static then Language.Static
-  else if is_abstract then Language.Abstract
-  else if is_interface then Language.Interface
-  else Language.Normal
+  let is_public = contains_type "public" type_list in
+  let is_private = contains_type "private" type_list in
+  let is_static = contains_type "static" type_list in
+  let is_abstract = contains_type "abstract" type_list in
+  let is_interface = contains_type "interface" type_list in
+  if is_interface then if is_public then Public_Interface else Default_Interface
+  else if is_public then
+    if is_static && is_abstract then Public_Static_Abstract
+    else if is_static then Public_Static
+    else if is_abstract then Public_Abstract
+    else Public
+  else if is_private then
+    if is_static && is_abstract then Private_Static_Abstract
+    else if is_static then Private_Static
+    else if is_abstract then Private_Abstract
+    else Private
+  else if is_static && is_abstract then Default_Static_Abstract
+  else if is_static then Default_Static
+  else if is_abstract then Default_Abstract
+  else Default
 
 let mapping_class_info assoc mmap =
   let class_name = JsonUtil.member "name" assoc |> JsonUtil.to_string in

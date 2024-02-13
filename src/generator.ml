@@ -772,17 +772,21 @@ let is_receiver id = if id = "con_recv" || id = "con_outer" then true else false
 
 let is_nested_class name = String.contains name '$'
 
-let is_normal_class class_name c_info =
+let is_public_class class_name c_info =
   match ClassInfo.M.find_opt class_name c_info with
   | Some typ -> (
-      match typ.ClassInfo.class_type with Static | Normal -> true | _ -> false)
+      match typ.ClassInfo.class_type with
+      | Public | Public_Static -> true
+      | _ -> false)
   | None -> true (* modeling class *)
 
 let is_abstract_class class_name (c_info, _) =
   match ClassInfo.M.find_opt class_name c_info with
   | Some typ -> (
       match typ.ClassInfo.class_type with
-      | Abstract | Abstract_and_Static -> true
+      | Public_Abstract | Public_Static_Abstract | Private_Abstract
+      | Private_Static_Abstract | Default_Abstract | Default_Static_Abstract ->
+          true
       | _ -> false)
   | _ -> false
 
@@ -803,24 +807,27 @@ let is_abstract_method method_name class_name_list m_info c_info =
         else check)
       false class_name_list
 
-let is_s_class name (c_info, _) =
+let is_static_class name (c_info, _) =
   let name =
     Regexp.global_rm (Str.regexp "\\.<.*>(.*)$") name
     |> Regexp.global_rm (Str.regexp "(.*)$")
   in
   match ClassInfo.M.find_opt name c_info with
   | Some typ -> (
-      match typ.ClassInfo.class_type with Static -> true | _ -> false)
+      match typ.ClassInfo.class_type with Public_Static -> true | _ -> false)
   | None -> false
 
 let is_private_class class_package c_info =
   match ClassInfo.M.find_opt class_package (c_info |> fst) with
   | Some info -> (
       let class_type = info.ClassInfo.class_type in
-      match class_type with Private -> true | _ -> false)
+      match class_type with
+      | Private | Private_Static | Private_Abstract | Private_Static_Abstract ->
+          true
+      | _ -> false)
   | None -> false
 
-let is_s_method m_name m_info =
+let is_static_method m_name m_info =
   match MethodInfo.M.find_opt m_name m_info with
   | None -> false
   | Some m -> m.MethodInfo.is_static
@@ -1425,7 +1432,7 @@ let get_clist class_name m_info (c_info, ig) =
       List.fold_left
         (fun init_list class_name_to_find ->
           if
-            is_normal_class class_name_to_find c_info
+            is_public_class class_name_to_find c_info
             && is_private method_name m_info |> not
             && match_constructor_name class_name_to_find method_name
             && Utils.is_anonymous method_name |> not
@@ -1816,7 +1823,7 @@ let get_field_set ret s_map =
 
 let error_entry_func ee es m_info c_info =
   let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
-  let f_arg_list = mk_arg ~is_s:(is_s_method ee m_info) param es in
+  let f_arg_list = mk_arg ~is_s:(is_static_method ee m_info) param es in
   let c_name = Utils.get_class_name ee in
   let typ_list =
     if is_private_class c_name c_info then
@@ -1859,7 +1866,8 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
       List.fold_left
         (fun lst (s, fields) ->
           let f_arg_list =
-            mk_arg ~is_s:(is_s_method s m_info)
+            mk_arg
+              ~is_s:(is_static_method s m_info)
               (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary
           in
           let prec =
@@ -1947,7 +1955,8 @@ let get_cfunc id constructor m_info =
   in
   let func = AST.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
-    mk_arg ~is_s:(is_s_method c m_info)
+    mk_arg
+      ~is_s:(is_static_method c m_info)
       (MethodInfo.M.find c m_info).MethodInfo.formal_params s
   in
   if VarListSet.cardinal arg_list = 0 then [ (cost, (func, AST.Arg [])) ]
@@ -2048,7 +2057,7 @@ let get_inner_func f arg =
 let cname_condition m_name m_info =
   match MethodInfo.M.find_opt m_name m_info with
   | Some info ->
-      (info.MethodInfo.return <> "" && is_s_method m_name m_info)
+      (info.MethodInfo.return <> "" && is_static_method m_name m_info)
       || Utils.is_init_method m_name
   | _ -> Utils.is_init_method m_name
 
@@ -2117,7 +2126,7 @@ let recv_in_assign_unroll (prec, p) m_info c_info =
   | AST.Assign (_, _, f, arg) when AST.recv_in_assign p ->
       if
         is_nested_class (AST.get_func f).import
-        && is_s_class (AST.get_func f).import c_info |> not
+        && is_static_class (AST.get_func f).import c_info |> not
         && Utils.is_init_method (AST.get_func f).method_name
       then (
         let recv, f, arg = get_inner_func f arg in

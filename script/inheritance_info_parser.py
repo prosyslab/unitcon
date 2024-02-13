@@ -17,6 +17,7 @@ extract_class_name_query = J_LANGUAGE.query("""
 
 extract_interface_name_query = J_LANGUAGE.query("""
 (interface_declaration
+(modifiers)* @interface-modifier
   (identifier) @interface-name)
 """)
 
@@ -150,7 +151,7 @@ def get_class_name(node, src, package_name):
             modifier_list = list(
                 filter(
                     lambda x: x == 'static' or x == 'abstract' or x ==
-                    'private',
+                    'private' or x == 'public',
                     [modifier.strip() for modifier in text.split(' ')]))
             if len(modifier_list) == 0:
                 class_modifier = []
@@ -186,17 +187,22 @@ def get_nested_class_name(node, src):
 def get_interface_name(node, src, package_name):
     match_list = extract_interface_name_query.captures(node)
     interface_name = ''
+    interface_modifier = ["interface"]
     for i in match_list:
         text = get_text(i, src)
-        if i[1] == 'interface-name':
+        if i[1] == 'interface-modifier':
+            if "public" in text:
+                interface_modifier.append("public")
+        elif i[1] == 'interface-name':
             interface_name = re.sub("\$$", "",
                                     get_parent_interface_name(i[0], src, ''))
             interface_name = get_package_class(package_name,
                                                remove_generic(interface_name))
             class_and_interface_list.append({
                 'name': interface_name,
-                'type': ["interface"]
+                'type': interface_modifier
             })
+            interface_modifier = ["interface"]
 
 
 def get_nested_interface_name(node, src):
