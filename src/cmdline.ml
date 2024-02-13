@@ -8,7 +8,7 @@ let basic_mode = ref false
 
 let syn_priority = ref false
 
-let time_out = ref (5 * 60)
+let time_out = ref (3 * 60)
 
 let until_time_out = ref false
 

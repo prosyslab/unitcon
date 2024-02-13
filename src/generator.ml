@@ -1,6 +1,7 @@
 open Language
 module CG = Callgraph.G
 module IG = Inheritance.G
+module ImportSet = Utils.ImportSet
 
 exception Not_found_setter
 
@@ -15,12 +16,6 @@ module VarSets = Set.Make (VarSet)
 
 module VarListSet = Set.Make (struct
   type t = AST.var list
-
-  let compare = compare
-end)
-
-module ImportSet = Set.Make (struct
-  type t = string
 
   let compare = compare
 end)
@@ -2451,24 +2446,7 @@ let pretty_format p =
         |> add_import (AST.get_func f).import
     | _ -> set
   in
-  let import =
-    let str_set =
-      ImportSet.fold
-        (fun i s ->
-          let path = Utils.rm_object_array_import i in
-          if i = "" || (Utils.is_array i && path = i) then s
-          else
-            ImportSet.add
-              ("import " ^ (path |> Utils.replace_nested_symbol) ^ ";\n")
-              s)
-        (imports p ImportSet.empty)
-        ImportSet.empty
-    in
-    ImportSet.fold (fun i s -> s ^ i) str_set ""
-  in
-  let start = "\npublic static void main(String args[]) throws Exception {\n" in
-  let code = start ^ AST.code p ^ "}\n\n" in
-  (import, code)
+  (imports p ImportSet.empty, AST.code p)
 
 let syn_priority_q queue =
   List.stable_sort
@@ -2540,4 +2518,4 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
     else (p_info, queue)
   in
   let result = mk_testcase summary cg m_info c_info s_map i_info p_info init in
-  if result = [] then (("", ""), []) else List.hd result
+  if result = [] then ((ImportSet.empty, ""), []) else List.hd result

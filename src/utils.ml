@@ -1,3 +1,9 @@
+module ImportSet = Set.Make (struct
+  type t = string
+
+  let compare = compare
+end)
+
 let get_class_name m_name =
   Regexp.first_rm ("\\.[^\\.]+(.*)" |> Str.regexp) m_name
 

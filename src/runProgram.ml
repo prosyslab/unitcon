@@ -2,12 +2,17 @@ open Language
 module F = Format
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
+module ImportSet = Utils.ImportSet
 
 let con_path = "unitcon_properties"
 
-let trial = ref 0
-
 let time = ref 0.0
+
+let imports = ref ImportSet.empty
+
+let codes : string list ref = ref []
+
+let test_file = ref ""
 
 type t = {
   program_dir : string;
@@ -25,6 +30,23 @@ type t = {
 }
 
 type run_type = Compile | Test
+
+let info =
+  ref
+    {
+      program_dir = "";
+      summary_file = "";
+      error_summary_file = "";
+      call_prop_file = "";
+      inheritance_file = "";
+      enum_file = "";
+      constant_file = "";
+      extra_callee_file = "";
+      compile_command = "";
+      test_command = "";
+      test_file = "";
+      expected_bug = "";
+    }
 
 (* ************************************** *
    parse analyzer's output
@@ -138,19 +160,50 @@ let simple_compiler program_dir command =
   let stdout, stdin, stderr =
     Unix.open_process_full command (Unix.environment ())
   in
-  Unix.wait () |> ignore;
-  Sys.chdir current_dir;
-  close_out stdin;
+  let pid = Unix.process_full_pid (stdout, stdin, stderr) in
   match run_type command with
   | Compile ->
+      Unix.waitpid [] pid |> ignore;
+      Sys.chdir current_dir;
+      close_out stdin;
       close_in stderr;
       stdout
   | Test ->
+      Unix.waitpid [ Unix.WNOHANG ] pid |> ignore;
+      Sys.chdir current_dir;
+      close_out stdin;
       close_in stdout;
       stderr
 
-(* test: (string * string) *)
-let insert_test test test_file =
+let get_test_method num body =
+  let method_name = "test" ^ string_of_int num ^ "()" in
+  let start = "public static void " ^ method_name ^ " throws Exception {\n" in
+  let catch = "catch(Exception e){\n  e.printStackTrace();\n}\n" in
+  let code = start ^ "try{\n" ^ body ^ "}\n" ^ catch ^ "}\n\n" in
+  (method_name, code)
+
+let get_test_methods code_list =
+  List.fold_left
+    (fun (num, method_names, methods) code ->
+      let m_name, m_body = get_test_method num code in
+      (num + 1, method_names ^ m_name ^ ";\n", methods ^ m_body ^ "\n"))
+    (1, "", "") code_list
+
+let get_imports i_set =
+  let str_set =
+    ImportSet.fold
+      (fun i s ->
+        let path = Utils.rm_object_array_import i in
+        if i = "" || (Utils.is_array i && path = i) then s
+        else
+          ImportSet.add
+            ("import " ^ (path |> Utils.replace_nested_symbol) ^ ";\n")
+            s)
+      i_set ImportSet.empty
+  in
+  ImportSet.fold (fun i s -> s ^ i) str_set ""
+
+let insert_test test_file =
   let need_default_class tc =
     match Str.search_forward ("unitcon_interface" |> Str.regexp) tc 0 with
     | exception _ -> (
@@ -166,21 +219,25 @@ let insert_test test test_file =
     | _ -> ""
   in
   let insert oc =
-    (test |> fst) ^ "\n" |> output_string oc;
-    insert_default_class (test |> snd |> need_default_class) |> output_string oc;
-    "public class UnitconTest {\n" ^ (test |> snd) ^ "}\n" |> output_string oc;
+    let start =
+      "\npublic static void main(String args[]) throws Exception {\n"
+    in
+    let _, method_names, m_bodies = get_test_methods (!codes |> List.rev) in
+    get_imports !imports ^ "\n" |> output_string oc;
+    insert_default_class (m_bodies |> need_default_class) |> output_string oc;
+    "public class UnitconTest {\n" |> output_string oc;
+    start ^ method_names ^ "}" ^ m_bodies ^ "}" |> output_string oc;
     flush oc;
     close_out oc
   in
   let oc = open_out test_file in
   insert oc
 
-(* new_tc: (string * string) *)
-let add_testcase new_tc test_file =
+let add_testcase test_file =
   if Sys.file_exists (Filename.remove_extension test_file ^ ".class") then
     Sys.remove (Filename.remove_extension test_file ^ ".class")
   else ();
-  insert_test new_tc test_file
+  insert_test test_file
 
 let my_really_read_string in_chan =
   let res = Buffer.create 1024 in
@@ -207,74 +264,63 @@ let init program_dir =
     if Filename.is_relative program_dir then cons (Unix.getcwd ()) program_dir
     else program_dir
   in
-  {
-    program_dir;
-    summary_file = cons con_path "summary.json" |> cons program_dir;
-    error_summary_file = cons con_path "error_summarys.json" |> cons program_dir;
-    call_prop_file = cons con_path "call_proposition.json" |> cons program_dir;
-    inheritance_file = cons con_path "inheritance_info.json" |> cons program_dir;
-    enum_file = cons con_path "enum_info.json" |> cons program_dir;
-    constant_file = cons con_path "extra_constant.json" |> cons program_dir;
-    extra_callee_file = cons con_path "extra_callee.json" |> cons program_dir;
-    compile_command = cons con_path "compile_command" |> cons program_dir;
-    test_command = cons con_path "test_command" |> cons program_dir;
-    test_file = cons program_dir "UnitconTest.java";
-    expected_bug = cons con_path "expected_bug" |> cons program_dir;
-  }
+  info :=
+    {
+      program_dir;
+      summary_file = cons con_path "summary.json" |> cons program_dir;
+      error_summary_file =
+        cons con_path "error_summarys.json" |> cons program_dir;
+      call_prop_file = cons con_path "call_proposition.json" |> cons program_dir;
+      inheritance_file =
+        cons con_path "inheritance_info.json" |> cons program_dir;
+      enum_file = cons con_path "enum_info.json" |> cons program_dir;
+      constant_file = cons con_path "extra_constant.json" |> cons program_dir;
+      extra_callee_file = cons con_path "extra_callee.json" |> cons program_dir;
+      compile_command = cons con_path "compile_command" |> cons program_dir;
+      test_command = cons con_path "test_command" |> cons program_dir;
+      test_file = cons program_dir "UnitconTest.java";
+      expected_bug = cons con_path "expected_bug" |> cons program_dir;
+    }
 
 (* return: (testcase * list(partial testcase)) *)
 let make_testcase ~is_start queue e_method_info program_info =
   Generator.mk_testcases ~is_start queue e_method_info program_info
 
-let build_program info tc =
+let build_program info =
   let compile_cmd = compile_command_of_file info.compile_command in
   let test_cmd = test_command_of_file info.test_command in
-  add_testcase tc info.test_file;
+  add_testcase info.test_file;
   (* javac *)
   simple_compiler info.program_dir compile_cmd |> close_in;
   simple_compiler info.program_dir test_cmd
 
 (* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start pkg info queue e_method_info p_info =
-  incr trial;
   let tc, tc_list = make_testcase ~is_start pkg queue e_method_info p_info in
-  if tc = ("", "") then failwith "can't proceed anymore";
-  let result_ic = build_program info tc in
-  if checking_bug_presence result_ic info.expected_bug then (
-    "# of trial: " ^ (!trial |> string_of_int) |> print_endline;
-    "duration: " ^ (Float.sub (Unix.time ()) !time |> string_of_float)
-    |> print_endline;
-    if !Cmdline.until_time_out then (
-      tc |> fst |> print_endline;
-      tc |> snd |> print_endline;
-      close_in result_ic |> ignore;
-      run_test ~is_start:false pkg info tc_list e_method_info p_info)
-    else (
-      close_in result_ic |> ignore;
-      tc))
+  if tc = (ImportSet.empty, "") then ( (* TODO: early stopping *) )
   else (
-    close_in result_ic |> ignore;
-    run_test ~is_start:false pkg info tc_list e_method_info p_info)
+    imports := ImportSet.union !imports (tc |> fst);
+    codes := (tc |> snd) :: !codes);
+  run_test ~is_start:false pkg info tc_list e_method_info p_info
 
 let run program_dir =
-  let info = init program_dir in
-  let method_info = parse_method_info info.summary_file in
-  let summary = parse_summary info.summary_file method_info in
+  time := Unix.time ();
+  init program_dir;
+  let method_info = parse_method_info !info.summary_file in
+  let summary = parse_summary !info.summary_file method_info in
   let callgraph =
-    parse_callgraph info.summary_file
-    |> parse_extra_callee info.extra_callee_file method_info
+    parse_callgraph !info.summary_file
+    |> parse_extra_callee !info.extra_callee_file method_info
   in
   let setter_map = get_setter summary method_info in
-  let class_info = parse_class_info info.inheritance_file in
+  let class_info = parse_class_info !info.inheritance_file in
   let instance_info =
-    parse_enum_info info.enum_file |> parse_instance_info info.constant_file
+    parse_enum_info !info.enum_file |> parse_instance_info !info.constant_file
   in
-  let primitive_info = parse_primitive_info info.constant_file in
-  let call_prop_map = parse_callprop info.call_prop_file in
-  let error_method_info = parse_error_summary info.error_summary_file in
-  time := Unix.time ();
-  ignore (Unix.alarm !Cmdline.time_out);
-  run_test ~is_start:true "FIXME" info [] error_method_info
+  let primitive_info = parse_primitive_info !info.constant_file in
+  let call_prop_map = parse_callprop !info.call_prop_file in
+  let error_method_info = parse_error_summary !info.error_summary_file in
+  run_test ~is_start:true "FIXME" !info [] error_method_info
     ( callgraph,
       summary,
       call_prop_map,
@@ -283,4 +329,12 @@ let run program_dir =
       setter_map,
       instance_info,
       primitive_info )
-  |> snd |> print_endline
+
+let run_testfile () =
+  let result_ic = build_program !info in
+  if checking_bug_presence result_ic !info.expected_bug then (
+    close_in result_ic |> ignore;
+    "true" |> print_endline)
+  else (
+    close_in result_ic |> ignore;
+    "false" |> print_endline)
