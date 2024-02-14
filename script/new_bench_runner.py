@@ -347,11 +347,11 @@ def run_command_maker(project_dir: str, build_type: str) -> None:
 ######################################################
 
 
-def copy_error_summary(project_dir: str, error_count: int) -> bool:
+def copy_error_summary(project_dir: str, summary_name: str) -> bool:
     """Copies the denoted error summary to unitcon_properties directory.
 
     :param project_dir: Main directory path of the target project
-    :param error_count: Number of the error summary file to copy
+    :param summary_name: Name of the error summary file to copy
     :return: Success or failure of the copying procedure"""
     debug("Copying error summary...")
     prop_dir = os.path.join(project_dir, "unitcon_properties")
@@ -363,19 +363,17 @@ def copy_error_summary(project_dir: str, error_count: int) -> bool:
         )
         os.remove(os.path.join(prop_dir, "error_summarys.json"))
 
-    file_name: str = os.path.join(
-        prop_dir, "error_summarys", str(error_count) + ".json"
-    )
-    if os.path.isfile(file_name):
+    summary_path: str = os.path.join(prop_dir, "error_summarys", summary_name)
+    if os.path.isfile(summary_path):
         debug(
-            f"{file_name} exists. Copying it to {os.path.join(prop_dir, 'error_summarys.json')}..."
+            f"{summary_path} exists. Copying it to {os.path.join(prop_dir, 'error_summarys.json')}..."
         )
         shutil.copyfile(
-            file_name,
+            summary_path,
             os.path.join(prop_dir, "error_summarys.json"),
         )
         return True
-    debug(f"{file_name} does not exist!")
+    debug(f"{summary_path} does not exist!")
     return False
 
 
@@ -406,7 +404,7 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
         project_dir, "unitcon_properties", "error_summarys"
     )
     for summary in os.listdir(error_summarys_dir):
-        if summary.endswith(".json"):
+        if summary.endswith(".json") and copy_error_summary(project_dir, summary):
             result_file: str = os.path.join(result_dir, "result-" + summary[:-5])
             cmd: str = " ".join([unitcon_path, project_dir, "-until-time-out"])
 
@@ -495,6 +493,12 @@ def main() -> None:
 
     run_infer(abspath, str(args.infer_path), args.version)
     remove_duplicate_summaries(abspath, args.encoding)
+    debug(
+        f"Total summaries:    {len([name for name in os.listdir(os.path.join(abspath, 'infer-out', 'error_summarys')) if name.endswith('.json')])}"
+    )
+    debug(
+        f"Distinct summaries: {len([name for name in os.listdir(os.path.join(abspath, 'unitcon_properties', 'error_summarys')) if name.endswith('.json')])}"
+    )
     run_parser(abspath, args.encoding)
     run_command_maker(abspath, args.build_type)
     run_unitcon(abspath, str(args.unitcon_path))
