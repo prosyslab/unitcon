@@ -4,15 +4,15 @@ module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 module ImportSet = Utils.ImportSet
 
+exception Compilation_Error
+
 let con_path = "unitcon_properties"
+
+let test_basename = "UnitconTest"
 
 let time = ref 0.0
 
-let imports = ref ImportSet.empty
-
-let codes : string list ref = ref []
-
-let test_file = ref ""
+let num_of_tc_files = ref 1
 
 type t = {
   program_dir : string;
@@ -25,7 +25,7 @@ type t = {
   extra_callee_file : string;
   compile_command : string;
   test_command : string;
-  test_file : string;
+  test_dir : string;
   expected_bug : string;
 }
 
@@ -44,7 +44,7 @@ let info =
       extra_callee_file = "";
       compile_command = "";
       test_command = "";
-      test_file = "";
+      test_dir = "";
       expected_bug = "";
     }
 
@@ -132,14 +132,14 @@ let my_really_read_string in_chan =
 let compile_command_of_file file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
   let ic = open_in file in
-  let s = really_input_string ic (in_channel_length ic) in
+  let s = really_input_string ic (in_channel_length ic) |> Regexp.rm_space in
   close_in ic;
   s
 
 let test_command_of_file file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
   let ic = open_in file in
-  let s = really_input_string ic (in_channel_length ic) in
+  let s = really_input_string ic (in_channel_length ic) |> Regexp.rm_space in
   close_in ic;
   s
 
@@ -166,42 +166,28 @@ let string_of_expected_bug file =
   |> Str.global_replace Regexp.dollar "\\$"
   |> Str.global_replace (Str.regexp "\n") "[ \t\r\n]+"
 
-let simple_compiler program_dir command =
-  let current_dir = Unix.getcwd () in
-  Sys.chdir program_dir;
+let execute_command command =
   let stdout, stdin, stderr =
     Unix.open_process_full command (Unix.environment ())
   in
   let pid = Unix.process_full_pid (stdout, stdin, stderr) in
-  Sys.chdir current_dir;
-  close_out stdin;
+  Unix.waitpid [ Unix.WUNTRACED ] pid |> ignore;
+  stdout |> close_in;
+  stdin |> close_out;
+  stderr
+
+let simple_compiler program_dir command =
+  let current_dir = Unix.getcwd () in
+  Sys.chdir program_dir;
   match run_type command with
   | Compile ->
-      let str = my_really_read_string stdout in
-      Unix.waitpid [] pid |> ignore;
-      close_in stderr;
-      close_in stdout;
-      str
+      let ic = execute_command command in
+      Sys.chdir current_dir;
+      ic
   | Test ->
-      let str = my_really_read_string stderr in
-      Unix.waitpid [] pid |> ignore;
-      close_in stdout;
-      close_in stderr;
-      str
-
-let get_test_method num body =
-  let method_name = "test" ^ string_of_int num ^ "()" in
-  let start = "public static void " ^ method_name ^ " throws Exception {\n" in
-  let catch = "catch(Exception e){\n  e.printStackTrace();\n}\n" in
-  let code = start ^ "try{\n" ^ body ^ "}\n" ^ catch ^ "}\n\n" in
-  (method_name, code)
-
-let get_test_methods code_list =
-  List.fold_left
-    (fun (num, method_names, methods) code ->
-      let m_name, m_body = get_test_method num code in
-      (num + 1, method_names ^ m_name ^ ";\n", methods ^ m_body ^ "\n"))
-    (1, "", "") code_list
+      let ic = execute_command command in
+      Sys.chdir current_dir;
+      ic
 
 let get_imports i_set =
   let str_set =
@@ -217,7 +203,7 @@ let get_imports i_set =
   in
   ImportSet.fold (fun i s -> s ^ i) str_set ""
 
-let insert_test test_file =
+let insert_test oc (file_num, tc, time) =
   let need_default_interface tc =
     match Str.search_forward ("unitcon_interface" |> Str.regexp) tc 0 with
     | exception _ -> None
@@ -234,32 +220,73 @@ let insert_test test_file =
     | Some "unitcon_enum" -> "enum unitcon_enum {}\n"
     | _ -> ""
   in
-  let insert oc =
+  let insert oc (i_set, m_bodies) =
+    let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
     let start =
       "\npublic static void main(String args[]) throws Exception {\n"
     in
-    let _, method_names, m_bodies = get_test_methods (!codes |> List.rev) in
-    get_imports !imports ^ "\n" |> output_string oc;
+    get_imports i_set ^ "\n" |> output_string oc;
+    time |> output_string oc;
     insert_default_class (m_bodies |> need_default_interface)
     |> output_string oc;
     insert_default_class (m_bodies |> need_default_enum) |> output_string oc;
-    "public class UnitconTest {\n" |> output_string oc;
-    start ^ method_names ^ "}\n\n" ^ m_bodies ^ "}" |> output_string oc;
+    "public class UnitconTest" ^ string_of_int file_num ^ " {\n"
+    |> output_string oc;
+    start ^ m_bodies ^ "}\n}\n" |> output_string oc;
     flush oc;
     close_out oc
   in
-  let oc = open_out test_file in
-  insert oc
+  insert oc tc
 
-let add_testcase test_file =
-  if Sys.file_exists (Filename.remove_extension test_file ^ ".class") then
-    Sys.remove (Filename.remove_extension test_file ^ ".class")
-  else ();
-  insert_test test_file
+let add_testcase test_dir file_num (tc, time) =
+  let oc =
+    open_out
+      (Filename.concat test_dir
+         (test_basename ^ string_of_int file_num ^ ".java"))
+  in
+  insert_test oc (file_num, tc, time)
 
-let checking_bug_presence ic expected_bug =
+let remove_files dir (pattern : Str.regexp) =
+  let remove_file file =
+    if Str.string_match pattern file 0 then
+      Unix.unlink (Filename.concat dir file)
+    else ()
+  in
+  let files = Array.to_list (Sys.readdir dir) in
+  List.iter (fun file -> remove_file file) files
+
+let remove_all_test_classes test_dir = remove_files test_dir Regexp.test_class
+
+let remove_all_test_files test_dir = remove_files test_dir Regexp.test_file
+
+let get_compilation_error_files data =
+  let get_f_name line =
+    String.split_on_char ':' line |> List.hd |> Filename.basename
+  in
+  let data = data |> String.split_on_char '\n' in
+  List.fold_left
+    (fun f_list line ->
+      if Str.string_match (".*UnitconTest[0-9]+\\.java" |> Str.regexp) line 0
+      then
+        let file_name = get_f_name line in
+        file_name :: f_list
+      else f_list)
+    [] data
+
+let modify_files test_dir data =
+  let error_files = get_compilation_error_files data in
+  List.iter
+    (fun file -> Unix.unlink (Filename.concat test_dir file))
+    error_files
+
+let checking_error_presence data =
+  match Str.search_forward (".*[0-9]+ error" |> Str.regexp) data 0 with
+  | exception Not_found -> ()
+  | _ -> raise Compilation_Error
+
+let checking_bug_presence data expected_bug =
   (* print_endline "checking ..."; *)
-  let check_bug bug = find bug ic in
+  let check_bug bug = find bug data in
   check_bug (string_of_expected_bug expected_bug)
 
 let init program_dir =
@@ -282,9 +309,13 @@ let init program_dir =
       extra_callee_file = cons con_path "extra_callee.json" |> cons program_dir;
       compile_command = cons con_path "compile_command" |> cons program_dir;
       test_command = cons con_path "test_command" |> cons program_dir;
-      test_file = cons program_dir "UnitconTest.java";
+      test_dir = cons program_dir "unitcon_tests";
       expected_bug = cons con_path "expected_bug" |> cons program_dir;
-    }
+    };
+  cons con_path "log.txt" |> cons program_dir |> Logger.from_file;
+  Logger.info "Start UnitCon for %s" program_dir;
+  try Unix.mkdir !info.test_dir 0o775
+  with Unix.Unix_error (Unix.EEXIST, _, _) -> ()
 
 (* return: (testcase * list(partial testcase)) *)
 let make_testcase ~is_start queue e_method_info program_info =
@@ -292,24 +323,34 @@ let make_testcase ~is_start queue e_method_info program_info =
 
 let build_program info =
   let compile_cmd = compile_command_of_file info.compile_command in
-  let test_cmd = test_command_of_file info.test_command in
-  add_testcase info.test_file;
   (* javac *)
-  simple_compiler info.program_dir compile_cmd |> ignore;
-  simple_compiler info.program_dir test_cmd
+  let rec compile_loop () =
+    let ic = simple_compiler info.program_dir compile_cmd in
+    let data = my_really_read_string ic in
+    ic |> close_in;
+    match checking_error_presence data with
+    | exception Compilation_Error ->
+        modify_files info.test_dir data;
+        compile_loop ()
+    | _ -> ()
+  in
+  compile_loop ()
 
 (* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start pkg info queue e_method_info p_info =
   let tc, tc_list = make_testcase ~is_start pkg queue e_method_info p_info in
-  if tc = (ImportSet.empty, "") then ( (* TODO: early stopping *) )
-  else (
-    imports := ImportSet.union !imports (tc |> fst);
-    codes := (tc |> snd) :: !codes);
+  (if tc = (ImportSet.empty, "") then ( (* TODO: early stopping *) )
+   else
+     let time = Float.sub (Unix.time ()) !time in
+     add_testcase info.test_dir !num_of_tc_files (tc, time);
+     num_of_tc_files := !num_of_tc_files + 1);
   run_test ~is_start:false pkg info tc_list e_method_info p_info
 
 let run program_dir =
   time := Unix.time ();
   init program_dir;
+  remove_all_test_classes !info.test_dir;
+  remove_all_test_files !info.test_dir;
   let method_info = parse_method_info !info.summary_file in
   let summary = parse_summary !info.summary_file method_info in
   let callgraph =
@@ -335,9 +376,35 @@ let run program_dir =
       primitive_info )
 
 let run_testfile () =
-  let result_ic = build_program !info in
-  if checking_bug_presence result_ic !info.expected_bug then
-    (* close_in result_ic |> ignore; *)
-    "true" |> print_endline
-  else (* close_in result_ic |> ignore; *)
-    "false" |> print_endline
+  let compile_start = Unix.time () in
+  Logger.info "Start compilation! (# of test files: %d)" (!num_of_tc_files - 1);
+  build_program !info;
+  Logger.info "End compilation! (duration: %f)"
+    (Float.sub (Unix.time ()) compile_start);
+  let test_cmd = test_command_of_file !info.test_command in
+  let execute program_dir test_dir expected_bug t_file =
+    let ic = simple_compiler program_dir (test_cmd ^ " " ^ t_file) in
+    let data = my_really_read_string ic in
+    ic |> close_in;
+    if checking_bug_presence data expected_bug then 1
+    else if not (Sys.file_exists (Filename.concat test_dir (t_file ^ ".java")))
+    then 0
+    else (
+      Unix.unlink (Filename.concat test_dir (t_file ^ ".java"));
+      Unix.unlink (Filename.concat test_dir (t_file ^ ".class"));
+      0)
+  in
+  let rec execute_test current_f_num program_dir test_dir expected_bug =
+    if current_f_num < !num_of_tc_files then
+      execute program_dir test_dir expected_bug
+        (test_basename ^ string_of_int current_f_num)
+      + execute_test (current_f_num + 1) program_dir test_dir expected_bug
+    else 0
+  in
+  let num_of_success =
+    execute_test 1 !info.program_dir !info.test_dir !info.expected_bug
+  in
+  Logger.info "End UnitCon for %s: %b(%d) (total time: %f)\n" !info.program_dir
+    (if num_of_success > 0 then true else false)
+    num_of_success
+    (Float.sub (Unix.time ()) !time)

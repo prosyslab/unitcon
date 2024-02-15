@@ -72,6 +72,10 @@ let space = Str.regexp " "
 
 let space2 = Str.regexp "  "
 
+let test_class = Str.regexp "UnitconTest[0-9]+\\.class"
+
+let test_file = Str.regexp "UnitconTest[0-9]+\\.java"
+
 let global_rm exp str = Str.global_replace exp "" str
 
 let first_rm exp str = Str.replace_first exp "" str
