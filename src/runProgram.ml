@@ -24,7 +24,7 @@ type t = {
   constant_file : string;
   extra_callee_file : string;
   compile_command : string;
-  test_command : string;
+  execute_command : string;
   test_dir : string;
   expected_bug : string;
 }
@@ -43,7 +43,7 @@ let info =
       constant_file = "";
       extra_callee_file = "";
       compile_command = "";
-      test_command = "";
+      execute_command = "";
       test_dir = "";
       expected_bug = "";
     }
@@ -136,12 +136,21 @@ let compile_command_of_file file =
   close_in ic;
   s
 
-let test_command_of_file file =
+let execute_command_of_file file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
   let ic = open_in file in
   let s = really_input_string ic (in_channel_length ic) |> Regexp.rm_space in
   close_in ic;
   s
+
+let modify_execute_command command t_file_name =
+  match Str.search_forward (".*-encoding" |> Str.regexp) command 0 with
+  | exception Not_found -> command ^ " " ^ t_file_name
+  | _ ->
+      Str.replace_first
+        ("-encoding" |> Str.regexp)
+        (t_file_name ^ " -encoding")
+        command
 
 let find word str =
   match
@@ -285,7 +294,6 @@ let checking_error_presence data =
   | _ -> raise Compilation_Error
 
 let checking_bug_presence data expected_bug =
-  (* print_endline "checking ..."; *)
   let check_bug bug = find bug data in
   check_bug (string_of_expected_bug expected_bug)
 
@@ -308,7 +316,7 @@ let init program_dir =
       constant_file = cons con_path "extra_constant.json" |> cons program_dir;
       extra_callee_file = cons con_path "extra_callee.json" |> cons program_dir;
       compile_command = cons con_path "compile_command" |> cons program_dir;
-      test_command = cons con_path "test_command" |> cons program_dir;
+      execute_command = cons con_path "execute_command" |> cons program_dir;
       test_dir = cons program_dir "unitcon_tests";
       expected_bug = cons con_path "expected_bug" |> cons program_dir;
     };
@@ -381,9 +389,11 @@ let run_testfile () =
   build_program !info;
   Logger.info "End compilation! (duration: %f)"
     (Float.sub (Unix.time ()) compile_start);
-  let test_cmd = test_command_of_file !info.test_command in
+  let execute_cmd = execute_command_of_file !info.execute_command in
   let execute program_dir test_dir expected_bug t_file =
-    let ic = simple_compiler program_dir (test_cmd ^ " " ^ t_file) in
+    let ic =
+      simple_compiler program_dir (modify_execute_command execute_cmd t_file)
+    in
     let data = my_really_read_string ic in
     ic |> close_in;
     if checking_bug_presence data expected_bug then 1
@@ -395,11 +405,11 @@ let run_testfile () =
       0)
   in
   let rec execute_test current_f_num program_dir test_dir expected_bug =
-    if current_f_num < !num_of_tc_files then
+    if current_f_num >= !num_of_tc_files then 0
+    else
       execute program_dir test_dir expected_bug
         (test_basename ^ string_of_int current_f_num)
       + execute_test (current_f_num + 1) program_dir test_dir expected_bug
-    else 0
   in
   let num_of_success =
     execute_test 1 !info.program_dir !info.test_dir !info.expected_bug

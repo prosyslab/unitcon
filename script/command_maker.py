@@ -6,6 +6,7 @@ import subprocess
 
 manifest_file_name = "Manifest"
 dependency_jar = "with_dependency.jar"
+test_dir = "unitcon_tests"
 test_file_name = "UnitconTest"
 
 
@@ -19,7 +20,7 @@ def make_java_files(project_dir):
         with open(unitcon_files, 'w') as f:
             for line in lines:
                 if line.startswith("Main.java"):
-                    f.write(line.replace("Main.java", "UnitconTest.java"))
+                    f.write("")
                 else:
                     f.write(line)
 
@@ -32,7 +33,8 @@ def copy_build_cmd(project_dir):
     with open(os.path.join(file_path, "compile_command"), 'w') as f:
         for line in lines:
             if "@java_files" in line:
-                f.write(line.replace("@java_files", "@unitcon_files"))
+                files = test_dir + "/*.java " + "@unitcon_files"
+                f.write(line.replace("@java_files", files))
             else:
                 f.write(line)
 
@@ -42,10 +44,10 @@ def modify_test_cmd(project_dir):
     lines = []
     with open(os.path.join(file_path, "test_command"), 'r') as f:
         lines = f.readlines()
-    with open(os.path.join(file_path, "test_command"), 'w') as f:
+    with open(os.path.join(file_path, "execute_command"), 'w') as f:
         for line in lines:
-            if "Main" in line:
-                f.write(line.replace("Main", "UnitconTest"))
+            if ":. Main" in line:
+                f.write(line.replace(":. Main", ":unitcon_tests:."))
             else:
                 f.write(line)
 
@@ -69,9 +71,9 @@ def make_dependency_jar(project_dir, classpaths):
 def write_command(cmd_type, file):
     command = []
     if cmd_type == "compile":
-        command = ["javac", "-cp", dependency_jar, test_file_name + ".java"]
-    elif cmd_type == "test":
-        command = ["java", "-cp", dependency_jar + ":.", test_file_name]
+        command = ["javac", "-cp", dependency_jar, test_dir + "/*.java"]
+    elif cmd_type == "execute":
+        command = ["java", "-cp", dependency_jar + ":" + test_dir + ":."]
     assert len(command) > 0, "Failed to make command line"
 
     with open(file, 'w') as f:
@@ -101,9 +103,9 @@ def make_build_command(project_dir):
 
     file_path = os.path.join(project_dir, "unitcon_properties")
     build_file = os.path.join(file_path, "compile_command")
-    test_file = os.path.join(file_path, "test_command")
+    execute_file = os.path.join(file_path, "execute_command")
     write_command("compile", build_file)
-    write_command("test", test_file)
+    write_command("execute", execute_file)
 
 
 def execute_build_cmd(project_dir):
