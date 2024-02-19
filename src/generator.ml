@@ -776,7 +776,7 @@ let is_public_class class_name c_info =
   match ClassInfo.M.find_opt class_name c_info with
   | Some typ -> (
       match typ.ClassInfo.class_type with
-      | Public | Public_Static -> true
+      | Public | Public_Static | Public_Static_Abstract -> true
       | _ -> false)
   | None -> true (* modeling class *)
 
@@ -1433,7 +1433,7 @@ let get_clist class_name m_info (c_info, ig) =
         (fun init_list class_name_to_find ->
           if
             is_public_class class_name_to_find c_info
-            && is_private method_name m_info |> not
+            && is_public method_name m_info
             && match_constructor_name class_name_to_find method_name
             && Utils.is_anonymous method_name |> not
           then method_name :: init_list
@@ -1446,7 +1446,7 @@ let find_class_file =
     (fun gvar_list const ->
       (0, AST.GlobalConstant (const ^ ".class")) :: gvar_list)
     []
-    [ "unitcon_interface"; "unitcon_enum" ]
+    [ "UnitconInterface"; "UnitconEnum" ]
 
 let find_enum_var_list c_name i_info =
   if InstanceInfo.M.mem c_name i_info then
@@ -1826,7 +1826,7 @@ let error_entry_func ee es m_info c_info =
   let f_arg_list = mk_arg ~is_s:(is_static_method ee m_info) param es in
   let c_name = Utils.get_class_name ee in
   let typ_list =
-    if is_private_class c_name c_info then
+    if is_public_class c_name (c_info |> fst) |> not then
       try IG.succ (c_info |> snd) c_name |> List.cons c_name
       with Invalid_argument _ -> [ c_name ]
     else [ c_name ]
@@ -1857,7 +1857,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
       let setter_list =
         (try SetterMap.M.find class_name s_map with _ -> [])
         |> List.filter (fun (s, fields) ->
-               is_private s m_info |> not
+               is_public s m_info
                && Utils.is_anonymous s |> not
                &&
                if !Cmdline.basic_mode || !Cmdline.syn_priority then true
@@ -1906,9 +1906,9 @@ let get_ret_obj class_name m_info c_info s_map =
         (fun init_list class_name_to_find ->
           if
             match_return_object class_name_to_find method_name m_info
-            && is_private_class (Utils.get_class_name method_name) c_info |> not
+            && is_public_class (Utils.get_class_name method_name) (c_info |> fst)
             && is_abstract_method method_name class_to_find m_info c_info |> not
-            && is_private method_name m_info |> not
+            && is_public method_name m_info
             && Utils.is_init_method method_name |> not
             && is_void_method method_name s_map |> not
             && Utils.is_anonymous method_name |> not
@@ -2054,10 +2054,11 @@ let get_inner_func f arg =
   in
   (n_recv, n_f, AST.Arg (AST.get_arg arg |> List.tl))
 
-let cname_condition m_name m_info =
+let cname_condition m_name m_info c_info =
   match MethodInfo.M.find_opt m_name m_info with
   | Some info ->
-      (info.MethodInfo.return <> "" && is_static_method m_name m_info)
+      info.MethodInfo.return <> ""
+      && (is_static_method m_name m_info || is_static_class m_name c_info)
       || Utils.is_init_method m_name
   | _ -> Utils.is_init_method m_name
 
@@ -2134,7 +2135,7 @@ let recv_in_assign_unroll (prec, p) m_info c_info =
         let r3 = AST.recv_in_assign_rule3_1 p recv f arg in
         incr outer;
         (prec, r2) :: [ (prec, r3) ])
-      else if cname_condition (AST.get_func f).method_name m_info then
+      else if cname_condition (AST.get_func f).method_name m_info c_info then
         [ (prec, get_cname f |> AST.recv_in_assign_rule1 p) ]
       else
         let r2 = AST.recv_in_assign_rule2 p "con_recv" !recv in
@@ -2184,10 +2185,10 @@ let fcall_in_void_unroll p m_info c_info s_map =
           [] lst
   | _ -> failwith "Fail: fcall_in_void_unroll"
 
-let recv_in_void_unroll (prec, p) m_info =
+let recv_in_void_unroll (prec, p) m_info c_info =
   match p with
   | AST.Void (_, f, _) when AST.recv_in_void p ->
-      if cname_condition (AST.get_func f).method_name m_info then
+      if cname_condition (AST.get_func f).method_name m_info c_info then
         [ (prec, get_cname f |> AST.recv_in_void_rule1 p) ]
       else
         let r2 = AST.recv_in_void_rule2 p "con_recv" !recv in
@@ -2248,7 +2249,8 @@ let one_unroll p summary cg m_info c_info s_map i_info p_info =
       (* fcall1_in_void --> recv_in_void --> arg_in_void *)
       fcall_in_void_unroll p m_info c_info s_map
       |> List.fold_left
-           (fun acc_lst x -> recv_in_void_unroll x m_info |> append acc_lst)
+           (fun acc_lst x ->
+             recv_in_void_unroll x m_info c_info |> append acc_lst)
            []
       |> List.fold_left
            (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
@@ -2263,7 +2265,7 @@ let one_unroll p summary cg m_info c_info s_map i_info p_info =
       |> List.rev
   | Void _ when AST.recv_in_void p ->
       (* unroll error entry *)
-      recv_in_void_unroll (0, p) m_info
+      recv_in_void_unroll (0, p) m_info c_info
       |> List.fold_left
            (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
            []
