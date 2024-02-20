@@ -18,6 +18,8 @@ let require_enum_class = ref false
 
 let require_interface_class = ref false
 
+let error_method_name = ref ""
+
 type t = {
   program_dir : string;
   summary_file : string;
@@ -306,9 +308,9 @@ let get_compilation_error_files data =
   List.fold_left
     (fun f_list line ->
       if Str.string_match (".*UnitconTest[0-9]+\\.java" |> Str.regexp) line 0
-      then (
+      then
         let file_name = get_f_name line in
-        file_name :: f_list)
+        file_name :: f_list
       else f_list)
     [] data
 
@@ -400,6 +402,10 @@ let run program_dir =
   let primitive_info = parse_primitive_info !info.constant_file in
   let call_prop_map = parse_callprop !info.call_prop_file in
   let error_method_info = parse_error_summary !info.error_summary_file in
+  (* for unknown bug detection *)
+  error_method_name :=
+    Regexp.first_rm ("(.*)" |> Str.regexp) (error_method_info |> fst)
+    |> Str.split Regexp.dot |> List.rev |> List.hd;
   run_test ~is_start:true "FIXME" !info [] error_method_info
     ( callgraph,
       summary,
