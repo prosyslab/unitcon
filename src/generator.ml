@@ -2227,11 +2227,14 @@ let rec arg_in_void_unroll (prec, p) =
            []
   | _ -> failwith "Fail: arg_in_void_unroll"
 
-let rec append l1 l2 =
-  match (l1, l2) with
-  | h1 :: t1, h2 :: t2 -> h1 :: h2 :: append t1 t2
-  | l1, [] -> l1
-  | [], l2 -> l2
+let append l1 l2 =
+  let rec iter accu ll1 ll2 =
+    match (ll1, ll2) with
+    | h1 :: t1, h2 :: t2 -> iter (h2 :: h1 :: accu) t1 t2
+    | [], ll2 -> List.rev_append accu ll2
+    | ll1, [] -> List.rev_append accu ll1
+  in
+  iter [] l1 l2
 
 let one_unroll p summary cg m_info c_info s_map i_info p_info =
   match p with
