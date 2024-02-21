@@ -814,7 +814,9 @@ let is_static_class name (c_info, _) =
   in
   match ClassInfo.M.find_opt name c_info with
   | Some typ -> (
-      match typ.ClassInfo.class_type with Public_Static -> true | _ -> false)
+      match typ.ClassInfo.class_type with
+      | Public_Static | Public_Static_Abstract -> true
+      | _ -> false)
   | None -> false
 
 let is_private_class class_package c_info =
@@ -2036,6 +2038,7 @@ let get_inner_func f arg =
         summary = (AST.get_func f).summary;
       }
   in
+  (* outer class variable *)
   let recv = AST.get_arg arg |> List.hd in
   let n_recv =
     AST.Variable
