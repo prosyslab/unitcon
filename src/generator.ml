@@ -1384,12 +1384,12 @@ let get_same_params_set summary params =
   get_same_type_param new_p |> get_same_precond_param summary
 
 let satisfied_c m_summary id candidate_constructor summary =
-  let c_summarys = SummaryMap.M.find candidate_constructor summary in
+  let c_summaries = SummaryMap.M.find candidate_constructor summary in
   let target_symbol =
     get_target_symbol (if is_receiver id then "this" else id) m_summary
     |> AST.get_rh_name
   in
-  if target_symbol = "" then [ (true, c_summarys |> List.hd) ]
+  if target_symbol = "" then [ (true, c_summaries |> List.hd) ]
   else
     List.fold_left
       (fun lst c_summary ->
@@ -1401,7 +1401,7 @@ let satisfied_c m_summary id candidate_constructor summary =
           |> check_intersect ~is_init:true m_summary c_summary,
           c_summary )
         :: lst)
-      [] c_summarys
+      [] c_summaries
     |> List.fold_left
          (fun lst (check_summary, c_summary) ->
            if List.filter (fun (_, c) -> c = false) check_summary = [] then
@@ -2382,39 +2382,31 @@ let check_overload prev_ee current_ee =
   else false
 
 (* find error entry *)
-let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
-    m_info c_info =
-  let propagation ?(prev_ee = "") caller_method caller_preconds call_prop =
+let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
+  let propagation caller_method caller_preconds call_prop =
     let new_value, new_mem, check_match =
       satisfy e_method e_summary call_prop m_info
     in
     let new_uf = mk_new_uf e_method e_summary call_prop m_info in
     if !Cmdline.basic_mode then
       ErrorEntrySet.union caller_preconds
-        (find_ee ~prev_ee caller_method empty_summary cg summary call_prop_map
-           m_info c_info)
+        (find_ee caller_method empty_summary cg summary call_prop_map m_info
+           c_info)
     else if check_match then
       let new_call_prop =
         new_value_summary new_value call_prop
         |> new_mem_summary new_mem |> new_uf_summary new_uf
       in
       ErrorEntrySet.union caller_preconds
-        (find_ee ~prev_ee caller_method new_call_prop cg summary call_prop_map
-           m_info c_info)
+        (find_ee caller_method new_call_prop cg summary call_prop_map m_info
+           c_info)
     else caller_preconds
   in
-  if prev_ee <> "" && check_overload prev_ee e_method |> not then
-    ErrorEntrySet.empty
+  if is_public e_method m_info then
+    ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty
   else
-    let new_prev_ee, ee_set =
-      if is_public e_method m_info && check_overload prev_ee e_method then
-        (e_method, ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty)
-      else (prev_ee, ErrorEntrySet.empty)
-    in
     let caller_list =
-      try
-        CG.succ cg e_method
-        |> List.filter (fun x -> x <> e_method && x <> prev_ee)
+      try CG.succ cg e_method |> List.filter (fun x -> x <> e_method)
       with Invalid_argument _ -> []
     in
     List.fold_left
@@ -2424,16 +2416,15 @@ let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
          with
         | None ->
             (* It is possible without any specific conditions *)
-            find_ee ~prev_ee:new_prev_ee caller_method empty_summary cg summary
-              call_prop_map m_info c_info
+            find_ee caller_method empty_summary cg summary call_prop_map m_info
+              c_info
         | Some prop_list ->
             List.fold_left
               (fun caller_preconds call_prop ->
-                propagation ~prev_ee:new_prev_ee caller_method caller_preconds
-                  call_prop)
+                propagation caller_method caller_preconds call_prop)
               ErrorEntrySet.empty prop_list)
         |> ErrorEntrySet.union set)
-      ee_set caller_list
+      ErrorEntrySet.empty caller_list
 
 let pretty_format p =
   let rec imports s set =
@@ -2493,7 +2484,7 @@ let rec mk_testcase summary cg m_info c_info s_map i_info p_info queue =
         |> mk_testcase summary cg m_info c_info s_map i_info p_info
   | [] -> []
 
-let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
+let mk_testcases ~is_start queue (e_method, error_summary)
     (cg, summary, call_prop_map, m_info, c_info, s_map, i_info, p_info) =
   let apply_rule list =
     List.fold_left
@@ -2503,8 +2494,7 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
       [] list
   in
   let p_info, init =
-    if is_start then (
-      pkg := pkg_name;
+    if is_start then
       ErrorEntrySet.fold
         (fun (ee, ee_s) (p_info_init, init_list) ->
           ( Constant.expand_string_value ee p_info_init,
@@ -2514,7 +2504,7 @@ let mk_testcases ~is_start pkg_name queue (e_method, error_summary)
                  []
             |> List.rev_append init_list ))
         (find_ee e_method error_summary cg summary call_prop_map m_info c_info)
-        (p_info, []))
+        (p_info, [])
     else (p_info, queue)
   in
   let result = mk_testcase summary cg m_info c_info s_map i_info p_info init in

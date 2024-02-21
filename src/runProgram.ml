@@ -34,7 +34,6 @@ type t = {
   inheritance_file : string;
   enum_file : string;
   constant_file : string;
-  extra_callee_file : string;
   compile_command : string;
   execute_command : string;
   test_dir : string;
@@ -53,7 +52,6 @@ let info =
       inheritance_file = "";
       enum_file = "";
       constant_file = "";
-      extra_callee_file = "";
       compile_command = "";
       execute_command = "";
       test_dir = "";
@@ -120,10 +118,6 @@ let parse_primitive_info filename =
   let default = Constant.default_primitive in
   if not (Sys.file_exists filename) then default
   else Json.from_file filename |> Constant.of_primitive_json default
-
-let parse_extra_callee filename minfo callgraph =
-  if not (Sys.file_exists filename) then callgraph
-  else Json.from_file filename |> Callgraph.of_extra_json minfo callgraph
 
 (* ************************************** *
    run program
@@ -381,7 +375,6 @@ let init program_dir =
         cons con_path "inheritance_info.json" |> cons program_dir;
       enum_file = cons con_path "enum_info.json" |> cons program_dir;
       constant_file = cons con_path "extra_constant.json" |> cons program_dir;
-      extra_callee_file = cons con_path "extra_callee.json" |> cons program_dir;
       compile_command = cons con_path "compile_command" |> cons program_dir;
       execute_command = cons con_path "execute_command" |> cons program_dir;
       test_dir = cons program_dir "unitcon_tests";
@@ -469,8 +462,8 @@ let run_testfile () =
 let abnormal_run = Sys.Signal_handle (fun _ -> run_testfile ())
 
 (* queue: (testcase * list(partial testcase)) *)
-let rec run_test ~is_start pkg info queue e_method_info p_info =
-  let tc, tc_list = make_testcase ~is_start pkg queue e_method_info p_info in
+let rec run_test ~is_start info queue e_method_info p_info =
+  let tc, tc_list = make_testcase ~is_start queue e_method_info p_info in
   if tc = (ImportSet.empty, "") then
     (* early stopping *)
     Unix.kill (Unix.getpid ()) Sys.sigusr1
@@ -478,7 +471,7 @@ let rec run_test ~is_start pkg info queue e_method_info p_info =
     let time = Float.sub (Unix.gettimeofday ()) !time in
     add_testcase info.test_dir !num_of_tc_files (tc, time);
     incr num_of_tc_files;
-    run_test ~is_start:false pkg info tc_list e_method_info p_info
+    run_test ~is_start:false info tc_list e_method_info p_info
 
 let run program_dir =
   (* for early stopping *)
@@ -488,10 +481,7 @@ let run program_dir =
   init_test_folder !info.test_dir;
   let method_info = parse_method_info !info.summary_file in
   let summary = parse_summary !info.summary_file method_info in
-  let callgraph =
-    parse_callgraph !info.summary_file
-    |> parse_extra_callee !info.extra_callee_file method_info
-  in
+  let callgraph = parse_callgraph !info.summary_file in
   let setter_map = get_setter summary method_info in
   let class_info = parse_class_info !info.inheritance_file in
   let instance_info =
@@ -504,7 +494,7 @@ let run program_dir =
   error_method_name :=
     Regexp.first_rm ("(.*)" |> Str.regexp) (error_method_info |> fst)
     |> Str.split Regexp.dot |> List.rev |> List.hd;
-  run_test ~is_start:true "FIXME" !info [] error_method_info
+  run_test ~is_start:true !info [] error_method_info
     ( callgraph,
       summary,
       call_prop_map,
