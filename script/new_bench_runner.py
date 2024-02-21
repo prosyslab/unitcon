@@ -447,8 +447,6 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
             debug(f"Renaming {curr_dir} to {results_dir}...")
             shutil.move(curr_dir, results_dir)
 
-            break
-
 
 ######################################################
 #                   Main Function                    #
