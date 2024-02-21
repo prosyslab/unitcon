@@ -65,9 +65,7 @@ let solver = Z3.Solver.mk_solver z3ctx None
 
 (* non-terminal cost for p, terminal cost for p, precision for p *)
 let get_cost p =
-  if !Cmdline.syn_priority then (p.nt_cost, p.t_cost, 0)
-  else if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec)
-  else (0, 0, 0)
+  if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec) else (0, 0, 0)
 
 let mk_cost prev_p curr_tc prec =
   {
@@ -1799,9 +1797,7 @@ let mk_params_list summary params_set org_param =
 
 let mk_arg ~is_s param s =
   let param = if is_s then param else param |> List.tl in
-  let same_params_set =
-    if !Cmdline.syn_priority then VarSets.empty else get_same_params_set s param
-  in
+  let same_params_set = get_same_params_set s param in
   let params_list = mk_params_list s same_params_set param in
   List.fold_left
     (fun arg_set lst -> VarListSet.add (lst |> List.rev) arg_set)
@@ -1862,7 +1858,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
                is_public s m_info
                && Utils.is_anonymous s |> not
                &&
-               if !Cmdline.basic_mode || !Cmdline.syn_priority then true
+               if !Cmdline.basic_mode then true
                else is_intersect var.field fields || Utils.is_array_set s)
       in
       List.fold_left
@@ -1920,7 +1916,7 @@ let get_ret_obj class_name m_info c_info s_map =
     m_info []
 
 let satisfied_c_list id t_summary summary summary_list =
-  if !Cmdline.basic_mode || !Cmdline.syn_priority then
+  if !Cmdline.basic_mode then
     List.fold_left
       (fun list constructor -> (0, constructor, empty_summary) :: list)
       [] summary_list
@@ -1978,7 +1974,7 @@ let summary_filtering name m_info list =
   |> List.filter (fun (_, c, _) -> is_recursive_param name c m_info |> not)
 
 let check_dup_summary lst =
-  if !Cmdline.basic_mode || !Cmdline.syn_priority then lst
+  if !Cmdline.basic_mode then lst
   else
     let rec collect_dup lst =
       match lst with
@@ -2010,7 +2006,7 @@ let get_ret_c ret summary m_info c_info s_map =
   else
     let id = AST.get_vinfo ret |> snd in
     let memory_effect_filtering list =
-      if !Cmdline.basic_mode || !Cmdline.syn_priority then list
+      if !Cmdline.basic_mode then list
       else
         List.filter
           (fun (_, c, _) -> is_method_with_memory_effect c summary)
@@ -2393,7 +2389,7 @@ let rec find_ee ?(prev_ee = "") e_method e_summary cg summary call_prop_map
       satisfy e_method e_summary call_prop m_info
     in
     let new_uf = mk_new_uf e_method e_summary call_prop m_info in
-    if !Cmdline.basic_mode || !Cmdline.syn_priority then
+    if !Cmdline.basic_mode then
       ErrorEntrySet.union caller_preconds
         (find_ee ~prev_ee caller_method empty_summary cg summary call_prop_map
            m_info c_info)
@@ -2465,15 +2461,6 @@ let pretty_format p =
   in
   (imports p ImportSet.empty, AST.code p)
 
-let syn_priority_q queue =
-  List.stable_sort
-    (fun p1 p2 ->
-      let nt1, t1, _ = get_cost p1 in
-      let nt2, t2, _ = get_cost p2 in
-      if compare (nt1 + t1) (nt2 + t2) <> 0 then compare (nt1 + t1) (nt2 + t2)
-      else compare nt1 nt2)
-    queue
-
 let priority_q queue =
   List.stable_sort
     (fun p1 p2 ->
@@ -2486,11 +2473,7 @@ let priority_q queue =
     queue
 
 let rec mk_testcase summary cg m_info c_info s_map i_info p_info queue =
-  let queue =
-    if !Cmdline.basic_mode then queue
-    else if !Cmdline.syn_priority then syn_priority_q queue
-    else priority_q queue
-  in
+  let queue = if !Cmdline.basic_mode then queue else priority_q queue in
   match queue with
   | p :: tl ->
       if AST.ground p.tc then [ (pretty_format p.tc, tl) ]

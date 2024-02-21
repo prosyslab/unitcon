@@ -1,7 +1,5 @@
 let out_dir = ref "unitcon-out"
 
-let print_callgraph = ref false
-
 let target_program : string option ref = ref None
 
 let basic_mode = ref false
@@ -19,11 +17,9 @@ let options =
     ( "-outdir",
       Arg.Set_string out_dir,
       "Output directory (default: unitcon-out)" );
-    ("-print-callgraph", Arg.Set print_callgraph, "Print callgraph");
-    ("-basic-mode", Arg.Set basic_mode, "Run basic mode (default: false)");
-    ( "-syn-priority",
-      Arg.Set syn_priority,
-      "Run using syntactic priority only (default: false)" );
+    ( "-basic-mode",
+      Arg.Set basic_mode,
+      "Run without optimization (default: false)" );
     ( "-time-out",
       Arg.Set_int time_out,
       "Time Budget except Static Analysis (default: 4m)" );
