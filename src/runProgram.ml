@@ -14,6 +14,12 @@ let time = ref 0.0
 
 let num_of_tc_files = ref 1
 
+let num_of_success = ref 0
+
+let first_success_tc = ref ""
+
+let last_success_tc = ref ""
+
 let require_enum_class = ref false
 
 let require_interface_class = ref false
@@ -374,17 +380,80 @@ let build_program info =
   in
   compile_loop ()
 
+let abnormal_exit =
+  Sys.Signal_handle
+    (fun _ ->
+      Logger.info "Abnormal End UnitCon for %s: %b(%d) (total time: %f)"
+        !info.program_dir
+        (if !num_of_success > 0 then true else false)
+        !num_of_success
+        (Float.sub (Unix.gettimeofday ()) !time);
+      Logger.info "First Success Test: %s" !first_success_tc;
+      Logger.info "Last Success Test: %s" !last_success_tc;
+      Unix._exit 0)
+
+(* if the max running time is exceeded, UnitCon is forced to shut down *)
+let interrupt pid =
+  Unix.sleep !Cmdline.max_run_time;
+  Unix.kill pid Sys.sigusr2
+
+let run_testfile () =
+  Sys.set_signal Sys.sigusr2 abnormal_exit;
+  Thread.create interrupt (Unix.getpid ()) |> ignore;
+  let compile_start = Unix.gettimeofday () in
+  add_default_class !info.test_dir;
+  Logger.info "Start compilation! (# of test files: %d)" (!num_of_tc_files - 1);
+  build_program !info;
+  Logger.info "End compilation! (duration: %f)"
+    (Float.sub (Unix.gettimeofday ()) compile_start);
+  let execute_cmd = execute_command_of_file !info.execute_command in
+  let execute program_dir test_dir expected_bug t_file =
+    let ic =
+      simple_compiler program_dir (modify_execute_command execute_cmd t_file)
+    in
+    let data = my_really_read_string ic in
+    ic |> close_in;
+    if checking_bug_presence data expected_bug then (
+      if !first_success_tc = "" then first_success_tc := t_file;
+      last_success_tc := t_file;
+      incr num_of_success)
+    else if not (Sys.file_exists (Filename.concat test_dir (t_file ^ ".java")))
+    then ()
+    else (
+      remove_file (Filename.concat test_dir (t_file ^ ".java"));
+      remove_file (Filename.concat test_dir (t_file ^ ".class")))
+  in
+  let rec execute_test current_f_num program_dir test_dir expected_bug =
+    if current_f_num < !num_of_tc_files then (
+      execute program_dir test_dir expected_bug
+        (test_basename ^ string_of_int current_f_num);
+      execute_test (current_f_num + 1) program_dir test_dir expected_bug)
+  in
+  execute_test 1 !info.program_dir !info.test_dir !info.expected_bug;
+  Logger.info "Normal End UnitCon for %s: %b(%d) (total time: %f)\n"
+    !info.program_dir
+    (if !num_of_success > 0 then true else false)
+    !num_of_success
+    (Float.sub (Unix.gettimeofday ()) !time);
+  Logger.info "First Success Test: %s" !first_success_tc
+
+let abnormal_run = Sys.Signal_handle (fun _ -> run_testfile ())
+
 (* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start pkg info queue e_method_info p_info =
   let tc, tc_list = make_testcase ~is_start pkg queue e_method_info p_info in
-  (if tc = (ImportSet.empty, "") then ( (* TODO: early stopping *) )
-   else
-     let time = Float.sub (Unix.gettimeofday ()) !time in
-     add_testcase info.test_dir !num_of_tc_files (tc, time);
-     incr num_of_tc_files);
-  run_test ~is_start:false pkg info tc_list e_method_info p_info
+  if tc = (ImportSet.empty, "") then
+    (* early stopping *)
+    Unix.kill (Unix.getpid ()) Sys.sigusr1
+  else
+    let time = Float.sub (Unix.gettimeofday ()) !time in
+    add_testcase info.test_dir !num_of_tc_files (tc, time);
+    incr num_of_tc_files;
+    run_test ~is_start:false pkg info tc_list e_method_info p_info
 
 let run program_dir =
+  (* for early stopping *)
+  Sys.set_signal Sys.sigusr1 abnormal_run;
   time := Unix.gettimeofday ();
   init program_dir;
   init_test_folder !info.test_dir;
@@ -415,40 +484,3 @@ let run program_dir =
       setter_map,
       instance_info,
       primitive_info )
-
-let run_testfile () =
-  let compile_start = Unix.gettimeofday () in
-  add_default_class !info.test_dir;
-  Logger.info "Start compilation! (# of test files: %d)" (!num_of_tc_files - 1);
-  build_program !info;
-  Logger.info "End compilation! (duration: %f)"
-    (Float.sub (Unix.gettimeofday ()) compile_start);
-  let execute_cmd = execute_command_of_file !info.execute_command in
-  let execute program_dir test_dir expected_bug t_file =
-    let ic =
-      simple_compiler program_dir (modify_execute_command execute_cmd t_file)
-    in
-    let data = my_really_read_string ic in
-    ic |> close_in;
-    if checking_bug_presence data expected_bug then 1
-    else if not (Sys.file_exists (Filename.concat test_dir (t_file ^ ".java")))
-    then 0
-    else (
-      remove_file (Filename.concat test_dir (t_file ^ ".java"));
-      remove_file (Filename.concat test_dir (t_file ^ ".class"));
-      0)
-  in
-  let rec execute_test current_f_num program_dir test_dir expected_bug =
-    if current_f_num >= !num_of_tc_files then 0
-    else
-      execute program_dir test_dir expected_bug
-        (test_basename ^ string_of_int current_f_num)
-      + execute_test (current_f_num + 1) program_dir test_dir expected_bug
-  in
-  let num_of_success =
-    execute_test 1 !info.program_dir !info.test_dir !info.expected_bug
-  in
-  Logger.info "End UnitCon for %s: %b(%d) (total time: %f)\n" !info.program_dir
-    (if num_of_success > 0 then true else false)
-    num_of_success
-    (Float.sub (Unix.gettimeofday ()) !time)

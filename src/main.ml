@@ -14,13 +14,13 @@ let main () =
       initialize ();
       RunProgram.run p
 
-let stopit =
+let run_testfile =
   Sys.Signal_handle
     (fun _ ->
       RunProgram.run_testfile ();
       Unix._exit 0)
 
 let _ =
-  Sys.set_signal Sys.sigalrm stopit;
+  Sys.set_signal Sys.sigalrm run_testfile;
   ignore (Unix.alarm !Cmdline.time_out);
   main ()
