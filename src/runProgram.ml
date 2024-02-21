@@ -223,7 +223,7 @@ let execute_command command =
   in
   match run_type command with
   | Compile -> execute command
-  | Test -> execute ("timeout 10s " ^ command)
+  | Test -> execute ("timeout 5s " ^ command)
 
 let simple_compiler program_dir command =
   let current_dir = Unix.getcwd () in
