@@ -679,7 +679,7 @@ let long_array_info =
       filename = "";
     }
 
-  let byte_array_info =
+let byte_array_info =
   let this = This (Array Byte) in
   let arg = Var (Int, "size") in
   MethodInfo.
@@ -791,7 +791,7 @@ let long_array_set_info =
       filename = "";
     }
 
-  let byte_array_set_info =
+let byte_array_set_info =
   let this = This (Array Char) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Byte, "elem") in

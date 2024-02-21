@@ -14,6 +14,8 @@ let max_run_time = ref (60 * 60) (* max running time except synthesis time *)
 
 let until_time_out = ref false
 
+let unknown_bug = ref false
+
 let options =
   [
     ( "-outdir",
@@ -28,6 +30,9 @@ let options =
     ( "-until-time-out",
       Arg.Set until_time_out,
       "Synthesis until time out (default: false)" );
+    ( "-unknown-bug",
+      Arg.Set unknown_bug,
+      "Run unknown bug searching mode (default: false)" );
   ]
 
 let parse_arg (x : string) =

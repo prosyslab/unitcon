@@ -34,10 +34,28 @@ def run_with_debug(cmd: str, *args, **kwargs) -> None:
     debug(f"Running command: {cmd.strip()}")
     debug(f"{args=}")
     debug(f"{kwargs=}")
-    output: str = subprocess.run(
-        cmd, *args, **kwargs, capture_output=True, check=False
-    ).stdout.decode("utf-8")
-    debug(f"Output:\n{output}")
+    debug("")
+
+    process: subprocess.Popen = subprocess.Popen(
+        cmd,
+        *args,
+        **kwargs,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+    )
+
+    while True:
+        stdout_line: str | None = process.stdout.readline()
+        stderr_line: str | None = process.stderr.readline()
+        if not stdout_line and not stderr_line and process.poll() is not None:
+            break
+        if stdout_line:
+            debug(stdout_line.strip())
+        if stderr_line:
+            debug(stderr_line.strip())
+
+    process.wait()
 
 
 def print_curr_time() -> None:
@@ -229,6 +247,7 @@ def run_infer(project_dir: str, infer_path: str, version: int) -> None:
     :param infer_path: Path of the infer executable
     :param version: Java version of the target project
     """
+    print_curr_time()
     debug("Running infer...")
     execute_build_cmd(project_dir, infer_path, version)
     execute_analyzer(project_dir, infer_path)
@@ -255,6 +274,7 @@ def remove_duplicate_summaries(project_dir: str, encoding: str) -> None:
 
     :param file_path: Main directory path of the target project
     """
+    print_curr_time()
     debug("Checking for duplicate summaries...")
     hash_file_dict: dict[int, list[str]] = {}
     error_summary_dir: str = os.path.join(
@@ -291,6 +311,21 @@ def remove_duplicate_summaries(project_dir: str, encoding: str) -> None:
                 if duplicate[idx]:
                     debug(f"Removing file {possible_duplicates[idx]}...")
                     os.remove(possible_duplicates[idx])
+
+    original_cnt: int = len(
+        [
+            name
+            for name in os.listdir(
+                os.path.join(project_dir, "infer-out", "error_summarys")
+            )
+            if name.endswith(".json")
+        ]
+    )
+    distinct_cnt: int = len(
+        [name for name in os.listdir(error_summary_dir) if name.endswith(".json")]
+    )
+    debug(f"Total summaries:    {original_cnt}")
+    debug(f"Distinct summaries: {distinct_cnt}")
 
 
 ######################################################
@@ -335,6 +370,7 @@ def run_command_maker(project_dir: str, build_type: str) -> None:
 
     :param project_dir: Main directory path of the target project
     :param build_type: Compile method of the project. (\"maven\" / \"javac\")"""
+    print_curr_time()
     debug("Running cmd maker...")
     cmd: str = " ".join(
         ["python3", os.path.join("script", "command_maker.py"), project_dir, build_type]
@@ -384,51 +420,34 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
     :param project_dir: Main directory path of the target project
     :param unitcon_path: Path of the unitcon executable
     """
+    print_curr_time()
     debug("Running unitcon...")
-    all_results_dir: str = os.path.join(os.getcwd(), "results")
-    result_dir: str = os.path.join(
-        all_results_dir, os.path.basename(project_dir) + "_result"
-    )
 
-    if not os.path.isdir(all_results_dir):
-        debug(f"{all_results_dir} does not exits. Creating...")
-        os.mkdir(all_results_dir)
-    elif os.path.isdir(result_dir):
-        debug(f"{result_dir} already exists. Deleting...")
-        shutil.rmtree(result_dir)
-    debug(f"Creating directory {result_dir}...")
-    os.mkdir(result_dir)
-
-    # while copy_error_summary(project_dir, error_count):
     error_summarys_dir = os.path.join(
         project_dir, "unitcon_properties", "error_summarys"
     )
     for summary in os.listdir(error_summarys_dir):
         if summary.endswith(".json") and copy_error_summary(project_dir, summary):
-            result_file: str = os.path.join(result_dir, "result-" + summary[:-5])
-            cmd: str = " ".join([unitcon_path, project_dir, "-until-time-out"])
+            curr_dir: str = os.path.join(project_dir, "unitcon_tests")
+            if not os.path.isdir(curr_dir):
+                debug(f"Creating directory {curr_dir}...")
+                os.mkdir(curr_dir)
 
+            cmd: str = " ".join(
+                [unitcon_path, project_dir, "-until-time-out", "-unknown-bug"]
+            )
             print_curr_time()
-            debug(f"Running command: {cmd}")
-            debug("args=()")
-            debug(
-                f"kwargs={{'cwd': {os.getcwd()}, 'shell': True, 'stdout': {subprocess.PIPE}, 'universal_newlines': True}}"
-            )
-            process: subprocess.Popen = subprocess.Popen(
-                cmd,
-                cwd=os.getcwd(),
-                shell=True,
-                stdout=subprocess.PIPE,
-                universal_newlines=True,
-            )
-            # Wait for ending of UnitCon
-            process.wait()
+            run_with_debug(cmd, cwd=os.getcwd(), shell=True)
 
             debug("Unitcon ended!")
-            out, _ = process.communicate()
-            with open(result_file, "wb") as f:
-                debug(f"Writing results to {result_file}...")
-                f.write(bytes(out, encoding="utf-8"))
+            results_dir: str = os.path.join(project_dir, "results_" + summary[:-5])
+            if os.path.isdir(results_dir):
+                debug(f"{results_dir} already exists. Deleting...")
+                shutil.rmtree(results_dir)
+            debug(f"Renaming {curr_dir} to {results_dir}...")
+            shutil.move(curr_dir, results_dir)
+
+            break
 
 
 ######################################################
@@ -448,7 +467,7 @@ def main() -> None:
        |  |- execute_summary_maker()
        |  `- copy_summary()
        |- remove_duplicate_summaries()
-       |  `- file_coontent_hash()
+       |  `- file_content_hash()
        |- run_parser()
        |- run_command_maker()
        `- run_unitcon()
@@ -493,12 +512,6 @@ def main() -> None:
 
     run_infer(abspath, str(args.infer_path), args.version)
     remove_duplicate_summaries(abspath, args.encoding)
-    debug(
-        f"Total summaries:    {len([name for name in os.listdir(os.path.join(abspath, 'infer-out', 'error_summarys')) if name.endswith('.json')])}"
-    )
-    debug(
-        f"Distinct summaries: {len([name for name in os.listdir(os.path.join(abspath, 'unitcon_properties', 'error_summarys')) if name.endswith('.json')])}"
-    )
     run_parser(abspath, args.encoding)
     run_command_maker(abspath, args.build_type)
     run_unitcon(abspath, str(args.unitcon_path))

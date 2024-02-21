@@ -164,14 +164,34 @@ let modify_execute_command command t_file_name =
         (t_file_name ^ " -encoding")
         command
 
-let find word str =
-  match
-    Str.search_forward
-      ("java.lang.NullPointerException" ^ "[ \t\r\n]+" ^ word |> Str.regexp)
-      str 0
-  with
+let check_substring substr str =
+  match Str.search_forward (Str.regexp substr) str 0 with
   | exception Not_found -> false
   | _ -> true
+
+let compare_stack_trace target_trace error_trace =
+  check_substring
+    ("java.lang.NullPointerException" ^ "[ \t\r\n]+" ^ target_trace)
+    error_trace
+
+let check_package_name_presence package_name error_trace =
+  check_substring package_name error_trace
+
+let check_target_method_presence error_trace =
+  check_substring
+    ("java.lang.NullPointerException.*" ^ !error_method_name)
+    error_trace
+
+let check_useless_npe error_trace =
+  let ignored_npes =
+    [
+      "java.io.File.<init>";
+      "java.io.FileInputStream.<init>";
+      "java.io.FileOutputStream.<init>";
+      "java.util.Objects.requireNonNull";
+    ]
+  in
+  List.exists (fun ignored -> check_substring ignored error_trace) ignored_npes
 
 let run_type str =
   if Str.string_match ("^javac" |> Str.regexp) str 0 then Compile
@@ -331,9 +351,18 @@ let checking_error_presence data =
   | exception Not_found -> ()
   | _ -> raise Compilation_Error
 
-let checking_bug_presence data expected_bug =
-  let check_bug bug = find bug data in
-  check_bug (string_of_expected_bug expected_bug)
+(* let checking_bug_presence data expected_bug =
+   let check_bug bug = compare_stack_trace bug data in
+   check_bug (string_of_expected_bug expected_bug) *)
+
+let checking_bug_presence error_trace expected_bug =
+  if !Cmdline.unknown_bug then
+    check_package_name_presence
+      (string_of_expected_bug expected_bug)
+      error_trace
+    && check_target_method_presence error_trace
+    && check_useless_npe error_trace |> not
+  else compare_stack_trace (string_of_expected_bug expected_bug) error_trace
 
 let init program_dir =
   let cons = Filename.concat in
@@ -358,7 +387,7 @@ let init program_dir =
       test_dir = cons program_dir "unitcon_tests";
       expected_bug = cons con_path "expected_bug" |> cons program_dir;
     };
-  cons con_path "log.txt" |> cons program_dir |> Logger.from_file;
+  cons !info.test_dir "log.txt" |> Logger.from_file;
   Logger.info "Start UnitCon for %s" program_dir
 
 (* return: (testcase * list(partial testcase)) *)
