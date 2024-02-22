@@ -148,6 +148,7 @@ def get_class_name(node, src, package_name):
     for i in match_list:
         text = get_text(i, src)
         if i[1] == 'class-modifier':
+            text = text.replace('\n', ' ') # consider multiple line
             modifier_list = list(
                 filter(
                     lambda x: x == 'static' or x == 'abstract' or x ==

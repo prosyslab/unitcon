@@ -774,7 +774,8 @@ let is_public_class class_name c_info =
   match ClassInfo.M.find_opt class_name c_info with
   | Some typ -> (
       match typ.ClassInfo.class_type with
-      | Public | Public_Static | Public_Static_Abstract | Public_Abstract -> true
+      | Public | Public_Static | Public_Static_Abstract | Public_Abstract ->
+          true
       | _ -> false)
   | None -> true (* modeling class *)
 
@@ -1433,7 +1434,7 @@ let get_clist class_name m_info (c_info, ig) =
         (fun init_list class_name_to_find ->
           if
             is_public_class class_name_to_find c_info
-            && is_public_class (Utils.get_class_name method_name) c_info
+            && is_abstract_class class_name_to_find (c_info, ig) |> not
             && is_public method_name m_info
             && match_constructor_name class_name_to_find method_name
             && Utils.is_anonymous method_name |> not
