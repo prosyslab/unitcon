@@ -9,11 +9,19 @@ import datetime
 
 
 VERBOSE: bool = False
+CAPTURE_TO: float = 120.0
+ANALYZE_TO: float = 120.0
+PREPROCESS_TO: float = 120.0
+UNITCON_TO: float = 1800.0
 
 
 ######################################################
 #             Debugging helper functions             #
 ######################################################
+
+
+class UnitconException(Exception):
+    """Exception class for Unitcon"""
 
 
 def debug(msg: str) -> None:
@@ -25,11 +33,13 @@ def debug(msg: str) -> None:
         print("[debug] " + msg)
 
 
-def run_with_debug(cmd: str, *args, **kwargs) -> None:
+def run_with_debug(cmd: str, *args, timeout: float | None = None, **kwargs) -> None:
     """Runs a subprocess using the given command and arguments.
     If verbose option is set, prints the output.
 
     :param cmd: Command to execute
+    :param timeout: Time limit for the subprocess in seconds (default: None)
+    :raises UnitconException: If timeout expires
     """
     debug(f"Running command: {cmd.strip()}")
     debug(f"{args=}")
@@ -45,17 +55,21 @@ def run_with_debug(cmd: str, *args, **kwargs) -> None:
         universal_newlines=True,
     )
 
-    while True:
-        stdout_line: str | None = process.stdout.readline()
-        stderr_line: str | None = process.stderr.readline()
-        if not stdout_line and not stderr_line and process.poll() is not None:
-            break
-        if stdout_line:
-            debug(stdout_line.strip())
-        if stderr_line:
-            debug(stderr_line.strip())
+    try:
+        while True:
+            stdout_line: str | None = process.stdout.readline()
+            stderr_line: str | None = process.stderr.readline()
+            if not stdout_line and not stderr_line and process.poll() is not None:
+                break
+            if stdout_line:
+                debug(stdout_line.strip())
+            if stderr_line:
+                debug(stderr_line.strip())
 
-    process.wait()
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        process.kill()
+        raise UnitconException(f"Subprocess timeout expired (TO: {timeout})") from exc
 
 
 def print_curr_time() -> None:
@@ -92,9 +106,9 @@ def execute_build_cmd(project_dir: str, infer_path: str, version: int) -> None:
                 cmd = " ".join(
                     [infer_path, "capture", "--java-version", str(version), "--", cmd]
                 )
-                run_with_debug(cmd, cwd=project_dir, shell=True)
+                run_with_debug(cmd, cwd=project_dir, shell=True, timeout=CAPTURE_TO)
             else:
-                run_with_debug(cmd, cwd=project_dir, shell=True)
+                run_with_debug(cmd, cwd=project_dir, shell=True, timeout=PREPROCESS_TO)
 
 
 def execute_analyzer(project_dir: str, infer_path: str) -> None:
@@ -105,7 +119,7 @@ def execute_analyzer(project_dir: str, infer_path: str) -> None:
     """
     debug("Executing analyzer...")
     cmd: str = " ".join([infer_path, "analyze", "--pulse-only", "--show-latent"])
-    run_with_debug(cmd, cwd=project_dir, shell=True)
+    run_with_debug(cmd, cwd=project_dir, shell=True, timeout=ANALYZE_TO)
 
 
 def execute_summary_maker(project_dir: str, infer_path: str) -> None:
@@ -159,10 +173,8 @@ def split_error_summary(dirpath: str, summary: str) -> None:
 
     with open(summary, "r", encoding="utf-8") as f:
         src_lines = f.readlines()
-        debug(f"{src_lines=}")
 
     for i in src_lines:
-        # debug(f"Current line: {i}")
         if '"Procname"' in i and '"BoItv"' in i:
             buf = i
             mk_error_summary_file(dirpath, error_count, buf)
@@ -283,7 +295,6 @@ def remove_duplicate_summaries(project_dir: str, encoding: str) -> None:
     for summary in os.listdir(error_summary_dir):
         if summary.endswith(".json"):
             summary_path: str = os.path.join(error_summary_dir, summary)
-            print(summary_path)
             hash_val: int = file_content_hash(summary_path, encoding)
             if hash_val in hash_file_dict:
                 hash_file_dict[hash_val].append(summary_path)
@@ -375,7 +386,7 @@ def run_command_maker(project_dir: str, build_type: str) -> None:
     cmd: str = " ".join(
         ["python3", os.path.join("script", "command_maker.py"), project_dir, build_type]
     )
-    run_with_debug(cmd, cwd=os.getcwd(), shell=True)
+    run_with_debug(cmd, cwd=os.getcwd(), shell=True, timeout=PREPROCESS_TO)
 
 
 ######################################################
@@ -428,18 +439,17 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
     )
     for summary in os.listdir(error_summarys_dir):
         if summary.endswith(".json") and copy_error_summary(project_dir, summary):
-            curr_dir: str = os.path.join(project_dir, "unitcon_tests")
-            if not os.path.isdir(curr_dir):
-                debug(f"Creating directory {curr_dir}...")
-                os.mkdir(curr_dir)
-
             cmd: str = " ".join(
                 [unitcon_path, project_dir, "-until-time-out", "-unknown-bug"]
             )
             print_curr_time()
-            run_with_debug(cmd, cwd=os.getcwd(), shell=True)
+            try:
+                run_with_debug(cmd, cwd=os.getcwd(), shell=True, timeout=UNITCON_TO)
+                debug("Unitcon ended!")
+            except UnitconException:
+                debug(f"Unitcon killed (TO: {UNITCON_TO})")
 
-            debug("Unitcon ended!")
+            curr_dir: str = os.path.join(project_dir, "unitcon_tests")
             results_dir: str = os.path.join(project_dir, "results_" + summary[:-5])
             if os.path.isdir(results_dir):
                 debug(f"{results_dir} already exists. Deleting...")
