@@ -380,6 +380,7 @@ let init program_dir =
       test_dir = cons program_dir "unitcon_tests";
       expected_bug = cons con_path "expected_bug" |> cons program_dir;
     };
+  init_test_folder !info.test_dir;
   cons !info.test_dir "log.txt" |> Logger.from_file;
   Logger.info "Start UnitCon for %s" program_dir
 
@@ -459,7 +460,11 @@ let run_testfile () =
     (Float.sub (Unix.gettimeofday ()) !time);
   Logger.info "First Success Test: %s" !first_success_tc
 
-let abnormal_run = Sys.Signal_handle (fun _ -> run_testfile ())
+let abnormal_run =
+  Sys.Signal_handle
+    (fun _ ->
+      Unix.alarm 0 |> ignore;
+      run_testfile ())
 
 (* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start info queue e_method_info p_info =
@@ -478,7 +483,6 @@ let run program_dir =
   Sys.set_signal Sys.sigusr1 abnormal_run;
   time := Unix.gettimeofday ();
   init program_dir;
-  init_test_folder !info.test_dir;
   let method_info = parse_method_info !info.summary_file in
   let summary = parse_summary !info.summary_file method_info in
   let callgraph = parse_callgraph !info.summary_file in
