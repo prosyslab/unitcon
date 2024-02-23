@@ -17,8 +17,9 @@ let parse_param param =
   let v_and_t = String.split_on_char ':' param in
   let rec get_type t =
     match t with
-    | "int" | "signed short" -> Int
+    | "int" -> Int
     | "long" -> Long
+    | "signed short" | "short" -> Short
     | "byte" | "signed char" -> Byte
     | "float" -> Float
     | "double" -> Double

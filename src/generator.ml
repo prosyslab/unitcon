@@ -758,12 +758,12 @@ let get_type v = match v with This typ -> typ | Var (typ, _) -> typ
 
 let is_primitive x =
   match AST.get_vinfo x |> fst with
-  | Int | Long | Byte | Float | Double | Bool | Char | String -> true
+  | Int | Long | Short | Byte | Float | Double | Bool | Char | String -> true
   | _ -> false
 
 let is_primitive_from_v v =
   match get_type (v.AST.variable |> fst) with
-  | Int | Long | Byte | Float | Double | Bool | Char | String -> true
+  | Int | Long | Short | Byte | Float | Double | Bool | Char | String -> true
   | _ -> false
 
 let is_receiver id = if id = "con_recv" || id = "con_outer" then true else false
@@ -869,7 +869,7 @@ let get_package_from_v v =
     match array with Array a -> get_object_from_array a | _ -> array
   in
   let rec get_package = function
-    | Int | Long | Byte | Float | Double | Bool | Char | NonType -> ""
+    | Int | Long | Short | Byte | Float | Double | Bool | Char | NonType -> ""
     | String -> "java.lang.String"
     | Array a -> get_object_from_array a |> get_package
     | Object t -> t
@@ -970,14 +970,7 @@ let default_value_list typ import p_info =
   let total default extra =
     let lst = List.rev_append default extra in
     match typ with
-    | Int | Long ->
-        List.fold_left
-          (fun acc x ->
-            match int_of_string_opt x with
-            | Some i -> AST.Primitive (Z i) :: acc
-            | _ -> acc)
-          [] lst
-    | Byte ->
+    | Int | Long | Short | Byte ->
         List.fold_left
           (fun acc x ->
             match int_of_string_opt x with
@@ -1039,7 +1032,7 @@ let calc_value id value default =
   match value.Value.value with
   | Eq v -> (
       match v with
-      | Int i | Long i | Byte i ->
+      | Int i | Long i | Short i | Byte i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let exp =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
@@ -1076,7 +1069,7 @@ let calc_value id value default =
       | _ -> failwith "not implemented eq")
   | Neq v -> (
       match v with
-      | Int i | Long i | Byte i ->
+      | Int i | Long i | Short i | Byte i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let exp =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
@@ -1113,7 +1106,7 @@ let calc_value id value default =
       | _ -> failwith "not implemented neq")
   | Le v -> (
       match v with
-      | Int i | Long i | Byte i ->
+      | Int i | Long i | Short i | Byte i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let exp =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
@@ -1136,7 +1129,7 @@ let calc_value id value default =
       | _ -> failwith "not implemented le")
   | Lt v -> (
       match v with
-      | Int i | Long i | Byte i ->
+      | Int i | Long i | Short i | Byte i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let exp =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
@@ -1159,7 +1152,7 @@ let calc_value id value default =
       | _ -> failwith "not implemented lt")
   | Ge v -> (
       match v with
-      | Int i | Long i | Byte i ->
+      | Int i | Long i | Short i | Byte i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let exp =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
@@ -1183,7 +1176,7 @@ let calc_value id value default =
       | _ -> failwith "not implemented ge")
   | Gt v -> (
       match v with
-      | Int i | Long i | Byte i ->
+      | Int i | Long i | Short i | Byte i ->
           let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
           let exp =
             Z3.Arithmetic.Integer.mk_numeral_i z3ctx i

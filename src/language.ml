@@ -36,6 +36,7 @@ type class_type =
 type typ =
   | Int
   | Long
+  | Short
   | Byte
   | Float
   | Double
@@ -68,6 +69,7 @@ let get_array_class_name = function
       match get_array_typ typ with
       | Int -> "IntArray" ^ (get_array_dim typ |> string_of_int)
       | Long -> "LongArray" ^ (get_array_dim typ |> string_of_int)
+      | Short -> "ShortArray" ^ (get_array_dim typ |> string_of_int)
       | Byte -> "ByteArray" ^ (get_array_dim typ |> string_of_int)
       | Float -> "FloatArray" ^ (get_array_dim typ |> string_of_int)
       | Double -> "DoubleArray" ^ (get_array_dim typ |> string_of_int)
@@ -85,6 +87,7 @@ let get_class_name = function
       match get_array_typ typ with
       | Int -> "IntArray"
       | Long -> "LongArray"
+      | Short -> "ShortArray"
       | Byte -> "ByteArray"
       | Float -> "FloatArray"
       | Double -> "DoubleArray"
@@ -132,6 +135,7 @@ module Value = struct
   type const =
     | Int of int
     | Long of int
+    | Short of int
     | Byte of int
     | Float of float
     | Double of float
@@ -942,6 +946,7 @@ module AST = struct
     match v |> fst with
     | Int -> "int " ^ (v |> snd)
     | Long -> "long " ^ (v |> snd)
+    | Short -> "short " ^ (v |> snd)
     | Byte -> "byte " ^ (v |> snd)
     | Float -> "float " ^ (v |> snd)
     | Double -> "double " ^ (v |> snd)
@@ -955,6 +960,7 @@ module AST = struct
         match get_array_typ typ with
         | Int -> "int" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
         | Long -> "long" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
+        | Short -> "short" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
         | Byte -> "byte" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
         | Float -> "float" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
         | Double ->
@@ -986,7 +992,11 @@ module AST = struct
     | ClassName c -> c
     | Id -> "ID"
 
-  let primitive_code p x =
+  let is_float id =
+    let is_f = function Float -> true | _ -> false in
+    get_vinfo id |> fst |> is_f
+
+  let primitive_code id_for_type p x =
     match p with
     | Z z -> (
         match get_vinfo x |> fst with
@@ -995,20 +1005,24 @@ module AST = struct
             else (true |> string_of_bool) ^ ";\n"
         | String -> "\"" ^ (z |> string_of_int) ^ "\";\n"
         | _ -> (z |> string_of_int) ^ ";\n")
-    | R r -> (r |> string_of_float) ^ ";\n"
+    | R r ->
+        (* e.g., float --> 0.f, double --> 0. *)
+        (r |> string_of_float)
+        ^ (if is_float id_for_type then "f" else "")
+        ^ ";\n"
     | B b -> (b |> string_of_bool) ^ ";\n"
     | C c -> "\'" ^ String.make 1 c ^ "\';\n"
     | S s -> "\"" ^ s ^ "\";\n"
 
-  let exp_code exp x =
+  let exp_code ?(for_typ = Id) exp x =
     match exp with
-    | Primitive p -> primitive_code p x
+    | Primitive p -> primitive_code for_typ p x
     | GlobalConstant g -> Utils.replace_nested_symbol g ^ ";\n"
     | Null -> "null;\n"
     | Exp -> "Exp;\n"
 
   let rec code = function
-    | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x
+    | Const (x, exp) -> id_code x ^ " = " ^ exp_code ~for_typ:x exp x
     | Assign (x0, x1, func, arg) ->
         if is_var x1 then
           id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
