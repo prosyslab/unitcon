@@ -227,11 +227,12 @@ let simple_compiler program_dir command =
   ic
 
 let get_imports i_set =
+  let is_default_path i = String.contains i '.' |> not in
   let str_set =
     ImportSet.fold
       (fun i s ->
         let path = Utils.rm_object_array_import i in
-        if i = "" || (Utils.is_array i && path = i) then s
+        if i = "" || (Utils.is_array i && path = i) || is_default_path i then s
         else
           ImportSet.add
             ("import " ^ (path |> Utils.replace_nested_symbol) ^ ";\n")
