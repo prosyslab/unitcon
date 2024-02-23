@@ -6,9 +6,9 @@ let basic_mode = ref false
 
 let syn_priority = ref false
 
-let time_out = ref (4 * 60) (* max synthesis time *)
+let time_out = ref (5 * 60) (* max synthesis time *)
 
-let max_run_time = ref (60 * 60) (* max running time except synthesis time *)
+let max_run_time = ref (20 * 60) (* max running time except synthesis time *)
 
 let unknown_bug = ref false
 
