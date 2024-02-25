@@ -992,11 +992,7 @@ module AST = struct
     | ClassName c -> c
     | Id -> "ID"
 
-  let is_float id =
-    let is_f = function Float -> true | _ -> false in
-    get_vinfo id |> fst |> is_f
-
-  let primitive_code id_for_type p x =
+  let primitive_code p x =
     match p with
     | Z z -> (
         match get_vinfo x |> fst with
@@ -1007,22 +1003,31 @@ module AST = struct
         | _ -> (z |> string_of_int) ^ ";\n")
     | R r ->
         (* e.g., float --> 0.f, double --> 0. *)
-        (r |> string_of_float)
-        ^ (if is_float id_for_type then "f" else "")
-        ^ ";\n"
+        let type_cast =
+          (match get_vinfo x |> fst with Float -> "f" | _ -> "") ^ ";\n"
+        in
+        (r |> string_of_float) ^ type_cast
     | B b -> (b |> string_of_bool) ^ ";\n"
     | C c -> "\'" ^ String.make 1 c ^ "\';\n"
     | S s -> "\"" ^ s ^ "\";\n"
 
-  let exp_code ?(for_typ = Id) exp x =
+  let exp_code exp x =
     match exp with
-    | Primitive p -> primitive_code for_typ p x
+    | Primitive p -> primitive_code p x
     | GlobalConstant g -> Utils.replace_nested_symbol g ^ ";\n"
-    | Null -> "null;\n"
+    | Null -> (
+        (* If type inference from the summaries is fail,
+           correct it in the code output step. *)
+        match get_vinfo x |> fst with
+        | Int | Long | Short | Byte | Char -> "0;\n"
+        | Float -> "0.f;\n"
+        | Double -> "0.;\n"
+        | Bool -> "false;\n"
+        | _ -> "null;\n")
     | Exp -> "Exp;\n"
 
   let rec code = function
-    | Const (x, exp) -> id_code x ^ " = " ^ exp_code ~for_typ:x exp x
+    | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x
     | Assign (x0, x1, func, arg) ->
         if is_var x1 then
           id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
