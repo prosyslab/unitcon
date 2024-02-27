@@ -1852,9 +1852,8 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
         |> List.filter (fun (s, fields) ->
                is_public s m_info
                && Utils.is_anonymous s |> not
-               &&
-               if !Cmdline.basic_mode then true
-               else is_intersect var.field fields || Utils.is_array_set s)
+               && is_intersect var.field fields
+               || Utils.is_array_set s)
       in
       List.fold_left
         (fun lst (s, fields) ->
@@ -1867,7 +1866,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) m_info c_info s_map =
             if
               contains_used_in_error var.field fields || Utils.is_modeling_set s
             then 0
-            else -1
+            else -2
           in
           let f =
             AST.F
@@ -1914,6 +1913,15 @@ let satisfied_c_list id t_summary summary summary_list =
   if !Cmdline.basic_mode then
     List.fold_left
       (fun list constructor -> (0, constructor, empty_summary) :: list)
+      [] summary_list
+  else if !Cmdline.pruning_mode then
+    List.fold_left
+      (fun list constructor ->
+        let c_summaries =
+          try SummaryMap.M.find constructor summary
+          with _ -> [ empty_summary ]
+        in
+        (0, constructor, c_summaries |> List.hd) :: list)
       [] summary_list
   else
     List.fold_left
@@ -1969,7 +1977,7 @@ let summary_filtering name m_info list =
   |> List.filter (fun (_, c, _) -> is_recursive_param name c m_info |> not)
 
 let check_dup_summary lst =
-  if !Cmdline.basic_mode then lst
+  if !Cmdline.basic_mode || !Cmdline.priority_mode then lst
   else
     let rec collect_dup lst =
       match lst with
@@ -2001,7 +2009,7 @@ let get_ret_c ret summary m_info c_info s_map =
   else
     let id = AST.get_vinfo ret |> snd in
     let memory_effect_filtering list =
-      if !Cmdline.basic_mode then list
+      if !Cmdline.basic_mode || !Cmdline.priority_mode then list
       else
         List.filter
           (fun (_, c, _) -> is_method_with_memory_effect c summary)
@@ -2387,6 +2395,9 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
       ErrorEntrySet.union caller_preconds
         (find_ee caller_method empty_summary cg summary call_prop_map m_info
            c_info)
+    else if !Cmdline.pruning_mode then
+      ErrorEntrySet.union caller_preconds
+        (find_ee caller_method call_prop cg summary call_prop_map m_info c_info)
     else if check_match then
       let new_call_prop =
         new_value_summary new_value call_prop
@@ -2459,7 +2470,10 @@ let priority_q queue =
     queue
 
 let rec mk_testcase summary cg m_info c_info s_map i_info p_info queue =
-  let queue = if !Cmdline.basic_mode then queue else priority_q queue in
+  let queue =
+    if !Cmdline.basic_mode || !Cmdline.pruning_mode then queue
+    else priority_q queue
+  in
   match queue with
   | p :: tl ->
       if AST.ground p.tc then [ (pretty_format p.tc, tl) ]

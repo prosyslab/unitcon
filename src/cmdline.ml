@@ -4,7 +4,9 @@ let target_program : string option ref = ref None
 
 let basic_mode = ref false
 
-let syn_priority = ref false
+let pruning_mode = ref false
+
+let priority_mode = ref false
 
 let time_out = ref (5 * 60) (* max synthesis time *)
 
@@ -20,9 +22,15 @@ let options =
     ( "-basic-mode",
       Arg.Set basic_mode,
       "Run without optimization (default: false)" );
+    ( "-pruning-mode",
+      Arg.Set pruning_mode,
+      "Run with only pruning (default: false)" );
+    ( "-priority-mode",
+      Arg.Set priority_mode,
+      "Run with only prioritization (default: false)" );
     ( "-time-out",
       Arg.Set_int time_out,
-      "Time Budget except Static Analysis (default: 4m)" );
+      "Time Budget except Static Analysis (default: 5m)" );
     ( "-unknown-bug",
       Arg.Set unknown_bug,
       "Run unknown bug searching mode (default: false)" );
