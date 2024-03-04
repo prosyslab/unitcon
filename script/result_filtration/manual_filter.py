@@ -120,7 +120,7 @@ def remove_useless_files(
             return
 
         output: str = result.stderr.decode("utf-8")
-        if check_targetted_method(output, target_method) and not check_npe(
+        if not check_targetted_method(output, target_method) or not check_npe(
             output, project_name
         ):
             print(f"Removing files: {java_file}.java, {f}")

@@ -439,9 +439,7 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
     )
     for summary in os.listdir(error_summarys_dir):
         if summary.endswith(".json") and copy_error_summary(project_dir, summary):
-            cmd: str = " ".join(
-                [unitcon_path, project_dir, "-until-time-out", "-unknown-bug"]
-            )
+            cmd: str = " ".join([unitcon_path, project_dir, "-unknown-bug"])
             print_curr_time()
             try:
                 run_with_debug(cmd, cwd=os.getcwd(), shell=True, timeout=UNITCON_TO)
