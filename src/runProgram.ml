@@ -259,7 +259,7 @@ let insert_test oc (file_num, tc, time) =
   let insert oc (i_set, m_bodies) =
     let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
     let start =
-      "\npublic static void main(String args[]) throws Exception {\n"
+      "\npublic static void main(String args[]) throws Exception, Throwable {\n"
     in
     need_default_class m_bodies;
     get_imports i_set ^ "\n" |> output_string oc;
