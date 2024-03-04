@@ -50,6 +50,34 @@ def remove_empty_dirs(project_dir: str) -> None:
     print(f"Testcases : {tc_cnt}")
 
 
+def run_manual_filter(project_dir: str) -> None:
+    """Runs the manual_filter.py script for each result folder.
+    This step is needed as result filtration does not occur if UnitCon is abnormally terminated.
+
+    :param project_dir: Main directory path of the target project
+    """
+    result_dirs: list[str] = [
+        result_dir
+        for result_dir in os.listdir(project_dir)
+        if os.path.isdir(os.path.join(project_dir, result_dir))
+        and result_dir.startswith("results_")
+    ]
+
+    base_dir: str = os.path.dirname(os.path.abspath(__file__))
+
+    for result in result_dirs:
+        os.system(
+            " ".join(
+                [
+                    "python3",
+                    os.path.join(base_dir, "manual_filter.py"),
+                    project_dir,
+                    result[8:],
+                ]
+            )
+        )
+
+
 def main() -> None:
     """Removes empty testcases found in the provided result directory."""
     parser: argparse.ArgumentParser = argparse.ArgumentParser()
@@ -61,6 +89,7 @@ def main() -> None:
     )
     args: argparse.Namespace = parser.parse_args()
     remove_empty_dirs(args.project_dir)
+    run_manual_filter(args.project_dir)
 
 
 if __name__ == "__main__":
