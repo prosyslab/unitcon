@@ -411,7 +411,7 @@ let abnormal_exit =
         !info.program_dir
         (if !num_of_success > 0 then true else false)
         !num_of_success
-        ((Unix.gettimeofday ()) -. !time);
+        (Unix.gettimeofday () -. !time);
       Logger.info "First Success Test: %s" !first_success_tc;
       Logger.info "Last Success Test: %s" !last_success_tc;
       Unix._exit 0)
@@ -429,7 +429,7 @@ let run_testfile () =
   Logger.info "Start compilation! (# of test files: %d)" (!num_of_tc_files - 1);
   build_program !info;
   Logger.info "End compilation! (duration: %f)"
-    ((Unix.gettimeofday ()) -. compile_start);
+    (Unix.gettimeofday () -. compile_start);
   let execute_cmd = execute_command_of_file !info.execute_command in
   let execute program_dir test_dir expected_bug t_file =
     let ic =
@@ -458,7 +458,7 @@ let run_testfile () =
     !info.program_dir
     (if !num_of_success > 0 then true else false)
     !num_of_success
-    ((Unix.gettimeofday ()) -. !time);
+    (Unix.gettimeofday () -. !time);
   Logger.info "First Success Test: %s" !first_success_tc
 
 let abnormal_run =
@@ -474,7 +474,7 @@ let rec run_test ~is_start info queue e_method_info p_info =
     (* early stopping *)
     Unix.kill (Unix.getpid ()) Sys.sigusr1
   else
-    let time = (Unix.gettimeofday ()) -. !time in
+    let time = Unix.gettimeofday () -. !time in
     add_testcase info.test_dir !num_of_tc_files (tc, time);
     incr num_of_tc_files;
     run_test ~is_start:false info tc_list e_method_info p_info

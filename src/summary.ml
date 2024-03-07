@@ -68,10 +68,6 @@ let parse_summary summary =
   let relation =
     JsonUtil.member "BoItv" summary |> JsonUtil.to_string |> Parser.parse_boitv
   in
-  let value =
-    JsonUtil.member "CItv" summary
-    |> JsonUtil.to_string |> Parser.parse_citv false
-  in
   let pre_var =
     JsonUtil.member "Precond_Stack" summary
     |> JsonUtil.to_string |> Parser.parse_var
@@ -79,6 +75,11 @@ let parse_summary summary =
   let pre_mem =
     JsonUtil.member "Precond_Heap" summary
     |> JsonUtil.to_string |> Parser.parse_mem
+  in
+  let value =
+    JsonUtil.member "CItv" summary
+    |> JsonUtil.to_string
+    |> Parser.parse_citv false pre_mem
   in
   let post_var =
     JsonUtil.member "Postcond_Stack" summary

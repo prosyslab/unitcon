@@ -6,10 +6,6 @@ let parse_callprop callprop =
   let relation =
     JsonUtil.member "BoItv" callprop |> JsonUtil.to_string |> Parser.parse_boitv
   in
-  let value =
-    JsonUtil.member "CItv" callprop
-    |> JsonUtil.to_string |> Parser.parse_citv false
-  in
   let pre_var =
     JsonUtil.member "Precond_Stack" callprop
     |> JsonUtil.to_string |> Parser.parse_var
@@ -17,6 +13,11 @@ let parse_callprop callprop =
   let pre_mem =
     JsonUtil.member "Precond_Heap" callprop
     |> JsonUtil.to_string |> Parser.parse_mem
+  in
+  let value =
+    JsonUtil.member "CItv" callprop
+    |> JsonUtil.to_string
+    |> Parser.parse_citv false pre_mem
   in
   let post_var =
     JsonUtil.member "Postcond_Stack" callprop

@@ -77,10 +77,20 @@ let parse_boitv boitv =
           mmap value_list)
       Relation.M.empty relation_list
 
-let parse_citv is_error citv =
+let parse_citv is_error mem citv =
   let value_maker value = Value.{ from_error = is_error; value } in
   let value_list = Regexp.remove_bk citv |> Str.split Regexp.bm in
-  if value_list = [] then Value.M.empty
+  let init_value =
+    Condition.M.fold
+      (fun head tail val_map ->
+        if Condition.M.cardinal tail > 1 then
+          Value.M.add (head |> AST.get_rh_name)
+            (Value.Neq Null |> value_maker)
+            val_map
+        else val_map)
+      mem Value.M.empty
+  in
+  if value_list = [] then init_value
   else
     List.fold_left
       (fun mmap mapping_value ->
@@ -228,7 +238,7 @@ let parse_citv is_error citv =
                       (Value.Outside (MinusInf, PlusInf) |> value_maker)
                       mmap)
         else failwith "parse_citv error")
-      Value.M.empty value_list
+      init_value value_list
 
 let parse_var var =
   if var = "[{ }]" then Condition.M.empty

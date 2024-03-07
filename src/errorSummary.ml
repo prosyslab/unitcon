@@ -26,10 +26,6 @@ let parse_summary summary =
   let relation =
     JsonUtil.member "BoItv" summary |> JsonUtil.to_string |> Parser.parse_boitv
   in
-  let value =
-    JsonUtil.member "CItv" summary
-    |> JsonUtil.to_string |> Parser.parse_citv true
-  in
   let pre_var =
     JsonUtil.member "Precond_Stack" summary
     |> JsonUtil.to_string |> Parser.parse_var
@@ -37,6 +33,11 @@ let parse_summary summary =
   let pre_mem =
     JsonUtil.member "Precond_Heap" summary
     |> JsonUtil.to_string |> Parser.parse_mem
+  in
+  let value =
+    JsonUtil.member "CItv" summary
+    |> JsonUtil.to_string
+    |> Parser.parse_citv true pre_mem
   in
   let post_var =
     JsonUtil.member "Postcond_Stack" summary
@@ -62,6 +63,5 @@ let get_method_name assoc =
   method_name
 
 let from_error_summary_json json =
-  if !Cmdline.basic_mode then
-    (get_method_name json, empty_summary)
+  if !Cmdline.basic_mode then (get_method_name json, empty_summary)
   else (get_method_name json, parse_summary json)
