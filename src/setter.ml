@@ -98,13 +98,13 @@ let get_change_fields
   (* e.g., post_this = v3 *)
   get_change_field post_this pre_mem post_mem value FieldSet.empty
 
-let find_setter m_name m_summarys m_infos mmap =
+let find_setter m_name m_summaries m_infos mmap =
   let class_name = Utils.get_class_name m_name in
   let change_fields =
     List.fold_left
       (fun field_set summary ->
         get_change_fields summary |> FieldSet.union field_set)
-      FieldSet.empty m_summarys
+      FieldSet.empty m_summaries
   in
   match MethodInfo.M.find_opt m_name m_infos with
   | Some i ->
@@ -119,6 +119,6 @@ let find_setter m_name m_summarys m_infos mmap =
 
 let from_summary_map summary m_infos =
   SummaryMap.M.fold
-    (fun method_name method_summarys mmap ->
-      find_setter method_name method_summarys m_infos mmap)
+    (fun m_name (m_summaries, _) mmap ->
+      find_setter m_name m_summaries m_infos mmap)
     summary SetterMap.M.empty

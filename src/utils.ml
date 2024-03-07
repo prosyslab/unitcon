@@ -19,7 +19,8 @@ let is_anonymous m_name =
   let rec check lst =
     match lst with hd :: tl -> check_int hd || check tl | _ -> false
   in
-  get_class_name m_name |> String.split_on_char '$' |> check
+  Str.string_match (".*\\$Lambda\\$_[0-9]+.*" |> Str.regexp) m_name 0
+  || get_class_name m_name |> String.split_on_char '$' |> check
 
 let get_array_class_name name =
   let arr = [ "Int"; "Long"; "Byte"; "Float"; "Double"; "Bool"; "Char" ] in

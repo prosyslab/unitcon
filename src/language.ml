@@ -241,7 +241,8 @@ module SummaryMap = struct
     type t = method_name [@@deriving compare]
   end)
 
-  type t = summary list M.t
+  (* list of summaries * list of fields with memory effects *)
+  type t = (summary list * string list) M.t
 end
 
 module CallPropMap = struct

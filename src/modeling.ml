@@ -922,44 +922,44 @@ let point_info =
 
 let add_java_package_summary mmap =
   SummaryMap.M.add "java.util.Map.put(java.lang.Object,java.lang.Object)"
-    [ map_put_summary ] mmap
-  |> SummaryMap.M.add "java.util.ArrayList.<init>()" [ array_list_summary ]
-  |> SummaryMap.M.add "java.io.File.<init>(java.lang.String)" [ file_summary ]
+    ([ map_put_summary ], []) mmap
+  |> SummaryMap.M.add "java.util.ArrayList.<init>()" ([ array_list_summary ], [])
+  |> SummaryMap.M.add "java.io.File.<init>(java.lang.String)" ([ file_summary ], [])
   |> SummaryMap.M.add "java.awt.image.BufferedImage.<init>(int,int,int)"
-       [ image_summary ]
+       ([ image_summary ], [])
   |> SummaryMap.M.add "java.awt.image.BufferedImage.createGraphics()"
-       [ image_create_summary ]
-  |> SummaryMap.M.add "java.lang.Object.getClass()" [ class_get_summary ]
+       ([ image_create_summary ], [])
+  |> SummaryMap.M.add "java.lang.Object.getClass()" ([ class_get_summary ], [])
   |> SummaryMap.M.add "java.io.PrintStream.<init>(java.io.File)"
-       [ print_summary ]
+       ([ print_summary ], [])
   |> SummaryMap.M.add "java.io.FileInputStream.<init>(java.io.File)"
-       [ file_input_summary ]
-  |> SummaryMap.M.add "java.lang.Object.<init>()" [ obj_summary ]
+       ([ file_input_summary ], [])
+  |> SummaryMap.M.add "java.lang.Object.<init>()" ([ obj_summary ], [])
   |> SummaryMap.M.add "java.lang.String.<init>(java.lang.String)"
-       [ string_summary ]
-  |> SummaryMap.M.add "IntArray.<init>(int)" [ array_summary ]
-  |> SummaryMap.M.add "LongArray.<init>(int)" [ array_summary ]
-  |> SummaryMap.M.add "ShortArray.<init>(int)" [ array_summary ]
-  |> SummaryMap.M.add "ByteArray.<init>(int)" [ array_summary ]
-  |> SummaryMap.M.add "FloatArray.<init>(int)" [ array_summary ]
-  |> SummaryMap.M.add "DoubleArray.<init>(int)" [ array_summary ]
-  |> SummaryMap.M.add "BoolArray.<init>(int)" [ array_summary ]
-  |> SummaryMap.M.add "CharArray.<init>(int)" [ array_summary ]
-  |> SummaryMap.M.add "StringArray.<init>(int)" [ array_summary ]
-  |> SummaryMap.M.add "ObjectArray.<init>(int)" [ array_summary ]
-  |> SummaryMap.M.add "IntArray.set(int,int)" [ array_set_summary ]
-  |> SummaryMap.M.add "LongArray.set(int,long)" [ array_set_summary ]
-  |> SummaryMap.M.add "ShortArray.set(int,short)" [ array_set_summary ]
-  |> SummaryMap.M.add "ByteArray.set(int,byte)" [ array_set_summary ]
-  |> SummaryMap.M.add "FloatArray.set(int,float)" [ array_set_summary ]
-  |> SummaryMap.M.add "DoubleArray.set(int,double)" [ array_set_summary ]
-  |> SummaryMap.M.add "BoolArray.set(int,boolean)" [ array_set_summary ]
-  |> SummaryMap.M.add "CharArray.set(int,char)" [ array_set_summary ]
+       ([ string_summary ], [])
+  |> SummaryMap.M.add "IntArray.<init>(int)" ([ array_summary ], [])
+  |> SummaryMap.M.add "LongArray.<init>(int)" ([ array_summary ], [])
+  |> SummaryMap.M.add "ShortArray.<init>(int)" ([ array_summary ], [])
+  |> SummaryMap.M.add "ByteArray.<init>(int)" ([ array_summary ], [])
+  |> SummaryMap.M.add "FloatArray.<init>(int)" ([ array_summary ], [])
+  |> SummaryMap.M.add "DoubleArray.<init>(int)" ([ array_summary ], [])
+  |> SummaryMap.M.add "BoolArray.<init>(int)" ([ array_summary ], [])
+  |> SummaryMap.M.add "CharArray.<init>(int)" ([ array_summary ], [])
+  |> SummaryMap.M.add "StringArray.<init>(int)" ([ array_summary ], [])
+  |> SummaryMap.M.add "ObjectArray.<init>(int)" ([ array_summary ], [])
+  |> SummaryMap.M.add "IntArray.set(int,int)" ([ array_set_summary ], [])
+  |> SummaryMap.M.add "LongArray.set(int,long)" ([ array_set_summary ], [])
+  |> SummaryMap.M.add "ShortArray.set(int,short)" ([ array_set_summary ], [])
+  |> SummaryMap.M.add "ByteArray.set(int,byte)" ([ array_set_summary ], [])
+  |> SummaryMap.M.add "FloatArray.set(int,float)" ([ array_set_summary ], [])
+  |> SummaryMap.M.add "DoubleArray.set(int,double)" ([ array_set_summary ], [])
+  |> SummaryMap.M.add "BoolArray.set(int,boolean)" ([ array_set_summary ], [])
+  |> SummaryMap.M.add "CharArray.set(int,char)" ([ array_set_summary ], [])
   |> SummaryMap.M.add "StringArray.set(int,java.lang.String)"
-       [ array_set_summary ]
+       ([ array_set_summary ], [])
   |> SummaryMap.M.add "ObjectArray.set(int,java.lang.Object)"
-       [ array_set_summary ]
-  |> SummaryMap.M.add "java.awt.Point.<init>(int,int)" [ point_summary ]
+       ([ array_set_summary ], [])
+  |> SummaryMap.M.add "java.awt.Point.<init>(int,int)" ([ point_summary ], [])
 
 let add_java_package_method mmap =
   MethodInfo.M.add "java.util.Map.put(java.lang.Object,java.lang.Object)"

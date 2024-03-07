@@ -5,6 +5,12 @@ module ImportSet = Utils.ImportSet
 
 exception Not_found_setter
 
+module TypeSet = Set.Make (struct
+  type t = string
+
+  let compare = compare
+end)
+
 module VarSet = Set.Make (struct
   type t = variable
 
@@ -854,6 +860,21 @@ let is_same_summary s1 s2 =
   if Condition.M.equal equal (s1.postcond |> snd) (s2.postcond |> snd) then true
   else false
 
+let prune_dup_summary lst =
+  let lst = List.rev lst in
+  if !Cmdline.basic_mode || !Cmdline.priority_mode then lst |> List.rev
+  else
+    let rec collect_dup lst =
+      match lst with
+      | (_, _, h) :: t ->
+          List.filter (fun (_, _, x) -> is_same_summary h x) t
+          |> List.rev_append (collect_dup t)
+      | _ -> []
+    in
+    List.fold_left
+      (fun l s -> if collect_dup lst |> List.mem s then l else s :: l)
+      [] lst
+
 let get_package_from_v v =
   let rec get_object_from_array array =
     match array with Array a -> get_object_from_array a | _ -> array
@@ -894,7 +915,8 @@ let match_return_object class_name method_name m_info =
   let return = info.MethodInfo.return in
   String.equal class_name return
 
-let get_clist class_name m_info (c_info, ig) =
+let get_m_lst x0 m_info (c_info, ig) =
+  let class_name = AST.get_vinfo x0 |> fst |> get_class_name in
   let class_to_find =
     try IG.succ ig class_name |> List.cons class_name
     with Invalid_argument _ -> [ class_name ]
@@ -902,39 +924,26 @@ let get_clist class_name m_info (c_info, ig) =
   MethodInfo.M.fold
     (fun method_name _ method_list ->
       List.fold_left
-        (fun init_list class_name_to_find ->
+        (fun (c_lst, ret_c_lst) class_name_to_find ->
           if
-            is_public_class class_name_to_find c_info
-            && is_abstract_class class_name_to_find (c_info, ig) |> not
+            is_public_class (Utils.get_class_name method_name) c_info
             && is_public method_name m_info
-            && match_constructor_name class_name_to_find method_name
             && Utils.is_anonymous method_name |> not
-          then method_name :: init_list
-          else init_list)
+          then
+            if
+              is_abstract_class class_name_to_find (c_info, ig) |> not
+              && match_constructor_name class_name_to_find method_name
+            then (method_name :: c_lst, ret_c_lst)
+            else if
+              match_return_object class_name_to_find method_name m_info
+              && is_abstract_method method_name class_to_find m_info (c_info, ig)
+                 |> not
+              && Utils.is_init_method method_name |> not
+            then (c_lst, method_name :: ret_c_lst)
+            else (c_lst, ret_c_lst)
+          else (c_lst, ret_c_lst))
         method_list class_to_find)
-    m_info []
-
-let get_ret_obj class_name m_info c_info s_map =
-  let class_to_find =
-    try IG.succ (c_info |> snd) class_name |> List.cons class_name
-    with Invalid_argument _ -> [ class_name ]
-  in
-  MethodInfo.M.fold
-    (fun method_name _ method_list ->
-      List.fold_left
-        (fun init_list class_name_to_find ->
-          if
-            match_return_object class_name_to_find method_name m_info
-            && is_public_class (Utils.get_class_name method_name) (c_info |> fst)
-            && is_abstract_method method_name class_to_find m_info c_info |> not
-            && is_public method_name m_info
-            && Utils.is_init_method method_name |> not
-            && is_void_method method_name s_map |> not
-            && Utils.is_anonymous method_name |> not
-          then method_name :: init_list
-          else init_list)
-        method_list class_to_find)
-    m_info []
+    m_info ([], [])
 
 let contains_symbol symbol memory =
   let inner_contains_symbol mem =
@@ -942,35 +951,38 @@ let contains_symbol symbol memory =
       (fun _ hd check -> if hd = symbol then true else check)
       mem false
   in
-  Condition.M.fold
-    (fun sym hd check ->
-      if sym = symbol then true else inner_contains_symbol hd || check)
-    memory false
+  match Condition.M.find_opt symbol memory with
+  | Some _ -> true
+  | _ ->
+      Condition.M.fold
+        (fun _ hd check -> check || inner_contains_symbol hd)
+        memory false
 
 let is_new_loc_field field summary =
   let is_null symbol =
     match Value.M.find_opt symbol summary.value with
     | Some x when x.Value.value = Eq Null -> true
-    | _ -> false
-  in
-  let collect_symbol mem =
-    Condition.M.fold
-      (fun _ hd acc_lst ->
-        match hd with Condition.RH_Symbol _ -> hd :: acc_lst | _ -> acc_lst)
-      mem []
+    | Some _ -> false
+    | _ -> true (* T considers same as null *)
   in
   let post_var, post_mem = summary.postcond in
   let field_var = AST.get_id_symbol post_var field in
-  let new_loc_list =
-    (match Condition.M.find_opt field_var post_mem with
-    | Some m -> collect_symbol m
-    | _ -> [])
-    |> List.filter (fun x -> contains_symbol x (summary.precond |> snd) |> not)
-    |> List.filter (fun x -> is_null (AST.get_rh_name x) |> not)
-  in
-  if new_loc_list = [] then false else true
+  match Condition.M.find_opt field_var post_mem with
+  | None -> false
+  | Some m ->
+      Condition.M.fold
+        (fun _ x check ->
+          match x with
+          | Condition.RH_Symbol _ ->
+              if
+                is_null (AST.get_rh_name x) |> not
+                && contains_symbol x (summary.precond |> snd) |> not
+              then true
+              else check
+          | _ -> check)
+        m false
 
-let ret_field_name_of summary =
+let ret_fld_name_of summary =
   let collect_field mem full_mem =
     Condition.M.fold
       (fun field symbol acc_lst ->
@@ -1000,98 +1012,51 @@ let ret_field_name_of summary =
   in
   field_name
 
-let rec get_fld_name sum_list =
-  match sum_list with
-  | hd :: tl ->
-      let n = ret_field_name_of hd in
-      if n = "" then get_fld_name tl else n
-  | _ -> ""
+let check_new_loc_field_for fld_name lst =
+  let rec check_for lst =
+    match lst with
+    | hd :: tl -> is_new_loc_field fld_name hd || check_for tl
+    | _ -> false
+  in
+  check_for lst
 
-let ret_type_of_m m_name m_info =
-  match MethodInfo.M.find_opt m_name m_info with
-  | Some x -> x.MethodInfo.return
-  | _ -> ""
-
-let is_getter_with_memory_effect m_name fld_name summary =
-  let sum_list = SummaryMap.M.find m_name summary in
+let is_getter_with_memory_effect m_summary fld_name =
   (* If the field name is empty, it indicates that the method doesn't return its field,
      so it should not be pruned for safety. *)
-  fld_name = ""
-  || List.filter (fun s -> is_new_loc_field "return" s) sum_list = [] |> not
+  fld_name = "" || check_new_loc_field_for "return" [ m_summary ]
 
-let is_recv_with_memory_effect fld_name subtypes summary m_info c_info s_map =
-  let ret_subtype_clst =
-    List.fold_left
-      (fun lst typ -> List.rev_append (get_clist typ m_info c_info) lst)
-      [] subtypes
+let collect_recv summary m_info c_info subtypes =
+  let is_available_class typ c_info =
+    match ClassInfo.M.find_opt typ c_info with
+    | Some t -> (
+        match t.ClassInfo.class_type with
+        | Public | Public_Static -> true
+        | _ -> false)
+    | _ -> true
   in
-  let ret_subtype_lst =
-    List.fold_left
-      (fun lst typ -> List.rev_append (get_ret_obj typ m_info c_info s_map) lst)
-      ret_subtype_clst subtypes
-  in
-  let check_one m_name =
-    let sum_list = SummaryMap.M.find m_name summary in
-    List.filter (fun s -> is_new_loc_field fld_name s) sum_list = [] |> not
-  in
-  List.fold_left
-    (fun check m_name -> check_one m_name || check)
-    false ret_subtype_lst
-
-let is_setter_with_memory_effect fld_name subtypes summary m_info s_map =
-  let get_fld_symbol { postcond = post_var, post_mem; _ } =
-    get_field_symbol (fld_name |> mk_var)
-      (AST.get_id_symbol post_var "this" |> AST.get_rh_name)
-      post_mem
-  in
-  let get_params_symbol m_name { precond = pre_var, pre_mem; _ } =
-    let info = MethodInfo.M.find m_name m_info in
-    List.fold_left
-      (fun lst param ->
-        match param with
-        | This _ -> lst
-        | Var (_, var) ->
-            get_field_symbol (var |> mk_var)
-              (AST.get_id_symbol pre_var var |> AST.get_rh_name)
-              pre_mem
-            :: lst)
-      [] info.MethodInfo.formal_params
-  in
-  let setter_lst =
-    List.fold_left
-      (fun lst typ ->
-        List.rev_append
-          ((try SetterMap.M.find typ s_map with _ -> [])
-          |> List.filter (fun (s, _) ->
-                 is_public s m_info && Utils.is_anonymous s |> not)
-          |> List.filter (fun (_, fld_set) ->
-                 FieldSet.mem { used_in_error = false; name = fld_name } fld_set
-                 || FieldSet.mem
-                      { used_in_error = true; name = fld_name }
-                      fld_set)
-          |> List.filter (fun (s, _) ->
-                 let setter_sum_list = SummaryMap.M.find s summary in
-                 List.fold_left
-                   (fun check smy ->
-                     if List.mem (get_fld_symbol smy) (get_params_symbol s smy)
-                     then check
-                     else true)
-                   false setter_sum_list))
-          lst)
-      [] subtypes
-  in
-  setter_lst = [] |> not
-
-let is_method_with_memory_effect m_name summary m_info c_info s_map =
-  let fld_name = SummaryMap.M.find m_name summary |> get_fld_name in
-  let ret_type = ret_type_of_m m_name m_info in
-  let subtypes =
-    try IG.succ (c_info |> snd) ret_type |> List.cons ret_type
-    with Invalid_argument _ -> [ ret_type ]
-  in
-  is_getter_with_memory_effect m_name fld_name summary
-  || is_recv_with_memory_effect fld_name subtypes summary m_info c_info s_map
-  || is_setter_with_memory_effect fld_name subtypes summary m_info s_map
+  MethodInfo.M.fold
+    (fun m_name info (recv_lst, set_lst) ->
+      let typ = Utils.get_class_name m_name in
+      if
+        is_public m_name m_info
+        && Utils.is_anonymous m_name |> not
+        && is_available_class typ (c_info |> fst)
+      then
+        if TypeSet.mem typ subtypes && match_constructor_name typ m_name then
+          ( (m_name, SummaryMap.M.find m_name summary |> snd) :: recv_lst,
+            set_lst )
+        else if TypeSet.mem info.MethodInfo.return subtypes then
+          let s_info = SummaryMap.M.find m_name summary in
+          if s_info |> snd <> [] then
+            ( (m_name, SummaryMap.M.find m_name summary |> snd) :: recv_lst,
+              set_lst )
+          else (recv_lst, set_lst)
+        else if TypeSet.mem typ subtypes && info.MethodInfo.return = "void" then
+          ( recv_lst,
+            (m_name, SummaryMap.M.find m_name summary |> fst) :: set_lst )
+        else (recv_lst, set_lst)
+      else (recv_lst, set_lst))
+    m_info ([], [])
 
 let calc_z3 id z3exp =
   let solver = Z3.Solver.mk_solver z3ctx None in
@@ -1538,7 +1503,7 @@ let get_same_params_set summary params =
   get_same_type_param new_p |> get_same_precond_param summary
 
 let satisfied_c m_summary id candidate_constructor summary =
-  let c_summaries = SummaryMap.M.find candidate_constructor summary in
+  let c_summaries, _ = SummaryMap.M.find candidate_constructor summary in
   let target_symbol =
     get_target_symbol (if is_receiver id then "this" else id) m_summary
     |> AST.get_rh_name
@@ -1604,7 +1569,7 @@ let find_global_var_list c_name t_var mem summary m_info =
       s_trace None
   in
   SummaryMap.M.fold
-    (fun init_name init_summary list ->
+    (fun init_name (init_summary, _) list ->
       let _, init_mem = (init_summary |> List.hd).precond in
       if
         Str.string_match (c_name ^ "\\.<clinit>" |> Str.regexp) init_name 0
@@ -1933,21 +1898,6 @@ let summary_filtering name m_info list =
   List.filter (fun (_, c, _) -> is_public c m_info) list
   |> List.filter (fun (_, c, _) -> is_recursive_param name c m_info |> not)
 
-let check_dup_summary lst =
-  let lst = List.rev lst in
-  if !Cmdline.basic_mode || !Cmdline.priority_mode then lst |> List.rev
-  else
-    let rec collect_dup lst =
-      match lst with
-      | (_, _, h) :: t ->
-          List.filter (fun (_, _, x) -> is_same_summary h x) t
-          |> List.rev_append (collect_dup t)
-      | _ -> []
-    in
-    List.fold_left
-      (fun l s -> if collect_dup lst |> List.mem s then l else s :: l)
-      [] lst
-
 let get_field_set ret s_map =
   let c_name = AST.get_vinfo ret |> fst |> get_class_name in
   let fields =
@@ -2007,12 +1957,13 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) summary m_info c_info
         List.fold_left
           (fun lst (s, fields) ->
             let smy =
-              (try SummaryMap.M.find s summary with _ -> [ empty_summary ])
+              (try SummaryMap.M.find s summary |> fst
+               with _ -> [ empty_summary ])
               |> List.hd
             in
             (s, fields, smy) :: lst)
           [] setter_list
-        |> List.rev |> check_dup_summary
+        |> List.rev |> prune_dup_summary
       in
       List.fold_left
         (fun lst (s, fields, _) ->
@@ -2046,44 +1997,41 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) summary m_info c_info
               f_arg_list lst)
         [] setter_list
 
-let satisfied_c_list id t_summary summary summary_list =
-  (if !Cmdline.basic_mode then
-     List.fold_left
-       (fun list constructor -> (0, constructor, empty_summary) :: list)
-       [] summary_list
-   else if !Cmdline.pruning_mode then
-     List.fold_left
-       (fun list constructor ->
-         let c_summaries =
-           try SummaryMap.M.find constructor summary
-           with _ -> [ empty_summary ]
-         in
-         (0, constructor, c_summaries |> List.hd) :: list)
-       [] summary_list
-   else
-     List.fold_left
-       (fun list constructor ->
-         let lst = satisfied_c t_summary id constructor summary in
-         let init = (0, "", empty_summary) in
-         let pick =
-           (List.fold_left (fun pick (check, summary) ->
-                if check then
-                  if Utils.is_array_init constructor then
-                    let new_summary =
-                      modify_array_summary id t_summary summary
-                    in
-                    (is_from_error true new_summary, constructor, new_summary)
-                  else
-                    let new_summary = modify_summary id t_summary summary in
-                    (is_from_error true new_summary, constructor, new_summary)
-                else if pick = (0, "", empty_summary) then
-                  (-3, constructor, empty_summary)
-                else pick))
-             init lst
-         in
-         if pick = init then list else pick :: list)
-       [] summary_list)
-  |> List.rev
+let satisfied_c_list id t_summary summary method_list =
+  if !Cmdline.basic_mode then
+    List.fold_left
+      (fun list constructor -> (0, constructor, empty_summary) :: list)
+      [] method_list
+  else if !Cmdline.pruning_mode then
+    List.fold_left
+      (fun list constructor ->
+        let c_summaries =
+          try SummaryMap.M.find constructor summary |> fst
+          with _ -> [ empty_summary ]
+        in
+        (0, constructor, c_summaries |> List.hd) :: list)
+      [] method_list
+  else
+    List.fold_left
+      (fun list constructor ->
+        let lst = satisfied_c t_summary id constructor summary in
+        let init = (0, "", empty_summary) in
+        let pick =
+          (List.fold_left (fun pick (check, smy) ->
+               if check then
+                 if Utils.is_array_init constructor then
+                   let new_summary = modify_array_summary id t_summary smy in
+                   (is_from_error true new_summary, constructor, new_summary)
+                 else
+                   let new_summary = modify_summary id t_summary smy in
+                   (is_from_error true new_summary, constructor, new_summary)
+               else if pick = (0, "", empty_summary) then
+                 (-3, constructor, empty_summary)
+               else pick))
+            init lst
+        in
+        if pick = init then list else pick :: list)
+      [] method_list
 
 let get_cfunc id constructor m_info =
   let cost, c, s = constructor in
@@ -2110,37 +2058,128 @@ let get_cfuncs id list m_info =
       List.rev_append (get_cfunc id (cost, c, s) m_info) lst)
     [] list
 
-let get_c ret summary _ m_info c_info =
+let get_c ret c_lst summary m_info =
   let class_name = AST.get_vinfo ret |> fst |> get_class_name in
   if class_name = "" then []
   else
     let id = AST.get_vinfo ret |> snd in
     let s_list =
-      get_clist class_name m_info c_info
+      c_lst
       |> satisfied_c_list id (AST.get_v ret).summary summary
       |> summary_filtering class_name m_info
-      |> check_dup_summary
+      |> prune_dup_summary
     in
     get_cfuncs ret s_list m_info
 
-let get_ret_c ret summary m_info c_info s_map =
+let is_ret_recv_mem_effect c_smy fld_name subtypes m_info ret_recv_methods =
+  let check_ret_recv fld_name subtypes m_name effect_fld_lst =
+    let info = MethodInfo.M.find m_name m_info in
+    List.mem info.MethodInfo.return subtypes && List.mem fld_name effect_fld_lst
+  in
+  List.fold_left
+    (fun check (m_name, effect_fld_lst) ->
+      check
+      || is_getter_with_memory_effect c_smy fld_name
+      || check_ret_recv fld_name subtypes m_name effect_fld_lst)
+    false ret_recv_methods
+
+let is_set_recv_mem_effect fld_name subtypes m_info s_map set_recv_methods =
+  let check_set_recv fld_name m_name summaries =
+    let get_fld_symbol { postcond = post_var, post_mem; _ } =
+      AST.get_tail_symbol ""
+        (get_field_symbol (fld_name |> mk_var)
+           (AST.get_id_symbol post_var "this" |> AST.get_rh_name)
+           post_mem)
+        post_mem
+    in
+    let get_params_symbol m_name { precond = pre_var, pre_mem; _ } =
+      let info = MethodInfo.M.find m_name m_info in
+      List.fold_left
+        (fun lst param ->
+          match param with
+          | This _ -> lst
+          | Var (_, var) ->
+              AST.get_tail_symbol ""
+                (get_field_symbol (var |> mk_var)
+                   (AST.get_id_symbol pre_var var |> AST.get_rh_name)
+                   pre_mem)
+                pre_mem
+              :: lst)
+        [] info.MethodInfo.formal_params
+    in
+    List.fold_left
+      (fun check smy ->
+        if List.mem (get_fld_symbol smy) (get_params_symbol m_name smy) then
+          check
+        else true)
+      false summaries
+  in
+  let check_set_cond fld_name m_name subtypes s_map =
+    let include_fld =
+      List.fold_left
+        (fun check (s, fld_set) ->
+          if
+            s = m_name
+            && FieldSet.mem { used_in_error = false; name = fld_name } fld_set
+          then true
+          else check)
+        false
+        (try SetterMap.M.find (Utils.get_class_name m_name) s_map with _ -> [])
+    in
+    List.mem (Utils.get_class_name m_name) subtypes && include_fld
+  in
+  List.fold_left
+    (fun check (m_name, summaries) ->
+      check
+      || check_set_cond fld_name m_name subtypes s_map
+         && check_set_recv fld_name m_name summaries)
+    false set_recv_methods
+
+let memory_effect_filtering summary m_info c_info s_map smy_lst =
+  let smy_lst = List.rev smy_lst in
+  if !Cmdline.basic_mode || !Cmdline.priority_mode then smy_lst |> List.rev
+  else
+    let recv_type =
+      List.fold_left
+        (fun need_typ_set (_, c, _) ->
+          let recv_type = Utils.get_class_name c in
+          let subtypes =
+            try IG.succ (c_info |> snd) recv_type |> List.cons recv_type
+            with Invalid_argument _ -> [ recv_type ]
+          in
+          TypeSet.union need_typ_set (TypeSet.of_list subtypes))
+        TypeSet.empty smy_lst
+    in
+    let ret_recv_methods, set_recv_methods =
+      collect_recv summary m_info c_info recv_type
+    in
+    List.fold_left
+      (fun lst (i, c, c_smy) ->
+        let fld_name = ret_fld_name_of c_smy in
+        let recv_type = Utils.get_class_name c in
+        let subtypes =
+          try IG.succ (c_info |> snd) recv_type |> List.cons recv_type
+          with Invalid_argument _ -> [ recv_type ]
+        in
+        if
+          is_ret_recv_mem_effect c_smy fld_name subtypes m_info ret_recv_methods
+          || is_set_recv_mem_effect fld_name subtypes m_info s_map
+               set_recv_methods
+        then (i, c, c_smy) :: lst
+        else lst)
+      [] smy_lst
+
+let get_ret_c ret ret_obj_lst summary m_info c_info s_map =
   let class_name = AST.get_vinfo ret |> fst |> get_class_name in
   if class_name = "" then []
   else
     let id = AST.get_vinfo ret |> snd in
-    let memory_effect_filtering list =
-      if !Cmdline.basic_mode || !Cmdline.priority_mode then list
-      else
-        List.filter
-          (fun (_, c, _) ->
-            is_method_with_memory_effect c summary m_info c_info s_map)
-          list
-    in
     let s_list =
-      get_ret_obj class_name m_info c_info s_map
+      ret_obj_lst
       |> satisfied_c_list id (AST.get_v ret).summary summary
       |> summary_filtering class_name m_info
-      |> memory_effect_filtering |> check_dup_summary
+      |> prune_dup_summary
+      |> memory_effect_filtering summary m_info c_info s_map
     in
     get_cfuncs ret s_list m_info
 
@@ -2159,7 +2198,7 @@ let get_inner_func f arg =
       }
   in
   (* outer class variable *)
-  let recv = AST.get_arg arg |> List.hd in
+  let recv = try AST.get_arg arg |> List.hd with _ -> AST.empty_var in
   let n_recv =
     AST.Variable
       {
@@ -2175,7 +2214,7 @@ let get_inner_func f arg =
         summary = recv.summary;
       }
   in
-  (n_recv, n_f, AST.Arg (AST.get_arg arg |> List.tl))
+  (n_recv, n_f, AST.Arg (try AST.get_arg arg |> List.tl with _ -> []))
 
 let cname_condition m_name m_info c_info =
   match MethodInfo.M.find_opt m_name m_info with
@@ -2232,13 +2271,14 @@ let const_unroll p summary m_info i_info p_info =
         else List.rev_append r3 r2
   | _ -> failwith "Fail: const_unroll"
 
-let fcall_in_assign_unroll p summary cg m_info c_info s_map =
+let fcall_in_assign_unroll p summary m_info c_info s_map =
   match p with
   | AST.Assign (x0, _, _, _) ->
       let field_set = get_field_set x0 s_map in
+      let c_lst, ret_c_lst = get_m_lst x0 m_info c_info in
       List.rev_append
-        (get_c x0 summary cg m_info c_info)
-        (get_ret_c x0 summary m_info c_info s_map)
+        (get_c x0 c_lst summary m_info)
+        (get_ret_c x0 ret_c_lst summary m_info c_info s_map)
       |> List.fold_left
            (fun lst (prec, (f, arg)) ->
              (prec, AST.fcall_in_assign_rule p field_set f arg) :: lst)
@@ -2356,13 +2396,13 @@ let append l1 l2 =
   in
   iter [] l1 l2
 
-let one_unroll p summary cg m_info c_info s_map i_info p_info =
+let one_unroll p summary m_info c_info s_map i_info p_info =
   match p with
   | AST.Seq _ when AST.void p -> void_unroll p
   | Const _ when AST.const p -> const_unroll p summary m_info i_info p_info
   | Assign _ when AST.fcall_in_assign p ->
       (* fcall_in_assign --> recv_in_assign --> arg_in_assign *)
-      fcall_in_assign_unroll p summary cg m_info c_info s_map
+      fcall_in_assign_unroll p summary m_info c_info s_map
       |> List.fold_left
            (fun acc_lst x ->
              recv_in_assign_unroll x m_info c_info |> append acc_lst)
@@ -2398,31 +2438,30 @@ let one_unroll p summary cg m_info c_info s_map i_info p_info =
       |> List.rev
   | _ -> failwith "Fail: one_unroll"
 
-let rec all_unroll ?(assign_ground = false) p summary cg m_info c_info s_map
-    i_info p_info stmt_map =
+let rec all_unroll ?(assign_ground = false) p summary m_info c_info s_map i_info
+    p_info stmt_map =
   match p with
   | _ when AST.ground p -> stmt_map
   | _ when assign_ground ->
-      all_unroll_void p summary cg m_info c_info s_map i_info p_info stmt_map
+      all_unroll_void p summary m_info c_info s_map i_info p_info stmt_map
   | AST.Seq (s1, s2) when s2 = AST.Stmt ->
-      all_unroll ~assign_ground s1 summary cg m_info c_info s_map i_info p_info
+      all_unroll ~assign_ground s1 summary m_info c_info s_map i_info p_info
         stmt_map
   | AST.Seq (s1, s2) ->
-      all_unroll ~assign_ground s1 summary cg m_info c_info s_map i_info p_info
+      all_unroll ~assign_ground s1 summary m_info c_info s_map i_info p_info
         stmt_map
-      |> all_unroll ~assign_ground s2 summary cg m_info c_info s_map i_info
-           p_info
+      |> all_unroll ~assign_ground s2 summary m_info c_info s_map i_info p_info
   | _ ->
       StmtMap.M.add p
-        (one_unroll p summary cg m_info c_info s_map i_info p_info)
+        (one_unroll p summary m_info c_info s_map i_info p_info)
         stmt_map
 
-and all_unroll_void p summary cg m_info c_info s_map i_info p_info stmt_map =
+and all_unroll_void p summary m_info c_info s_map i_info p_info stmt_map =
   match p with
   | _ when AST.ground p -> stmt_map
   | AST.Seq _ when AST.void p ->
       StmtMap.M.add p
-        (one_unroll p summary cg m_info c_info s_map i_info p_info)
+        (one_unroll p summary m_info c_info s_map i_info p_info)
         stmt_map
   | Seq (s1, s2) -> (
       match AST.last_code s1 with
@@ -2430,7 +2469,7 @@ and all_unroll_void p summary cg m_info c_info s_map i_info p_info stmt_map =
           let new_void =
             one_unroll
               (AST.Seq (AST.last_code s1, s2))
-              summary cg m_info c_info s_map i_info p_info
+              summary m_info c_info s_map i_info p_info
             |> List.fold_left
                  (fun lst void ->
                    ( void |> fst,
@@ -2441,9 +2480,8 @@ and all_unroll_void p summary cg m_info c_info s_map i_info p_info stmt_map =
           in
           StmtMap.M.add p new_void stmt_map
       | _ ->
-          all_unroll_void s1 summary cg m_info c_info s_map i_info p_info
-            stmt_map
-          |> all_unroll_void s2 summary cg m_info c_info s_map i_info p_info)
+          all_unroll_void s1 summary m_info c_info s_map i_info p_info stmt_map
+          |> all_unroll_void s2 summary m_info c_info s_map i_info p_info)
   | _ -> failwith "Fail: all_unroll_void"
 
 let rec change_stmt p s new_s =
@@ -2492,18 +2530,6 @@ let combinate (prec, p) stmt_map =
          | _ -> lst)
        [ (prec, p) ]
   |> List.rev
-
-let check_overload prev_ee current_ee =
-  let prev =
-    if prev_ee = "" then ""
-    else
-      Str.split (Str.regexp "(") prev_ee
-      |> List.hd
-      |> Str.global_replace Regexp.dollar "\\$"
-  in
-  if prev = "" || Str.string_match (prev ^ "(" |> Str.regexp) current_ee 0 then
-    true
-  else false
 
 (* find error entry *)
 let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
@@ -2590,7 +2616,7 @@ let priority_q queue =
       else compare nt1 nt2)
     queue
 
-let rec mk_testcase summary cg m_info c_info s_map i_info p_info queue =
+let rec mk_testcase summary m_info c_info s_map i_info p_info queue =
   let queue =
     if !Cmdline.basic_mode || !Cmdline.pruning_mode then queue
     else priority_q queue
@@ -2600,7 +2626,7 @@ let rec mk_testcase summary cg m_info c_info s_map i_info p_info queue =
       if AST.ground p.tc then [ (pretty_format p.tc, tl) ]
       else
         (match
-           all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc summary cg
+           all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc summary
              m_info c_info s_map i_info p_info StmtMap.M.empty
          with
         | exception Not_found_setter -> tl
@@ -2611,7 +2637,7 @@ let rec mk_testcase summary cg m_info c_info s_map i_info p_info queue =
                    mk_cost p (new_tc |> snd) (new_tc |> fst) :: lst)
                  []
             |> List.rev_append (tl |> List.rev))
-        |> mk_testcase summary cg m_info c_info s_map i_info p_info
+        |> mk_testcase summary m_info c_info s_map i_info p_info
   | [] -> []
 
 let mk_testcases ~is_start queue (e_method, error_summary)
@@ -2638,5 +2664,5 @@ let mk_testcases ~is_start queue (e_method, error_summary)
         (p_info, [])
     else (p_info, queue)
   in
-  let result = mk_testcase summary cg m_info c_info s_map i_info p_info init in
+  let result = mk_testcase summary m_info c_info s_map i_info p_info init in
   if result = [] then ((ImportSet.empty, ""), []) else List.hd result
