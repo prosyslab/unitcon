@@ -2002,6 +2002,7 @@ let satisfied_c_list id t_summary summary method_list =
     List.fold_left
       (fun list constructor -> (0, constructor, empty_summary) :: list)
       [] method_list
+    |> List.rev
   else if !Cmdline.pruning_mode then
     List.fold_left
       (fun list constructor ->
@@ -2011,6 +2012,7 @@ let satisfied_c_list id t_summary summary method_list =
         in
         (0, constructor, c_summaries |> List.hd) :: list)
       [] method_list
+    |> List.rev
   else
     List.fold_left
       (fun list constructor ->
@@ -2032,6 +2034,7 @@ let satisfied_c_list id t_summary summary method_list =
         in
         if pick = init then list else pick :: list)
       [] method_list
+    |> List.rev
 
 let get_cfunc id constructor m_info =
   let cost, c, s = constructor in
