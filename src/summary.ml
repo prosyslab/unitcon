@@ -20,8 +20,7 @@ let is_new_loc_field field summary =
   let is_null symbol =
     match Value.M.find_opt symbol summary.value with
     | Some x when x.Value.value = Eq Null -> true
-    | Some _ -> false
-    | _ -> true (* T considers same as null *)
+    | _ -> false
   in
   let _, post_mem = summary.postcond in
   let field_var = AST.get_tail_symbol "" field post_mem in

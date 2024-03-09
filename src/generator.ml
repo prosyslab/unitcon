@@ -258,25 +258,27 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
   if is_init then
     (*this, this*)
     let t_symbol, c_symbol = vs_list |> List.hd in
-    let t_var, t_mem = t_summary.precond in
-    let c_var, c_mem = c_summary.precond in
-    let c_t_mem = Condition.M.find_opt (t_symbol |> mk_symbol) t_var in
-    let c_c_mem = Condition.M.find_opt (c_symbol |> mk_symbol) c_var in
-    match (c_t_mem, c_c_mem) with
-    | None, _ | _, None -> [ (t_symbol, c_symbol) ]
-    | Some t_id, Some c_id -> (
-        let t_symbol = get_field_symbol t_id t_symbol t_mem in
-        let c_symbol = get_field_symbol c_id c_symbol c_mem in
-        let c_t_mem = Condition.M.find_opt t_symbol t_mem in
-        let c_c_mem = Condition.M.find_opt c_symbol c_mem in
-        match (c_t_mem, c_c_mem) with
-        | None, _ -> []
-        | _, None -> []
-        | Some t, Some c ->
-            Condition.M.fold
-              (fun key sym sym_list ->
-                get_value_symbol key sym c t_mem c_mem :: sym_list)
-              t [])
+    if c_symbol = "" then []
+    else
+      let t_var, t_mem = t_summary.precond in
+      let c_var, c_mem = c_summary.precond in
+      let c_t_mem = Condition.M.find_opt (t_symbol |> mk_symbol) t_var in
+      let c_c_mem = Condition.M.find_opt (c_symbol |> mk_symbol) c_var in
+      match (c_t_mem, c_c_mem) with
+      | None, _ | _, None -> [ (t_symbol, c_symbol) ]
+      | Some t_id, Some c_id -> (
+          let t_symbol = get_field_symbol t_id t_symbol t_mem in
+          let c_symbol = get_field_symbol c_id c_symbol c_mem in
+          let c_t_mem = Condition.M.find_opt t_symbol t_mem in
+          let c_c_mem = Condition.M.find_opt c_symbol c_mem in
+          match (c_t_mem, c_c_mem) with
+          | None, _ -> []
+          | _, None -> []
+          | Some t, Some c ->
+              Condition.M.fold
+                (fun key sym sym_list ->
+                  get_value_symbol key sym c t_mem c_mem :: sym_list)
+                t [])
   else vs_list
 
 let is_from_error from_func summary =
@@ -962,8 +964,7 @@ let is_new_loc_field field summary =
   let is_null symbol =
     match Value.M.find_opt symbol summary.value with
     | Some x when x.Value.value = Eq Null -> true
-    | Some _ -> false
-    | _ -> true (* T considers same as null *)
+    | _ -> false
   in
   let post_var, post_mem = summary.postcond in
   let field_var = AST.get_id_symbol post_var field in
@@ -992,16 +993,15 @@ let ret_fld_name_of summary =
         | _ -> acc_lst)
       mem []
   in
-  let pre_var, pre_mem = summary.precond in
-  let this_var = AST.get_id_symbol pre_var "this" in
+  let post_var, post_mem = summary.postcond in
+  let this_var = AST.get_id_symbol post_var "this" in
   let candidate_fields =
     match
-      Condition.M.find_opt (AST.get_next_symbol this_var pre_mem) pre_mem
+      Condition.M.find_opt (AST.get_next_symbol this_var post_mem) post_mem
     with
-    | Some m -> collect_field m pre_mem
+    | Some m -> collect_field m post_mem
     | _ -> []
   in
-  let post_var, post_mem = summary.postcond in
   let return_var = AST.get_id_symbol post_var "return" in
   let return_tail_symbol = AST.get_tail_symbol "" return_var post_mem in
   let field_name =
@@ -1010,22 +1010,15 @@ let ret_fld_name_of summary =
         if sym = return_tail_symbol then field else found)
       "" candidate_fields
   in
-  field_name
+  (candidate_fields = [], field_name)
 
-let check_new_loc_field_for fld_name lst =
-  let rec check_for lst =
-    match lst with
-    | hd :: tl -> is_new_loc_field fld_name hd || check_for tl
-    | _ -> false
-  in
-  check_for lst
-
-let is_getter_with_memory_effect m_summary fld_name =
+let is_getter_with_memory_effect m_summary empty_fld fld_name =
   (* If the field name is empty, it indicates that the method doesn't return its field,
      so it should not be pruned for safety. *)
-  fld_name = "" || check_new_loc_field_for "return" [ m_summary ]
+  let new_loc = is_new_loc_field "return" m_summary in
+  (empty_fld && fld_name = "" && new_loc |> not) || new_loc
 
-let collect_recv summary m_info c_info subtypes =
+let collect_ret_recv summary m_info c_info subtypes =
   let is_available_class typ c_info =
     match ClassInfo.M.find_opt typ c_info with
     | Some t -> (
@@ -1035,7 +1028,7 @@ let collect_recv summary m_info c_info subtypes =
     | _ -> true
   in
   MethodInfo.M.fold
-    (fun m_name info (recv_lst, set_lst) ->
+    (fun m_name info recv_lst ->
       let typ = Utils.get_class_name m_name in
       if
         is_public m_name m_info
@@ -1043,20 +1036,22 @@ let collect_recv summary m_info c_info subtypes =
         && is_available_class typ (c_info |> fst)
       then
         if TypeSet.mem typ subtypes && match_constructor_name typ m_name then
-          ( (m_name, SummaryMap.M.find m_name summary |> snd) :: recv_lst,
-            set_lst )
+          (m_name, SummaryMap.M.find m_name summary |> snd) :: recv_lst
         else if TypeSet.mem info.MethodInfo.return subtypes then
           let s_info = SummaryMap.M.find m_name summary in
           if s_info |> snd <> [] then
-            ( (m_name, SummaryMap.M.find m_name summary |> snd) :: recv_lst,
-              set_lst )
-          else (recv_lst, set_lst)
-        else if TypeSet.mem typ subtypes && info.MethodInfo.return = "void" then
-          ( recv_lst,
-            (m_name, SummaryMap.M.find m_name summary |> fst) :: set_lst )
-        else (recv_lst, set_lst)
-      else (recv_lst, set_lst))
-    m_info ([], [])
+            (m_name, SummaryMap.M.find m_name summary |> snd) :: recv_lst
+          else recv_lst
+        else recv_lst
+      else recv_lst)
+    m_info []
+
+let collect_set_recv s_map subtypes =
+  SetterMap.M.fold
+    (fun c_name m_lst set_lst ->
+      if TypeSet.mem c_name subtypes then List.rev_append m_lst set_lst
+      else set_lst)
+    s_map []
 
 let calc_z3 id z3exp =
   let solver = Z3.Solver.mk_solver z3ctx None in
@@ -1926,7 +1921,7 @@ let error_entry_func ee es m_info c_info =
   in
   List.fold_left
     (fun lst typ ->
-      if VarListSet.cardinal f_arg_list = 0 then
+      if VarListSet.is_empty f_arg_list then
         (0, AST.F { typ; method_name = ee; import = typ; summary = es }, [])
         :: lst
       else
@@ -1990,7 +1985,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) summary m_info c_info
                 summary = var.summary;
               }
           in
-          if VarListSet.cardinal f_arg_list = 0 then (prec, f, []) :: lst
+          if VarListSet.is_empty f_arg_list then (prec, f, []) :: lst
           else
             VarListSet.fold
               (fun f_arg acc -> (prec, f, f_arg) :: acc)
@@ -2049,7 +2044,7 @@ let get_cfunc id constructor m_info =
       ~is_s:(is_static_method c m_info)
       (MethodInfo.M.find c m_info).MethodInfo.formal_params s
   in
-  if VarListSet.cardinal arg_list = 0 then [ (cost, (func, AST.Arg [])) ]
+  if VarListSet.is_empty arg_list then [ (cost, (func, AST.Arg [])) ]
   else
     VarListSet.fold
       (fun arg cfuncs -> (cost, (func, AST.Arg arg)) :: cfuncs)
@@ -2074,25 +2069,21 @@ let get_c ret c_lst summary m_info =
     in
     get_cfuncs ret s_list m_info
 
-let is_ret_recv_mem_effect c_smy fld_name subtypes m_info ret_recv_methods =
+let is_ret_recv_mem_effect fld_name subtypes m_info ret_recv_methods =
   let check_ret_recv fld_name subtypes m_name effect_fld_lst =
     let info = MethodInfo.M.find m_name m_info in
     List.mem info.MethodInfo.return subtypes && List.mem fld_name effect_fld_lst
   in
   List.fold_left
     (fun check (m_name, effect_fld_lst) ->
-      check
-      || is_getter_with_memory_effect c_smy fld_name
-      || check_ret_recv fld_name subtypes m_name effect_fld_lst)
+      check || check_ret_recv fld_name subtypes m_name effect_fld_lst)
     false ret_recv_methods
 
-let is_set_recv_mem_effect fld_name subtypes m_info s_map set_recv_methods =
+let is_set_recv_mem_effect fld_name summary m_info set_recv_methods =
   let check_set_recv fld_name m_name summaries =
     let get_fld_symbol { postcond = post_var, post_mem; _ } =
-      AST.get_tail_symbol ""
-        (get_field_symbol (fld_name |> mk_var)
-           (AST.get_id_symbol post_var "this" |> AST.get_rh_name)
-           post_mem)
+      get_field_symbol (fld_name |> mk_var)
+        (AST.get_id_symbol post_var "this" |> AST.get_rh_name)
         post_mem
     in
     let get_params_symbol m_name { precond = pre_var, pre_mem; _ } =
@@ -2102,10 +2093,8 @@ let is_set_recv_mem_effect fld_name subtypes m_info s_map set_recv_methods =
           match param with
           | This _ -> lst
           | Var (_, var) ->
-              AST.get_tail_symbol ""
-                (get_field_symbol (var |> mk_var)
-                   (AST.get_id_symbol pre_var var |> AST.get_rh_name)
-                   pre_mem)
+              get_field_symbol ("" |> mk_var)
+                (AST.get_id_symbol pre_var var |> AST.get_rh_name)
                 pre_mem
               :: lst)
         [] info.MethodInfo.formal_params
@@ -2117,25 +2106,16 @@ let is_set_recv_mem_effect fld_name subtypes m_info s_map set_recv_methods =
         else true)
       false summaries
   in
-  let check_set_cond fld_name m_name subtypes s_map =
-    let include_fld =
-      List.fold_left
-        (fun check (s, fld_set) ->
-          if
-            s = m_name
-            && FieldSet.mem { used_in_error = false; name = fld_name } fld_set
-          then true
-          else check)
-        false
-        (try SetterMap.M.find (Utils.get_class_name m_name) s_map with _ -> [])
-    in
-    List.mem (Utils.get_class_name m_name) subtypes && include_fld
+  let check_set_cond fld_name fld_set =
+    if FieldSet.mem { used_in_error = false; name = fld_name } fld_set then true
+    else false
   in
   List.fold_left
-    (fun check (m_name, summaries) ->
+    (fun check (m_name, fld_set) ->
       check
-      || check_set_cond fld_name m_name subtypes s_map
-         && check_set_recv fld_name m_name summaries)
+      || check_set_cond fld_name fld_set
+         && check_set_recv fld_name m_name
+              (SummaryMap.M.find m_name summary |> fst))
     false set_recv_methods
 
 let memory_effect_filtering summary m_info c_info s_map smy_lst =
@@ -2153,21 +2133,26 @@ let memory_effect_filtering summary m_info c_info s_map smy_lst =
           TypeSet.union need_typ_set (TypeSet.of_list subtypes))
         TypeSet.empty smy_lst
     in
-    let ret_recv_methods, set_recv_methods =
-      collect_recv summary m_info c_info recv_type
-    in
+    let ret_recv_methods = collect_ret_recv summary m_info c_info recv_type in
+    let set_recv_methods = collect_set_recv s_map recv_type in
     List.fold_left
       (fun lst (i, c, c_smy) ->
-        let fld_name = ret_fld_name_of c_smy in
+        let empty_fld, fld_name = ret_fld_name_of c_smy in
         let recv_type = Utils.get_class_name c in
         let subtypes =
-          try IG.succ (c_info |> snd) recv_type |> List.cons recv_type
-          with Invalid_argument _ -> [ recv_type ]
+          if is_static_method c m_info then []
+          else
+            try IG.succ (c_info |> snd) recv_type |> List.cons recv_type
+            with Invalid_argument _ -> [ recv_type ]
         in
-        if
-          is_ret_recv_mem_effect c_smy fld_name subtypes m_info ret_recv_methods
-          || is_set_recv_mem_effect fld_name subtypes m_info s_map
-               set_recv_methods
+        let check_getter =
+          is_getter_with_memory_effect c_smy empty_fld fld_name
+        in
+        if subtypes = [] && check_getter then (i, c, c_smy) :: lst
+        else if
+          check_getter
+          || is_ret_recv_mem_effect fld_name subtypes m_info ret_recv_methods
+          || is_set_recv_mem_effect fld_name summary m_info set_recv_methods
         then (i, c, c_smy) :: lst
         else lst)
       [] smy_lst
@@ -2286,6 +2271,7 @@ let fcall_in_assign_unroll p summary m_info c_info s_map =
            (fun lst (prec, (f, arg)) ->
              (prec, AST.fcall_in_assign_rule p field_set f arg) :: lst)
            []
+      |> List.rev
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
 let recv_in_assign_unroll (prec, p) m_info c_info =
@@ -2297,10 +2283,14 @@ let recv_in_assign_unroll (prec, p) m_info c_info =
         && Utils.is_init_method (AST.get_func f).method_name
       then (
         let recv, f, arg = get_inner_func f arg in
-        let r2 = AST.recv_in_assign_rule2_1 p recv f arg in
-        let r3 = AST.recv_in_assign_rule3_1 p recv f arg in
-        incr outer;
-        (prec, r2) :: [ (prec, r3) ])
+        if (AST.get_v recv).import = "" then
+          (* The import of the inner class function being empty means that the receiver is an empty variable. *)
+          []
+        else
+          let r2 = AST.recv_in_assign_rule2_1 p recv f arg in
+          let r3 = AST.recv_in_assign_rule3_1 p recv f arg in
+          incr outer;
+          (prec, r2) :: [ (prec, r3) ])
       else if cname_condition (AST.get_func f).method_name m_info c_info then
         [ (prec, get_cname f |> AST.recv_in_assign_rule1 p) ]
       else
@@ -2349,6 +2339,7 @@ let fcall_in_void_unroll p summary m_info c_info s_map =
           (fun lst (prec, f, arg) ->
             (prec, AST.fcall_in_void_rule p f (AST.Arg arg)) :: lst)
           [] lst
+        |> List.rev
   | _ -> failwith "Fail: fcall_in_void_unroll"
 
 let recv_in_void_unroll (prec, p) m_info c_info =
@@ -2408,35 +2399,41 @@ let one_unroll p summary m_info c_info s_map i_info p_info =
       fcall_in_assign_unroll p summary m_info c_info s_map
       |> List.fold_left
            (fun acc_lst x ->
-             recv_in_assign_unroll x m_info c_info |> append acc_lst)
+             List.rev_append
+               (recv_in_assign_unroll x m_info c_info |> List.rev)
+               acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x -> arg_in_assign_unroll x |> append acc_lst)
+           (fun acc_lst x ->
+             List.rev_append (arg_in_assign_unroll x |> List.rev) acc_lst)
            []
-      |> List.rev
   | Void _ when AST.fcall1_in_void p ->
       (* fcall1_in_void --> recv_in_void --> arg_in_void *)
       fcall_in_void_unroll p summary m_info c_info s_map
       |> List.fold_left
            (fun acc_lst x ->
-             recv_in_void_unroll x m_info c_info |> append acc_lst)
+             List.rev_append
+               (recv_in_void_unroll x m_info c_info |> List.rev)
+               acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
+           (fun acc_lst x ->
+             List.rev_append (arg_in_void_unroll x |> List.rev) acc_lst)
            []
-      |> List.rev
   | Void _ when AST.fcall2_in_void p ->
       (* fcall2_in_void --> arg_in_void *)
       fcall_in_void_unroll p summary m_info c_info s_map
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
+           (fun acc_lst x ->
+             List.rev_append (arg_in_void_unroll x |> List.rev) acc_lst)
            []
       |> List.rev
   | Void _ when AST.recv_in_void p ->
       (* unroll error entry *)
       recv_in_void_unroll (0, p) m_info c_info
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
+           (fun acc_lst x ->
+             List.rev_append (arg_in_void_unroll x |> List.rev) acc_lst)
            []
       |> List.rev
   | _ -> failwith "Fail: one_unroll"
@@ -2497,12 +2494,13 @@ let rec change_stmt p s new_s =
 
 let rec return_stmts p =
   match p with
-  | AST.Seq (s1, s2) -> p :: List.rev_append (return_stmts s1) (return_stmts s2)
+  | AST.Seq (s1, s2) ->
+      p :: List.rev_append (return_stmts s1 |> List.rev) (return_stmts s2)
   | _ when AST.ground p -> []
   | _ -> [ p ]
 
 let sort_stmts map stmts =
-  List.sort
+  List.stable_sort
     (fun s1 s2 ->
       match (StmtMap.M.find_opt s1 map, StmtMap.M.find_opt s2 map) with
       | Some l1, Some l2 -> compare (l1 |> List.length) (l2 |> List.length)
@@ -2528,7 +2526,8 @@ let combinate (prec, p) stmt_map =
              []
          | Some new_s_list ->
              List.fold_left
-               (fun l _p -> combinate_stmt _p s new_s_list |> append l)
+               (fun l _p ->
+                 List.rev_append (combinate_stmt _p s new_s_list |> List.rev) l)
                [] lst
          | _ -> lst)
        [ (prec, p) ]
