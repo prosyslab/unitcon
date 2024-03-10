@@ -203,9 +203,8 @@ let string_of_expected_bug file =
 
 let execute_command command =
   let close_channel (stdout, stdin, stderr) =
-    stdout |> close_in;
     stdin |> close_out;
-    stderr
+    (stdout, stderr)
   in
   let execute command =
     let stdout, stdin, stderr =
@@ -222,9 +221,9 @@ let execute_command command =
 let simple_compiler program_dir command =
   let current_dir = Unix.getcwd () in
   Sys.chdir program_dir;
-  let ic = execute_command command in
+  let ic_out, ic_err = execute_command command in
   Sys.chdir current_dir;
-  ic
+  (ic_out, ic_err)
 
 let get_imports i_set =
   let is_default_path i = String.contains i '.' |> not in
@@ -335,11 +334,27 @@ let get_compilation_error_files data =
       else f_list)
     [] data
 
+let remove_last_file test_dir =
+  decr num_of_tc_files;
+  let last_file =
+    "UnitconTest" ^ (!num_of_tc_files |> string_of_int) ^ ".java"
+  in
+  remove_file (Filename.concat test_dir last_file)
+
 let modify_files test_dir data =
   let error_files = get_compilation_error_files data in
   List.iter
     (fun file -> remove_file (Filename.concat test_dir file))
     error_files
+
+let checking_init_err data =
+  match
+    Str.search_forward
+      ("Error occurred during initialization of VM" |> Str.regexp)
+      data 0
+  with
+  | exception Not_found -> false
+  | _ -> true
 
 let checking_error_presence data =
   match Str.search_forward ("[0-9]+ error" |> Str.regexp) data 0 with
@@ -393,14 +408,20 @@ let build_program info =
   let compile_cmd = compile_command_of_file info.compile_command in
   (* javac *)
   let rec compile_loop () =
-    let ic = simple_compiler info.program_dir compile_cmd in
-    let data = my_really_read_string ic in
-    ic |> close_in;
-    match checking_error_presence data with
-    | exception Compilation_Error ->
-        modify_files info.test_dir data;
-        compile_loop ()
-    | _ -> ()
+    let ic_out, ic_err = simple_compiler info.program_dir compile_cmd in
+    let data_out = my_really_read_string ic_out in
+    let data_err = my_really_read_string ic_err in
+    ic_out |> close_in;
+    ic_err |> close_in;
+    if checking_init_err data_out then (
+      remove_last_file info.test_dir;
+      compile_loop ())
+    else
+      match checking_error_presence data_err with
+      | exception Compilation_Error ->
+          modify_files info.test_dir data_err;
+          compile_loop ()
+      | _ -> ()
   in
   compile_loop ()
 
@@ -432,11 +453,12 @@ let run_testfile () =
     (Unix.gettimeofday () -. compile_start);
   let execute_cmd = execute_command_of_file !info.execute_command in
   let execute program_dir test_dir expected_bug t_file =
-    let ic =
+    let ic_out, ic_err =
       simple_compiler program_dir (modify_execute_command execute_cmd t_file)
     in
-    let data = my_really_read_string ic in
-    ic |> close_in;
+    let data = my_really_read_string ic_err in
+    ic_out |> close_in;
+    ic_err |> close_in;
     if checking_bug_presence data expected_bug then (
       if !first_success_tc = "" then first_success_tc := t_file;
       last_success_tc := t_file;
