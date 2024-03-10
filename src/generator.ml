@@ -863,7 +863,6 @@ let is_same_summary s1 s2 =
   else false
 
 let prune_dup_summary lst =
-  let lst = List.rev lst in
   if !Cmdline.basic_mode || !Cmdline.priority_mode then lst |> List.rev
   else
     let rec collect_dup lst =
@@ -896,17 +895,6 @@ let is_recursive_param parent_class method_name m_info =
     (fun check var ->
       match var with Var (typ, _) when typ = this -> true | _ -> check)
     false info.MethodInfo.formal_params
-
-let is_void_method m_name s_map =
-  let c_name = Utils.get_class_name m_name in
-  let slist = try SetterMap.M.find c_name s_map with _ -> [] in
-  let rec check lst =
-    match lst with
-    | hd :: _ when m_name = (hd |> fst) -> true
-    | _ :: tl -> check tl
-    | [] -> false
-  in
-  check slist
 
 let match_constructor_name class_name method_name =
   let class_name = Str.global_replace Regexp.dollar "\\$" class_name in
@@ -993,15 +981,16 @@ let ret_fld_name_of summary =
         | _ -> acc_lst)
       mem []
   in
-  let post_var, post_mem = summary.postcond in
-  let this_var = AST.get_id_symbol post_var "this" in
+  let pre_var, pre_mem = summary.precond in
+  let this_var = AST.get_id_symbol pre_var "this" in
   let candidate_fields =
     match
-      Condition.M.find_opt (AST.get_next_symbol this_var post_mem) post_mem
+      Condition.M.find_opt (AST.get_next_symbol this_var pre_mem) pre_mem
     with
-    | Some m -> collect_field m post_mem
+    | Some m -> collect_field m pre_mem
     | _ -> []
   in
+  let post_var, post_mem = summary.postcond in
   let return_var = AST.get_id_symbol post_var "return" in
   let return_tail_symbol = AST.get_tail_symbol "" return_var post_mem in
   let field_name =
@@ -1010,15 +999,15 @@ let ret_fld_name_of summary =
         if sym = return_tail_symbol then field else found)
       "" candidate_fields
   in
-  (candidate_fields = [], field_name)
+  field_name
 
-let is_getter_with_memory_effect m_summary empty_fld fld_name =
+let is_getter_with_memory_effect m_summary fld_name =
   (* If the field name is empty, it indicates that the method doesn't return its field,
      so it should not be pruned for safety. *)
   let new_loc = is_new_loc_field "return" m_summary in
-  (empty_fld && fld_name = "" && new_loc |> not) || new_loc
+  (fld_name = "" && new_loc |> not) || new_loc
 
-let collect_ret_recv summary m_info c_info subtypes =
+let collect_recv summary m_info c_info s_map subtypes =
   let is_available_class typ c_info =
     match ClassInfo.M.find_opt typ c_info with
     | Some t -> (
@@ -1028,7 +1017,7 @@ let collect_ret_recv summary m_info c_info subtypes =
     | _ -> true
   in
   MethodInfo.M.fold
-    (fun m_name info recv_lst ->
+    (fun m_name info (recv_lst, set_lst) ->
       let typ = Utils.get_class_name m_name in
       if
         is_public m_name m_info
@@ -1036,15 +1025,25 @@ let collect_ret_recv summary m_info c_info subtypes =
         && is_available_class typ (c_info |> fst)
       then
         if TypeSet.mem typ subtypes && match_constructor_name typ m_name then
-          (m_name, SummaryMap.M.find m_name summary |> snd) :: recv_lst
+          ( (m_name, SummaryMap.M.find m_name summary |> snd) :: recv_lst,
+            set_lst )
         else if TypeSet.mem info.MethodInfo.return subtypes then
           let s_info = SummaryMap.M.find m_name summary in
           if s_info |> snd <> [] then
-            (m_name, SummaryMap.M.find m_name summary |> snd) :: recv_lst
-          else recv_lst
-        else recv_lst
-      else recv_lst)
-    m_info []
+            ( (m_name, SummaryMap.M.find m_name summary |> snd) :: recv_lst,
+              set_lst )
+          else (recv_lst, set_lst)
+        else if TypeSet.mem typ subtypes && info.MethodInfo.return = "void" then
+          match SetterMap.M.find_opt typ s_map with
+          | Some lst -> (
+              match List.find_opt (fun (x, _) -> x = m_name) lst with
+              | Some (_, fld_set) when FieldSet.is_empty fld_set |> not ->
+                  (recv_lst, (m_name, fld_set) :: set_lst)
+              | _ -> (recv_lst, set_lst))
+          | _ -> (recv_lst, set_lst)
+        else (recv_lst, set_lst)
+      else (recv_lst, set_lst))
+    m_info ([], [])
 
 let collect_set_recv s_map subtypes =
   SetterMap.M.fold
@@ -2133,11 +2132,12 @@ let memory_effect_filtering summary m_info c_info s_map smy_lst =
           TypeSet.union need_typ_set (TypeSet.of_list subtypes))
         TypeSet.empty smy_lst
     in
-    let ret_recv_methods = collect_ret_recv summary m_info c_info recv_type in
-    let set_recv_methods = collect_set_recv s_map recv_type in
+    let ret_recv_methods, set_recv_methods =
+      collect_recv summary m_info c_info s_map recv_type
+    in
     List.fold_left
       (fun lst (i, c, c_smy) ->
-        let empty_fld, fld_name = ret_fld_name_of c_smy in
+        let fld_name = ret_fld_name_of c_smy in
         let recv_type = Utils.get_class_name c in
         let subtypes =
           if is_static_method c m_info then []
@@ -2145,9 +2145,7 @@ let memory_effect_filtering summary m_info c_info s_map smy_lst =
             try IG.succ (c_info |> snd) recv_type |> List.cons recv_type
             with Invalid_argument _ -> [ recv_type ]
         in
-        let check_getter =
-          is_getter_with_memory_effect c_smy empty_fld fld_name
-        in
+        let check_getter = is_getter_with_memory_effect c_smy fld_name in
         if subtypes = [] && check_getter then (i, c, c_smy) :: lst
         else if
           check_getter
@@ -2271,7 +2269,6 @@ let fcall_in_assign_unroll p summary m_info c_info s_map =
            (fun lst (prec, (f, arg)) ->
              (prec, AST.fcall_in_assign_rule p field_set f arg) :: lst)
            []
-      |> List.rev
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
 let recv_in_assign_unroll (prec, p) m_info c_info =
@@ -2339,7 +2336,6 @@ let fcall_in_void_unroll p summary m_info c_info s_map =
           (fun lst (prec, f, arg) ->
             (prec, AST.fcall_in_void_rule p f (AST.Arg arg)) :: lst)
           [] lst
-        |> List.rev
   | _ -> failwith "Fail: fcall_in_void_unroll"
 
 let recv_in_void_unroll (prec, p) m_info c_info =
@@ -2399,43 +2395,33 @@ let one_unroll p summary m_info c_info s_map i_info p_info =
       fcall_in_assign_unroll p summary m_info c_info s_map
       |> List.fold_left
            (fun acc_lst x ->
-             List.rev_append
-               (recv_in_assign_unroll x m_info c_info |> List.rev)
-               acc_lst)
+             recv_in_assign_unroll x m_info c_info |> append acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x ->
-             List.rev_append (arg_in_assign_unroll x |> List.rev) acc_lst)
+           (fun acc_lst x -> arg_in_assign_unroll x |> append acc_lst)
            []
   | Void _ when AST.fcall1_in_void p ->
       (* fcall1_in_void --> recv_in_void --> arg_in_void *)
       fcall_in_void_unroll p summary m_info c_info s_map
       |> List.fold_left
            (fun acc_lst x ->
-             List.rev_append
-               (recv_in_void_unroll x m_info c_info |> List.rev)
-               acc_lst)
+             recv_in_void_unroll x m_info c_info |> append acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x ->
-             List.rev_append (arg_in_void_unroll x |> List.rev) acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
            []
   | Void _ when AST.fcall2_in_void p ->
       (* fcall2_in_void --> arg_in_void *)
       fcall_in_void_unroll p summary m_info c_info s_map
       |> List.fold_left
-           (fun acc_lst x ->
-             List.rev_append (arg_in_void_unroll x |> List.rev) acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
            []
-      |> List.rev
   | Void _ when AST.recv_in_void p ->
       (* unroll error entry *)
       recv_in_void_unroll (0, p) m_info c_info
       |> List.fold_left
-           (fun acc_lst x ->
-             List.rev_append (arg_in_void_unroll x |> List.rev) acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
            []
-      |> List.rev
   | _ -> failwith "Fail: one_unroll"
 
 let rec all_unroll ?(assign_ground = false) p summary m_info c_info s_map i_info
@@ -2494,8 +2480,7 @@ let rec change_stmt p s new_s =
 
 let rec return_stmts p =
   match p with
-  | AST.Seq (s1, s2) ->
-      p :: List.rev_append (return_stmts s1 |> List.rev) (return_stmts s2)
+  | AST.Seq (s1, s2) -> p :: List.rev_append (return_stmts s1) (return_stmts s2)
   | _ when AST.ground p -> []
   | _ -> [ p ]
 
@@ -2526,8 +2511,7 @@ let combinate (prec, p) stmt_map =
              []
          | Some new_s_list ->
              List.fold_left
-               (fun l _p ->
-                 List.rev_append (combinate_stmt _p s new_s_list |> List.rev) l)
+               (fun l _p -> combinate_stmt _p s new_s_list |> append l)
                [] lst
          | _ -> lst)
        [ (prec, p) ]
