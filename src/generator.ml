@@ -1020,26 +1020,41 @@ let collect_recv m_info (ret_type, m_type) c_info s_map subtypes =
     (fun typ (ret_list, set_list) ->
       let r_list =
         (try ReturnType.M.find typ ret_type with _ -> [])
-        |> List.filter (fun x ->
-               is_public x m_info
-               && Utils.is_anonymous x |> not
-               && is_available_class typ (c_info |> fst))
+        |> List.fold_left
+             (fun lst x ->
+               if
+                 is_public x m_info
+                 && Utils.is_anonymous x |> not
+                 && is_available_class typ (c_info |> fst)
+               then x :: lst
+               else lst)
+             []
       in
       let c_list =
-      (try MethodType.M.find typ m_type with _ -> [])
-        |> List.filter (fun x ->
-               is_public x m_info
-               && Utils.is_anonymous x |> not
-               && is_available_class typ (c_info |> fst)
-               && match_constructor_name typ x)
+        (try MethodType.M.find typ m_type with _ -> [])
+        |> List.fold_left
+             (fun lst x ->
+               if
+                 is_public x m_info
+                 && Utils.is_anonymous x |> not
+                 && is_available_class typ (c_info |> fst)
+                 && match_constructor_name typ x
+               then x :: lst
+               else lst)
+             []
       in
       let s_list =
         (try SetterMap.M.find typ s_map with _ -> [])
-        |> List.filter (fun (x, field_set) ->
-               is_public x m_info
-               && Utils.is_anonymous x |> not
-               && is_available_class typ (c_info |> fst)
-               && FieldSet.is_empty field_set |> not)
+        |> List.fold_left
+             (fun lst (x, field_set) ->
+               if
+                 is_public x m_info
+                 && Utils.is_anonymous x |> not
+                 && is_available_class typ (c_info |> fst)
+                 && FieldSet.is_empty field_set |> not
+               then (x, field_set) :: lst
+               else lst)
+             []
       in
       ( List.rev_append r_list c_list |> List.rev_append ret_list,
         List.rev_append s_list set_list ))
@@ -2097,7 +2112,7 @@ let is_set_recv_mem_effect fld_name summary m_info set_recv_methods =
       (fun check smy ->
         if List.mem (get_fld_symbol smy) (get_params_symbol m_name smy) then
           check
-        else true)
+        else false)
       false summaries
   in
   List.fold_left
