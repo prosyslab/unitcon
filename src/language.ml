@@ -123,6 +123,22 @@ module MethodInfo = struct
   type t = info M.t
 end
 
+module ReturnType = struct
+  module M = Map.Make (struct
+    type t = class_name [@@deriving compare]
+  end)
+
+  type t = method_name list M.t
+end
+
+module MethodType = struct
+  module M = Map.Make (struct
+    type t = class_name [@@deriving compare]
+  end)
+
+  type t = method_name list M.t
+end
+
 module Relation = struct
   module M = Map.Make (struct
     type t = symbol [@@deriving compare]

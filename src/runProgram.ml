@@ -507,6 +507,7 @@ let run program_dir =
   time := Unix.gettimeofday ();
   init program_dir;
   let method_info = parse_method_info !info.summary_file in
+  let type_info = Summary.from_method_type method_info in
   let summary = parse_summary !info.summary_file method_info in
   let callgraph = parse_callgraph !info.summary_file in
   let setter_map = get_setter summary method_info in
@@ -526,6 +527,7 @@ let run program_dir =
       summary,
       call_prop_map,
       method_info,
+      type_info,
       class_info,
       setter_map,
       instance_info,

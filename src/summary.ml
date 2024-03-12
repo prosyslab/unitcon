@@ -203,6 +203,27 @@ let from_method_json json =
   in
   Modeling.add_java_package_method method_info
 
+let from_method_type minfo =
+  MethodInfo.M.fold
+    (fun m_name info (rtype, mtype) ->
+      let class_name = Utils.get_class_name m_name in
+      let mtype =
+        match MethodType.M.find_opt class_name mtype with
+        | Some m -> MethodType.M.add class_name (m_name :: m) mtype
+        | _ -> MethodType.M.add class_name [ m_name ] mtype
+      in
+      let rtype =
+        if info.MethodInfo.return = "void" || info.MethodInfo.return = "" then
+          rtype
+        else
+          match ReturnType.M.find_opt info.MethodInfo.return rtype with
+          | Some m -> ReturnType.M.add info.MethodInfo.return (m_name :: m) rtype
+          | _ -> ReturnType.M.add info.MethodInfo.return [ m_name ] rtype
+      in
+      (rtype, mtype))
+    minfo
+    (ReturnType.M.empty, MethodType.M.empty)
+
 let from_summary_json minfo json =
   let json = JsonUtil.to_list json in
   let summary_map =
