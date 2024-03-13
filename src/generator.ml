@@ -2110,9 +2110,8 @@ let is_set_recv_mem_effect fld_name summary m_info set_recv_methods =
     in
     List.fold_left
       (fun check smy ->
-        if List.mem (get_fld_symbol smy) (get_params_symbol m_name smy) then
-          check
-        else false)
+        check
+        || List.mem (get_fld_symbol smy) (get_params_symbol m_name smy) |> not)
       false summaries
   in
   List.fold_left
