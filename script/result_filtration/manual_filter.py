@@ -59,7 +59,7 @@ def check_empty(result_path: str) -> bool:
 def targetted_method(project_path: str, result_cnt: int) -> str:
     """Returns the name of the target method."""
     summary_file: str = os.path.join(
-        project_path, "unitcon_properties", "error_summarys", f"{result_cnt}.json"
+        project_path, "unitcon_properties", "error_summaries", f"{result_cnt}.json"
     )
     with open(summary_file, "r", encoding="utf-8") as f:
         return json.load(f)["Procname"].strip().split("(")[0]

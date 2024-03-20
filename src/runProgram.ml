@@ -385,7 +385,7 @@ let init program_dir =
       program_dir;
       summary_file = cons con_path "summary.json" |> cons program_dir;
       error_summary_file =
-        cons con_path "error_summarys.json" |> cons program_dir;
+        cons con_path "error_summaries.json" |> cons program_dir;
       call_prop_file = cons con_path "call_proposition.json" |> cons program_dir;
       inheritance_file =
         cons con_path "inheritance_info.json" |> cons program_dir;

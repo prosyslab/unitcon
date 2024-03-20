@@ -189,15 +189,15 @@ def split_error_summary(dirpath: str, summary: str) -> None:
             buf += i
 
 
-def split_error_summarys(project_dir: str) -> None:
+def split_error_summaries(project_dir: str) -> None:
     """Wrapper function for `split_error_summary()`.
     Creates the directory to save the individual error summary files.
 
     :param project_dir: Main directory path of the target project
     """
     debug("Splitting error summary...")
-    err_summary: str = os.path.join(project_dir, "error_summarys.json")
-    summarys_dir: str = os.path.join(project_dir, "error_summarys")
+    err_summary: str = os.path.join(project_dir, "error_summaries.json")
+    summarys_dir: str = os.path.join(project_dir, "error_summaries")
 
     if os.path.isdir(summarys_dir):
         debug(f"{summarys_dir} already exists. Removing...")
@@ -210,8 +210,8 @@ def split_error_summarys(project_dir: str) -> None:
 
 def copy_summary(project_dir: str) -> None:
     """Copy Infer's error summary into `unitcon_properties` file.
-    After performing `split_error_summarys()`, copies the following directory and files:
-    - `error_summarys`
+    After performing `split_error_summaries()`, copies the following directory and files:
+    - `error_summaries`
     - `summary.json`
     - `call_proposition.json`
 
@@ -223,18 +223,18 @@ def copy_summary(project_dir: str) -> None:
 
     if os.path.isfile(os.path.join(org_path, "summary.json")):
         debug(f"Copying file {org_path} to {new_path}")
-        if os.path.isdir(os.path.join(new_path, "error_summarys")):
+        if os.path.isdir(os.path.join(new_path, "error_summaries")):
             debug(
-                f"{os.path.join(new_path, 'error_summarys')} already exists. Removing..."
+                f"{os.path.join(new_path, 'error_summaries')} already exists. Removing..."
             )
-            shutil.rmtree(os.path.join(new_path, "error_summarys"))
-        split_error_summarys(org_path)
+            shutil.rmtree(os.path.join(new_path, "error_summaries"))
+        split_error_summaries(org_path)
 
         debug(f"Copying relevant summarys from {org_path} to {new_path}...")
-        debug("error_summarys")
+        debug("error_summaries")
         shutil.copytree(
-            os.path.join(org_path, "error_summarys"),
-            os.path.join(new_path, "error_summarys"),
+            os.path.join(org_path, "error_summaries"),
+            os.path.join(new_path, "error_summaries"),
         )
 
         debug("summary.json")
@@ -290,7 +290,7 @@ def remove_duplicate_summaries(project_dir: str, encoding: str) -> None:
     debug("Checking for duplicate summaries...")
     hash_file_dict: dict[int, list[str]] = {}
     error_summary_dir: str = os.path.join(
-        project_dir, "unitcon_properties", "error_summarys"
+        project_dir, "unitcon_properties", "error_summaries"
     )
     for summary in os.listdir(error_summary_dir):
         if summary.endswith(".json"):
@@ -327,7 +327,7 @@ def remove_duplicate_summaries(project_dir: str, encoding: str) -> None:
         [
             name
             for name in os.listdir(
-                os.path.join(project_dir, "infer-out", "error_summarys")
+                os.path.join(project_dir, "infer-out", "error_summaries")
             )
             if name.endswith(".json")
         ]
@@ -404,20 +404,20 @@ def copy_error_summary(project_dir: str, summary_name: str) -> bool:
     prop_dir = os.path.join(project_dir, "unitcon_properties")
 
     # Remove error_summary used previously
-    if os.path.isfile(os.path.join(prop_dir, "error_summarys.json")):
+    if os.path.isfile(os.path.join(prop_dir, "error_summaries.json")):
         debug(
-            f"{os.path.join(prop_dir, 'error_summarys.json')} already exists. Deleting..."
+            f"{os.path.join(prop_dir, 'error_summaries.json')} already exists. Deleting..."
         )
-        os.remove(os.path.join(prop_dir, "error_summarys.json"))
+        os.remove(os.path.join(prop_dir, "error_summaries.json"))
 
-    summary_path: str = os.path.join(prop_dir, "error_summarys", summary_name)
+    summary_path: str = os.path.join(prop_dir, "error_summaries", summary_name)
     if os.path.isfile(summary_path):
         debug(
-            f"{summary_path} exists. Copying it to {os.path.join(prop_dir, 'error_summarys.json')}..."
+            f"{summary_path} exists. Copying it to {os.path.join(prop_dir, 'error_summaries.json')}..."
         )
         shutil.copyfile(
             summary_path,
-            os.path.join(prop_dir, "error_summarys.json"),
+            os.path.join(prop_dir, "error_summaries.json"),
         )
         return True
     debug(f"{summary_path} does not exist!")
@@ -434,10 +434,10 @@ def run_unitcon(project_dir: str, unitcon_path: str) -> None:
     print_curr_time()
     debug("Running unitcon...")
 
-    error_summarys_dir = os.path.join(
-        project_dir, "unitcon_properties", "error_summarys"
+    error_summaries_dir = os.path.join(
+        project_dir, "unitcon_properties", "error_summaries"
     )
-    for summary in os.listdir(error_summarys_dir):
+    for summary in os.listdir(error_summaries_dir):
         if summary.endswith(".json") and copy_error_summary(project_dir, summary):
             cmd: str = " ".join([unitcon_path, project_dir, "-unknown-bug"])
             print_curr_time()
