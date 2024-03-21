@@ -17,8 +17,10 @@ source venv/bin/activate
 ```sh
 python3 script/inheritance_info_parser.py PATH/TO/SOURCE/DIR --encoding [ utf-8 | iso-8859-1 ]
 python3 script/enum_parser.py PATH/TO/SOURCE/DIR --encoding  [ utf-8 | iso-8859-1 ]
-python3 script/callee_collector.py PATH/TO/SOURCE/DIR --encoding  [ utf-8 | iso-8859-1 ]
+python3 script/constant_collector.py PATH/TO/SOURCE/DIR --encoding  [ utf-8 | iso-8859-1 ]
+python3 script/command_maker.py PATH/TO/SOURCE/DIR [ maven | javac ]
 ```
+Additionally, the source directory must contains static analysis results within the `unitcon_properties` directory.
 
 ## Run
 ```sh
