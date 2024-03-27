@@ -183,15 +183,7 @@ let mapping_summary method_summaries minfo mmap =
     if summaries = [] then ([ empty_summary ], [])
     else (summaries, collect_new_loc_fields summaries)
   in
-  if
-    Str.string_match (".*access\\$.*" |> Str.regexp) method_name 0
-    || Str.string_match (".*access_.*" |> Str.regexp) method_name 0
-    || Str.string_match (".*\\.clone()$" |> Str.regexp) method_name 0
-    || Str.string_match
-         (".*\\[specialized with aliases\\]" |> Str.regexp)
-         method_name 0
-    || MethodInfo.M.mem method_name minfo |> not
-  then mmap
+  if MethodInfo.M.mem method_name minfo |> not then mmap
   else SummaryMap.M.add method_name summaries mmap
 
 let from_method_json json =
@@ -217,7 +209,8 @@ let from_method_type minfo =
           rtype
         else
           match ReturnType.M.find_opt info.MethodInfo.return rtype with
-          | Some m -> ReturnType.M.add info.MethodInfo.return (m_name :: m) rtype
+          | Some m ->
+              ReturnType.M.add info.MethodInfo.return (m_name :: m) rtype
           | _ -> ReturnType.M.add info.MethodInfo.return [ m_name ] rtype
       in
       (rtype, mtype))

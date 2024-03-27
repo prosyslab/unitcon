@@ -232,9 +232,7 @@ let mk_new_uf method_name from_s to_s m_info =
     from_s.use_field UseFieldMap.M.empty
 
 let get_field_symbol id symbol mem =
-  AST.get_tail_symbol
-    (id |> AST.get_rh_name ~is_var:true)
-    (symbol |> mk_symbol) mem
+  AST.get_tail_symbol (id |> AST.get_rh_name ~is_var:true) symbol mem
 
 let get_value_symbol key sym c t_mem c_mem =
   let c_sym =
@@ -267,8 +265,8 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
       match (c_t_mem, c_c_mem) with
       | None, _ | _, None -> [ (t_symbol, c_symbol) ]
       | Some t_id, Some c_id -> (
-          let t_symbol = get_field_symbol t_id t_symbol t_mem in
-          let c_symbol = get_field_symbol c_id c_symbol c_mem in
+          let t_symbol = get_field_symbol t_id (t_symbol |> mk_symbol) t_mem in
+          let c_symbol = get_field_symbol c_id (c_symbol |> mk_symbol) c_mem in
           let c_t_mem = Condition.M.find_opt t_symbol t_mem in
           let c_c_mem = Condition.M.find_opt c_symbol c_mem in
           match (c_t_mem, c_c_mem) with
@@ -461,9 +459,9 @@ let check_g_btw_one ~is_ge (g_v : Value.const) (btw_max : Value.const) =
       if float_g g_f btw_max_f then Some false else Some true
   | _ -> None
 
-let check_btw_btw_one (r_min : Value.const) (r_max : Value.const)
-    (e_min : Value.const) (e_max : Value.const) =
-  match (r_min, r_max, e_min, e_max) with
+let check_btw_btw_one (caller_min : Value.const) (caller_max : Value.const)
+    (callee_min : Value.const) (callee_max : Value.const) =
+  match (caller_min, caller_max, callee_min, callee_max) with
   | Int r_min_i, Int r_max_i, Int e_min_i, Int e_max_i
   | Int r_min_i, Int r_max_i, Int e_min_i, Long e_max_i
   | Int r_min_i, Int r_max_i, Long e_min_i, Int e_max_i
@@ -552,75 +550,52 @@ let check_intersect_one caller_sym callee_sym caller_prop callee_summary =
           check )
       else (caller_prop.value, check)
     in
+    let get_result check_opt =
+      match check_opt with
+      | Some check -> return_caller check
+      | _ -> (Value.M.empty, false)
+    in
     match (caller_value.Value.value, callee_value.Value.value) with
     | Eq eq_v1, Eq eq_v2 ->
         if eq_v1 = eq_v2 then return_caller true else return_caller false
     | Eq eq_v, Neq neq_v | Neq neq_v, Eq eq_v ->
         if eq_v = neq_v then return_caller false else return_caller true
-    | Eq eq_v, Le le_v | Le le_v, Eq eq_v -> (
-        match check_eq_l_one ~is_le:true eq_v le_v with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
-    | Eq eq_v, Lt lt_v | Lt lt_v, Eq eq_v -> (
-        match check_eq_l_one ~is_le:false eq_v lt_v with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
-    | Eq eq_v, Ge ge_v | Ge ge_v, Eq eq_v -> (
-        match check_eq_g_one ~is_ge:true eq_v ge_v with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
-    | Eq eq_v, Gt gt_v | Gt gt_v, Eq eq_v -> (
-        match check_eq_g_one ~is_ge:false eq_v gt_v with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
+    | Eq eq_v, Le le_v | Le le_v, Eq eq_v ->
+        check_eq_l_one ~is_le:true eq_v le_v |> get_result
+    | Eq eq_v, Lt lt_v | Lt lt_v, Eq eq_v ->
+        check_eq_l_one ~is_le:false eq_v lt_v |> get_result
+    | Eq eq_v, Ge ge_v | Ge ge_v, Eq eq_v ->
+        check_eq_g_one ~is_ge:true eq_v ge_v |> get_result
+    | Eq eq_v, Gt gt_v | Gt gt_v, Eq eq_v ->
+        check_eq_g_one ~is_ge:false eq_v gt_v |> get_result
     | Eq eq_v, Between (btw_min, btw_max) | Between (btw_min, btw_max), Eq eq_v
-      -> (
-        match check_eq_btw_one eq_v btw_min btw_max with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
+      ->
+        check_eq_btw_one eq_v btw_min btw_max |> get_result
     | Eq eq_v, Outside (out_min, out_max) | Outside (out_min, out_max), Eq eq_v
-      -> (
-        match check_eq_out_one eq_v out_min out_max with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
-    | Le le_v, Ge ge_v | Ge ge_v, Le le_v -> (
-        match check_l_g_one ~is_e:true le_v ge_v with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
+      ->
+        check_eq_out_one eq_v out_min out_max |> get_result
+    | Le le_v, Ge ge_v | Ge ge_v, Le le_v ->
+        check_l_g_one ~is_e:true le_v ge_v |> get_result
     | Le l_v, Gt g_v
     | Lt l_v, Ge g_v
     | Lt l_v, Gt g_v
     | Ge g_v, Lt l_v
     | Gt g_v, Le l_v
-    | Gt g_v, Lt l_v -> (
-        match check_l_g_one ~is_e:false l_v g_v with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
-    | Le le_v, Between (btw_min, _) | Between (btw_min, _), Le le_v -> (
-        match check_l_btw_one ~is_le:true le_v btw_min with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
-    | Lt lt_v, Between (btw_min, _) | Between (btw_min, _), Lt lt_v -> (
-        match check_l_btw_one ~is_le:false lt_v btw_min with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
-    | Ge ge_v, Between (_, btw_max) | Between (_, btw_max), Ge ge_v -> (
-        match check_g_btw_one ~is_ge:true ge_v btw_max with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
-    | Gt gt_v, Between (_, btw_max) | Between (_, btw_max), Gt gt_v -> (
-        match check_g_btw_one ~is_ge:false gt_v btw_max with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
-    | Between (caller_min, caller_max), Between (callee_min, callee_max) -> (
-        match check_btw_btw_one caller_min caller_max callee_min callee_max with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
+    | Gt g_v, Lt l_v ->
+        check_l_g_one ~is_e:false l_v g_v |> get_result
+    | Le le_v, Between (btw_min, _) | Between (btw_min, _), Le le_v ->
+        check_l_btw_one ~is_le:true le_v btw_min |> get_result
+    | Lt lt_v, Between (btw_min, _) | Between (btw_min, _), Lt lt_v ->
+        check_l_btw_one ~is_le:false lt_v btw_min |> get_result
+    | Ge ge_v, Between (_, btw_max) | Between (_, btw_max), Ge ge_v ->
+        check_g_btw_one ~is_ge:true ge_v btw_max |> get_result
+    | Gt gt_v, Between (_, btw_max) | Between (_, btw_max), Gt gt_v ->
+        check_g_btw_one ~is_ge:false gt_v btw_max |> get_result
+    | Between (r_min, r_max), Between (e_min, e_max) ->
+        check_btw_btw_one r_min r_max e_min e_max |> get_result
     | Between (btw_min, btw_max), Outside (out_min, out_max)
-    | Outside (out_min, out_max), Between (btw_min, btw_max) -> (
-        match check_btw_out_one btw_min btw_max out_min out_max with
-        | Some check -> return_caller check
-        | _ -> (Value.M.empty, false))
+    | Outside (out_min, out_max), Between (btw_min, btw_max) ->
+        check_btw_out_one btw_min btw_max out_min out_max |> get_result
     | _, Outside _
     | Outside _, _
     | Lt _, Le _
@@ -952,22 +927,24 @@ let is_new_loc_field field summary =
     | Some x when x.Value.value = Eq Null -> true
     | _ -> false
   in
+  let is_new_loc x =
+    match x with
+    | Condition.RH_Symbol _
+      when is_null (AST.get_rh_name x) |> not
+           && contains_symbol x (summary.precond |> snd) |> not ->
+        true
+    | _ -> false
+  in
+  let is_new_loc_mem m =
+    Condition.M.fold
+      (fun _ x check -> if check || is_new_loc x then true else check)
+      m false
+  in
   let post_var, post_mem = summary.postcond in
   let field_var = AST.get_id_symbol post_var field in
   match Condition.M.find_opt field_var post_mem with
   | None -> false
-  | Some m ->
-      Condition.M.fold
-        (fun _ x check ->
-          match x with
-          | Condition.RH_Symbol _ ->
-              if
-                is_null (AST.get_rh_name x) |> not
-                && contains_symbol x (summary.precond |> snd) |> not
-              then true
-              else check
-          | _ -> check)
-        m false
+  | Some m -> is_new_loc_mem m
 
 let ret_fld_name_of summary =
   let collect_field mem full_mem =
@@ -1014,39 +991,30 @@ let collect_recv m_info (ret_type, m_type) c_info s_map subtypes =
         | _ -> false)
     | _ -> true
   in
+  (* cond_r is same as cond_common *)
+  let cond_common typ m_name =
+    is_available_method m_name m_info && is_available_class typ (c_info |> fst)
+  in
+  let cond_c typ m_name =
+    cond_common typ m_name && match_constructor_name typ m_name
+  in
+  let cond_s typ (m_name, field_set) =
+    cond_common typ m_name && FieldSet.is_empty field_set |> not
+  in
   let get_r_list typ =
     (try ReturnType.M.find typ ret_type with _ -> [])
     |> List.fold_left
-         (fun lst x ->
-           if
-             is_available_method x m_info
-             && is_available_class typ (c_info |> fst)
-           then x :: lst
-           else lst)
+         (fun lst x -> if cond_common typ x then x :: lst else lst)
          []
   in
   let get_c_list typ =
     (try MethodType.M.find typ m_type with _ -> [])
-    |> List.fold_left
-         (fun lst x ->
-           if
-             is_available_method x m_info
-             && is_available_class typ (c_info |> fst)
-             && match_constructor_name typ x
-           then x :: lst
-           else lst)
-         []
+    |> List.fold_left (fun lst x -> if cond_c typ x then x :: lst else lst) []
   in
   let get_s_list typ =
     (try SetterMap.M.find typ s_map with _ -> [])
     |> List.fold_left
-         (fun lst (x, field_set) ->
-           if
-             is_available_method x m_info
-             && is_available_class typ (c_info |> fst)
-             && FieldSet.is_empty field_set |> not
-           then (x, field_set) :: lst
-           else lst)
+         (fun lst setter -> if cond_s typ setter then setter :: lst else lst)
          []
   in
   TypeSet.fold
@@ -1494,18 +1462,17 @@ let get_array_size array summary =
 
 let get_same_type_param params =
   let get_type p = match p with Var (t, _) -> t | _ -> NonType in
+  let mk_new_set p =
+    List.fold_left
+      (fun set op_p ->
+        if get_type p = get_type op_p && get_type p <> NonType then
+          VarSet.add op_p set
+        else set)
+      (VarSet.empty |> VarSet.add p)
+      params
+  in
   List.fold_left
-    (fun sets p ->
-      let new_set =
-        List.fold_left
-          (fun set op_p ->
-            if get_type p = get_type op_p && get_type p <> NonType then
-              VarSet.add op_p set
-            else set)
-          (VarSet.empty |> VarSet.add p)
-          params
-      in
-      VarSets.add new_set sets)
+    (fun sets p -> VarSets.add (mk_new_set p) sets)
     VarSets.empty params
 
 let get_same_precond_param summary param_sets =
@@ -1714,19 +1681,20 @@ let n_forward n start start_map =
   forwards 1 (find_key start start_map)
 
 let check_new_value symbol vmap memory =
-  let get_tail_sym field value =
-    AST.get_tail_symbol (AST.get_rh_name ~is_var:true field) value memory
+  let checker mem =
+    Condition.M.fold
+      (fun field value check ->
+        match
+          Value.M.find_opt
+            (get_field_symbol field value memory |> AST.get_rh_name)
+            vmap
+        with
+        | Some _ -> true
+        | _ -> check)
+      mem false
   in
   match Condition.M.find_opt symbol memory with
-  | Some x ->
-      Condition.M.fold
-        (fun field value check ->
-          match
-            Value.M.find_opt (AST.get_rh_name (get_tail_sym field value)) vmap
-          with
-          | Some _ -> true
-          | _ -> check)
-        x false
+  | Some x -> checker x
   | _ -> false
 
 let add_new_mmap f1 f2 org_key field map =
@@ -1867,24 +1835,24 @@ let get_param v summary =
   | Var (typ, _) when typ = NonType -> None
   | This _ ->
       incr new_var;
-      Some
-        AST.
-          {
-            import = get_package_from_v v;
-            variable = (v, !new_var |> mk_some);
-            field = get_field "this";
-            summary;
-          }
+      AST.
+        {
+          import = get_package_from_v v;
+          variable = (v, !new_var |> mk_some);
+          field = get_field "this";
+          summary;
+        }
+      |> mk_some
   | Var (_, id) ->
       incr new_var;
-      Some
-        AST.
-          {
-            import = get_package_from_v v;
-            variable = (v, !new_var |> mk_some);
-            field = get_field id;
-            summary;
-          }
+      AST.
+        {
+          import = get_package_from_v v;
+          variable = (v, !new_var |> mk_some);
+          field = get_field id;
+          summary;
+        }
+      |> mk_some
 
 let get_org_params_list summary org_param =
   List.fold_left
@@ -2127,7 +2095,7 @@ let get_params_symbol m_name m_info { precond = pre_var, pre_mem; _ } =
       | This _ -> lst
       | Var (_, var) ->
           get_field_symbol ("" |> mk_var)
-            (AST.get_id_symbol pre_var var |> AST.get_rh_name)
+            (AST.get_id_symbol pre_var var)
             pre_mem
           :: lst)
     [] info.MethodInfo.formal_params
@@ -2136,7 +2104,7 @@ let is_set_recv_mem_effect fld_name summary m_info set_recv_methods =
   let check_set_recv fld_name m_name summaries =
     let get_fld_symbol { postcond = post_var, post_mem; _ } =
       get_field_symbol (fld_name |> mk_var)
-        (AST.get_id_symbol post_var "this" |> AST.get_rh_name)
+        (AST.get_id_symbol post_var "this")
         post_mem
     in
     List.fold_left
@@ -2491,21 +2459,19 @@ and all_unroll_void p summary m_info type_info c_info s_map i_info p_info
         (one_unroll p summary m_info type_info c_info s_map i_info p_info)
         stmt_map
   | Seq (s1, s2) -> (
+      let new_void s1 f =
+        (f |> fst, AST.Seq (AST.modify_last_assign s1, f |> snd))
+      in
+      let new_void_list s1 s2 =
+        one_unroll
+          (AST.Seq (AST.last_code s1, s2))
+          summary m_info type_info c_info s_map i_info p_info
+        |> List.fold_left (fun lst void -> new_void s1 void :: lst) []
+        |> List.rev
+      in
       match AST.last_code s1 with
       | AST.Assign _ when AST.is_stmt s2 ->
-          let new_void =
-            one_unroll
-              (AST.Seq (AST.last_code s1, s2))
-              summary m_info type_info c_info s_map i_info p_info
-            |> List.fold_left
-                 (fun lst void ->
-                   ( void |> fst,
-                     AST.Seq (AST.modify_last_assign s1, void |> snd) )
-                   :: lst)
-                 []
-            |> List.rev
-          in
-          StmtMap.M.add p new_void stmt_map
+          StmtMap.M.add p (new_void_list s1 s2) stmt_map
       | _ ->
           all_unroll_void s1 summary m_info type_info c_info s_map i_info p_info
             stmt_map
@@ -2545,20 +2511,24 @@ let combinate (prec, p) stmt_map =
         :: lst)
       [] new_s_list
   in
-  return_stmts p |> sort_stmts stmt_map
-  |> List.fold_left
-       (fun lst s ->
-         match StmtMap.M.find_opt s stmt_map with
-         | Some new_s_list when new_s_list = [] ->
-             (* Because these will be never grounded, remove all *)
-             []
-         | Some new_s_list ->
-             List.fold_left
-               (fun l _p -> combinate_stmt _p s new_s_list |> append l)
-               [] lst
-         | _ -> lst)
-       [ (prec, p) ]
-  |> List.rev
+  let combinate_stmts s new_s_lst partial_lst =
+    List.fold_left
+      (fun l _p -> combinate_stmt _p s new_s_lst |> append l)
+      [] partial_lst
+  in
+  let all_combinate stmts =
+    List.fold_left
+      (fun lst s ->
+        match StmtMap.M.find_opt s stmt_map with
+        | Some new_s_list when new_s_list = [] ->
+            (* Because these will be never grounded, remove all *)
+            []
+        | Some new_s_list -> combinate_stmts s new_s_list lst
+        | _ -> lst)
+      [ (prec, p) ]
+      stmts
+  in
+  return_stmts p |> sort_stmts stmt_map |> all_combinate |> List.rev
 
 (* find error entry *)
 let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
