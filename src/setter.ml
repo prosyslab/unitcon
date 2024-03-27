@@ -61,6 +61,20 @@ let equal_values set1 set2 vmap =
     (filter set1) false
 
 let get_change_field post_key pre_mem post_mem vmap field_set =
+  let collect_field_set field value old_set =
+    match field with
+    | Condition.RH_Var id ->
+        let pre = get_tail_set value pre_mem TailsSet.empty in
+        let post = get_tail_set value post_mem TailsSet.empty in
+        let compare_value = equal_values (pre, pre_mem) (post, post_mem) vmap in
+        let change_field =
+          if pre = post || compare_value then false else true
+        in
+        if change_field then
+          FieldSet.add { used_in_error = false; name = id } old_set
+        else old_set
+    | _ -> old_set
+  in
   match Condition.M.find_opt post_key post_mem with
   | None -> field_set
   | Some value_map -> (
@@ -69,25 +83,7 @@ let get_change_field post_key pre_mem post_mem vmap field_set =
       | Some _ ->
           Condition.M.fold
             (fun field value old_field_set ->
-              let new_field_set =
-                match field with
-                | Condition.RH_Var id ->
-                    let pre = get_tail_set value pre_mem TailsSet.empty in
-                    let post = get_tail_set value post_mem TailsSet.empty in
-                    let compare_value =
-                      equal_values (pre, pre_mem) (post, post_mem) vmap
-                    in
-                    let change_field =
-                      if pre = post || compare_value then false else true
-                    in
-                    if change_field then
-                      FieldSet.add
-                        { used_in_error = false; name = id }
-                        field_set
-                    else field_set
-                | _ -> field_set
-              in
-              FieldSet.union new_field_set old_field_set)
+              collect_field_set field value old_field_set)
             value_map field_set)
 
 let get_change_fields
