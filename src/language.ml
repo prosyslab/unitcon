@@ -819,15 +819,18 @@ module AST = struct
           (Void (new_id x0 new_current_summary, Func, Arg []));
       ]
 
+  (* let void_rule2_normal x0 x1 f arg =
+     let remove = FieldSet.remove in
+     FieldSet.fold
+       (fun field lst ->
+         new_seq
+           (Assign (new_field x0 (remove field (x0 |> get_v).field), x1, f, arg))
+           (Void (new_field x0 (FieldSet.singleton field), Func, Arg []))
+         :: lst)
+       (x0 |> get_v).field [] *)
+
   let void_rule2_normal x0 x1 f arg =
-    let remove = FieldSet.remove in
-    FieldSet.fold
-      (fun field lst ->
-        new_seq
-          (Assign (new_field x0 (remove field (x0 |> get_v).field), x1, f, arg))
-          (Void (new_field x0 (FieldSet.singleton field), Func, Arg []))
-        :: lst)
-      (x0 |> get_v).field []
+    [ new_seq (Assign (x0, x1, f, arg)) (Void (x0, Func, Arg [])) ]
 
   let void_rule2 s =
     match s with

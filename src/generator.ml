@@ -5,6 +5,8 @@ module ImportSet = Utils.ImportSet
 
 exception Not_found_setter
 
+exception Not_found_get_object
+
 module TypeSet = Set.Make (struct
   type t = string
 
@@ -2269,13 +2271,15 @@ let fcall_in_assign_unroll p summary m_info type_info c_info s_map =
   | AST.Assign (x0, _, _, _) ->
       let field_set = get_field_set x0 s_map in
       let c_lst, ret_c_lst = get_m_lst x0 m_info c_info in
-      List.rev_append
-        (get_c x0 c_lst summary m_info)
-        (get_ret_c x0 ret_c_lst summary m_info type_info c_info s_map)
-      |> List.fold_left
-           (fun lst (prec, (f, arg)) ->
-             (prec, AST.fcall_in_assign_rule p field_set f arg) :: lst)
-           []
+      if c_lst = [] && ret_c_lst = [] then raise Not_found_get_object
+      else
+        List.rev_append
+          (get_c x0 c_lst summary m_info)
+          (get_ret_c x0 ret_c_lst summary m_info type_info c_info s_map)
+        |> List.fold_left
+             (fun lst (prec, (f, arg)) ->
+               (prec, AST.fcall_in_assign_rule p field_set f arg) :: lst)
+             []
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
 let recv_in_assign_unroll (prec, p) m_info c_info =
@@ -2489,8 +2493,8 @@ let rec change_stmt p s new_s =
 
 let rec return_stmts p =
   match p with
+  | _ when AST.ground p -> [] (* ground check of partial tc is first *)
   | AST.Seq (s1, s2) -> p :: List.rev_append (return_stmts s1) (return_stmts s2)
-  | _ when AST.ground p -> []
   | _ -> [ p ]
 
 let sort_stmts map stmts =
@@ -2516,6 +2520,7 @@ let combinate (prec, p) stmt_map =
       (fun l _p -> combinate_stmt _p s new_s_lst |> append l)
       [] partial_lst
   in
+  (* stmts is all fragments of statements in partial tc *)
   let all_combinate stmts =
     List.fold_left
       (fun lst s ->
@@ -2629,6 +2634,7 @@ let rec mk_testcase summary m_info type_info c_info s_map i_info p_info queue =
              m_info type_info c_info s_map i_info p_info StmtMap.M.empty
          with
         | exception Not_found_setter -> tl
+        | exception Not_found_get_object -> tl
         | x ->
             combinate (p.prec, p.tc) x
             |> List.fold_left
