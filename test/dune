@@ -1,0 +1,8 @@
+(rule
+ (alias runtest)
+ (action
+  (run ../src/main.exe Bears-189-buggy)))
+
+(test
+ (name unit)
+ (libraries oUnit))

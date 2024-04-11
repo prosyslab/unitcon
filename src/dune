@@ -18,5 +18,7 @@
   generator
   runProgram)
  (libraries ocamlgraph unix yojson str core z3 logger)
+ (instrumentation
+  (backend bisect_ppx))
  (preprocess
   (pps ppx_compare)))
