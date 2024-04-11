@@ -924,7 +924,8 @@ let add_java_package_summary mmap =
   SummaryMap.M.add "java.util.Map.put(java.lang.Object,java.lang.Object)"
     ([ map_put_summary ], []) mmap
   |> SummaryMap.M.add "java.util.ArrayList.<init>()" ([ array_list_summary ], [])
-  |> SummaryMap.M.add "java.io.File.<init>(java.lang.String)" ([ file_summary ], [])
+  |> SummaryMap.M.add "java.io.File.<init>(java.lang.String)"
+       ([ file_summary ], [])
   |> SummaryMap.M.add "java.awt.image.BufferedImage.<init>(int,int,int)"
        ([ image_summary ], [])
   |> SummaryMap.M.add "java.awt.image.BufferedImage.createGraphics()"

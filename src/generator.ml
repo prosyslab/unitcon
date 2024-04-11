@@ -1775,7 +1775,7 @@ let modify_summary id t_summary c_summary =
       relation = c_summary.relation;
       value =
         (if value = default_value then c_summary.value
-         else Value.M.add (AST.get_rh_name symbol) value c_summary.value);
+        else Value.M.add (AST.get_rh_name symbol) value c_summary.value);
       use_field = c_summary.use_field;
       precond = (c_summary.precond |> fst, pre_mem);
       postcond = (c_summary.postcond |> fst, post_mem);
@@ -1884,16 +1884,16 @@ let mk_params_list summary params_set org_param =
     | hd :: tl ->
         let same_param = find_same_param hd |> find_org_param org_params_list in
         (if params_list = [] then [ [ hd ] ]
-         else if hd = same_param then
-           (* not found the same parameter *)
-           List.fold_left
-             (fun acc list -> List.cons (hd :: list) acc)
-             [] params_list
-         else
-           List.fold_left
-             (fun acc list ->
-               List.cons (same_param :: list) acc |> List.cons (hd :: list))
-             [] params_list)
+        else if hd = same_param then
+          (* not found the same parameter *)
+          List.fold_left
+            (fun acc list -> List.cons (hd :: list) acc)
+            [] params_list
+        else
+          List.fold_left
+            (fun acc list ->
+              List.cons (same_param :: list) acc |> List.cons (hd :: list))
+            [] params_list)
         |> mk_params tl
     | _ -> params_list
   in
@@ -2587,8 +2587,8 @@ let pretty_format p =
   let rec imports s set =
     let add_import import set =
       (if is_nested_class import then
-         ImportSet.add (Str.replace_first (Str.regexp "\\$.*$") "" import) set
-       else set)
+       ImportSet.add (Str.replace_first (Str.regexp "\\$.*$") "" import) set
+      else set)
       |> ImportSet.add import
     in
     match s with
