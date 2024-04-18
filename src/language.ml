@@ -389,19 +389,19 @@ module AST = struct
   and is_exp = function Exp -> true | _ -> false
 
   let rec ground = function
-    | Const (x, exp) -> (is_id x || is_exp exp) |> not
+    | Const (x, exp) -> not (is_id x || is_exp exp)
     | Assign (x0, x1, func, arg) ->
-        (is_id x0 || is_id x1 || is_func func || is_arg arg) |> not
-    | Void (x, func, arg) -> (is_id x || is_func func || is_arg arg) |> not
+        not (is_id x0 || is_id x1 || is_func func || is_arg arg)
+    | Void (x, func, arg) -> not (is_id x || is_func func || is_arg arg)
     | Seq (s1, s2) -> ground s1 && ground s2
     | Skip -> true
     | Stmt -> false
 
   let rec assign_ground = function
-    | Const (x, exp) -> (is_id x || is_exp exp) |> not
+    | Const (x, exp) -> not (is_id x || is_exp exp)
     | Assign (x0, x1, func, arg) ->
-        (is_id x0 || is_id x1 || is_func func || is_arg arg) |> not
-    | Void (x, func, arg) -> (is_id x || is_func func || is_arg arg) |> not
+        not (is_id x0 || is_id x1 || is_func func || is_arg arg)
+    | Void (x, func, arg) -> not (is_id x || is_func func || is_arg arg)
     | Seq (s1, s2) -> assign_ground s1 && assign_ground s2
     | Skip -> true
     | Stmt -> true
@@ -445,14 +445,13 @@ module AST = struct
 
   and count_texp = function Exp -> 0 | _ -> 1
 
-  let is_array_init f = (get_func f).method_name |> Utils.is_array_init
+  let is_array_init f = Utils.is_array_init (get_func f).method_name
 
-  let is_array_set f = (get_func f).method_name |> Utils.is_array_set
+  let is_array_set f = Utils.is_array_set (get_func f).method_name
 
   let is_file f =
     let fname = (get_func f).method_name in
-    if Str.string_match ("java.io.File\\.<init>" |> Str.regexp) fname 0 then
-      true
+    if Str.string_match (Str.regexp "java.io.File\\.<init>") fname 0 then true
     else false
 
   (* ************************************** *
@@ -533,10 +532,10 @@ module AST = struct
         let new_x0 =
           Variable
             {
-              import = (x0 |> get_v).import;
-              variable = (x0 |> get_v).variable;
+              import = (get_v x0).import;
+              variable = (get_v x0).variable;
               field;
-              summary = (x0 |> get_v).summary;
+              summary = (get_v x0).summary;
             }
         in
         Assign (new_x0, x1, f, arg)
@@ -572,7 +571,7 @@ module AST = struct
                 (match func with
                 | Func -> FieldSet.empty
                 | F f ->
-                    get_field_from_ufmap "this" (f.summary.precond |> fst)
+                    get_field_from_ufmap "this" (fst f.summary.precond)
                       f.summary.use_field);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
@@ -594,7 +593,7 @@ module AST = struct
                 (match func with
                 | Func -> FieldSet.empty
                 | F f ->
-                    get_field_from_ufmap "this" (f.summary.precond |> fst)
+                    get_field_from_ufmap "this" (fst f.summary.precond)
                       f.summary.use_field);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
@@ -666,11 +665,11 @@ module AST = struct
   let get_index_value (v : Value.v) : Field.t =
     match v.value with
     | Value.Eq (Int i) ->
-        { used_in_error = v.from_error; name = i |> string_of_int }
+        { used_in_error = v.from_error; name = string_of_int i }
     | Value.Ge (Int i) ->
-        { used_in_error = v.from_error; name = i |> string_of_int }
+        { used_in_error = v.from_error; name = string_of_int i }
     | Value.Gt (Int i) ->
-        { used_in_error = v.from_error; name = i + 1 |> string_of_int }
+        { used_in_error = v.from_error; name = string_of_int (i + 1) }
     | _ -> { used_in_error = false; name = "" }
 
   let org_symbol id { precond = pre_var, pre_mem; _ } =
@@ -704,7 +703,7 @@ module AST = struct
             match sym with
             | Condition.RH_Index s when idx = "" ->
                 ( (s, find_value s),
-                  ( v |> get_rh_name,
+                  ( get_rh_name v,
                     find_value (get_tail_symbol "" v memory |> get_rh_name) ) )
             | _ -> ((idx, idx_value), (elem, elem_value)))
           x
@@ -733,22 +732,21 @@ module AST = struct
 
   let array_field_var org_summary array =
     Condition.M.add
-      (Condition.RH_Symbol (array |> fst |> fst))
-      (Condition.RH_Var "index")
-      (org_summary.precond |> fst)
+      (Condition.RH_Symbol (fst array |> fst))
+      (Condition.RH_Var "index") (fst org_summary.precond)
     |> Condition.M.add
-         (Condition.RH_Symbol (array |> snd |> fst))
+         (Condition.RH_Symbol (snd array |> fst))
          (Condition.RH_Var "elem")
 
   let array_current_mem org_summary array =
     Condition.M.add (Condition.RH_Symbol "v5")
       (Condition.M.add (Condition.RH_Var "index")
-         (Condition.RH_Symbol (array |> fst |> fst))
+         (Condition.RH_Symbol (fst array |> fst))
          Condition.M.empty)
-      (org_summary.precond |> snd)
+      (snd org_summary.precond)
     |> Condition.M.add (Condition.RH_Var "elem")
          (Condition.M.add Condition.RH_Any
-            (Condition.RH_Symbol (array |> snd |> fst))
+            (Condition.RH_Symbol (snd array |> fst))
             Condition.M.empty)
 
   let next_summary_in_void org_summary new_mem =
@@ -756,8 +754,8 @@ module AST = struct
       relation = org_summary.relation;
       value = org_summary.value;
       use_field = org_summary.use_field;
-      precond = (org_summary.precond |> fst, new_mem);
-      postcond = (org_summary.postcond |> fst, new_mem);
+      precond = (fst org_summary.precond, new_mem);
+      postcond = (fst org_summary.postcond, new_mem);
       args = org_summary.args;
     }
 
@@ -776,42 +774,41 @@ module AST = struct
   let new_id id summary =
     Variable
       {
-        import = (id |> get_v).import;
-        variable = (id |> get_v).variable;
-        field = (id |> get_v).field;
+        import = (get_v id).import;
+        variable = (get_v id).variable;
+        field = (get_v id).field;
         summary;
       }
 
   let new_field id field =
     Variable
       {
-        import = (id |> get_v).import;
-        variable = (id |> get_v).variable;
+        import = (get_v id).import;
+        variable = (get_v id).variable;
         field;
-        summary = (id |> get_v).summary;
+        summary = (get_v id).summary;
       }
 
   (* 5 *)
   let void_rule1 s = match s with Seq (s1, _) -> Seq (s1, Skip) | _ -> s
 
   let void_rule2_array x0 x1 f arg =
-    let arr_id = x0 |> get_vinfo |> snd in
-    let new_idx, new_elem = get_array_index arr_id (x0 |> get_v).summary in
+    let arr_id = get_vinfo x0 |> snd in
+    let new_idx, new_elem = get_array_index arr_id (get_v x0).summary in
     (* remove setter of duplicate index *)
-    if FieldSet.mem (new_idx |> snd |> get_index_value) (x0 |> get_v).field then
-      []
+    if FieldSet.mem (snd new_idx |> get_index_value) (get_v x0).field then []
     else
       let nfield =
-        FieldSet.add (new_idx |> snd |> get_index_value) (x0 |> get_v).field
+        FieldSet.add (snd new_idx |> get_index_value) (get_v x0).field
       in
       let new_next_summary =
-        next_summary_in_void (x0 |> get_v).summary
-          (remove_array_index arr_id (new_idx |> fst) (x0 |> get_v).summary)
+        next_summary_in_void (get_v x0).summary
+          (remove_array_index arr_id (fst new_idx) (get_v x0).summary)
       in
       let new_current_summary =
-        current_summary_in_assign (x0 |> get_v).summary
-          (array_field_var (x0 |> get_v).summary (new_idx, new_elem))
-          (array_current_mem (x0 |> get_v).summary (new_idx, new_elem))
+        current_summary_in_assign (get_v x0).summary
+          (array_field_var (get_v x0).summary (new_idx, new_elem))
+          (array_current_mem (get_v x0).summary (new_idx, new_elem))
       in
       [
         new_seq
@@ -863,7 +860,7 @@ module AST = struct
                 (match func with
                 | Func -> FieldSet.empty
                 | F f ->
-                    get_field_from_ufmap "this" (f.summary.precond |> fst)
+                    get_field_from_ufmap "this" (fst f.summary.precond)
                       f.summary.use_field);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
@@ -885,7 +882,7 @@ module AST = struct
                 (match func with
                 | Func -> FieldSet.empty
                 | F f ->
-                    get_field_from_ufmap "this" (f.summary.precond |> fst)
+                    get_field_from_ufmap "this" (fst f.summary.precond)
                       f.summary.use_field);
               summary =
                 (match func with Func -> empty_summary | F f -> f.summary);
@@ -899,11 +896,11 @@ module AST = struct
    * ************************************** *)
 
   let get_method_name m =
-    Regexp.first_rm ("(.*)" |> Str.regexp) m
+    Regexp.first_rm (Str.regexp "(.*)") m
     |> Str.split Regexp.dot |> List.rev |> List.hd
 
   let get_short_class_name c =
-    Regexp.first_rm ("\\.<init>(.*)" |> Str.regexp) c
+    Regexp.first_rm (Str.regexp "\\.<init>(.*)") c
     |> Str.split Regexp.dot |> List.rev |> List.hd
 
   let array_code dim content =
@@ -911,7 +908,7 @@ module AST = struct
     code dim
 
   let arg_code f arg =
-    let cc code x idx = code ^ ", " ^ x ^ (idx |> string_of_int) in
+    let cc code x idx = code ^ ", " ^ x ^ string_of_int idx in
     match arg with
     | Param p ->
         let param =
@@ -928,14 +925,14 @@ module AST = struct
             (Utils.get_array_dim_from_class_name (get_func f).typ)
             param
         else if is_array_set f then
-          let lst = param |> Str.split Regexp.bm in
+          let lst = Str.split Regexp.bm param in
           array_code
             (Utils.get_array_dim_from_class_name (get_func f).typ)
-            (lst |> List.hd |> Regexp.rm_space)
+            (List.hd lst |> Regexp.rm_space)
           ^ " = "
-          ^ (lst |> List.tl |> List.hd |> Regexp.rm_space)
+          ^ (List.tl lst |> List.hd |> Regexp.rm_space)
         else "(" ^ param ^ ")"
-    | Arg x -> "Arg(" ^ (x |> List.length |> string_of_int) ^ ")"
+    | Arg x -> "Arg(" ^ (List.length x |> string_of_int) ^ ")"
 
   let func_code func =
     match func with
@@ -959,39 +956,36 @@ module AST = struct
   let var_code v =
     let v =
       match v.variable with
-      | Var (typ, id), Some idx -> (typ, id ^ (idx |> string_of_int))
+      | Var (typ, id), Some idx -> (typ, id ^ string_of_int idx)
       | _, None -> (NonType, "")
       | This _, _ -> (NonType, "")
     in
-    match v |> fst with
-    | Int -> "int " ^ (v |> snd)
-    | Long -> "long " ^ (v |> snd)
-    | Short -> "short " ^ (v |> snd)
-    | Byte -> "byte " ^ (v |> snd)
-    | Float -> "float " ^ (v |> snd)
-    | Double -> "double " ^ (v |> snd)
-    | Bool -> "boolean " ^ (v |> snd)
-    | Char -> "char " ^ (v |> snd)
-    | String -> "String " ^ (v |> snd)
+    match fst v with
+    | Int -> "int " ^ snd v
+    | Long -> "long " ^ snd v
+    | Short -> "short " ^ snd v
+    | Byte -> "byte " ^ snd v
+    | Float -> "float " ^ snd v
+    | Double -> "double " ^ snd v
+    | Bool -> "boolean " ^ snd v
+    | Char -> "char " ^ snd v
+    | String -> "String " ^ snd v
     | Object name ->
-        (name |> get_short_class_name |> Utils.replace_nested_symbol)
-        ^ " " ^ (v |> snd)
+        (get_short_class_name name |> Utils.replace_nested_symbol) ^ " " ^ snd v
     | Array typ -> (
         match get_array_typ typ with
-        | Int -> "int" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
-        | Long -> "long" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
-        | Short -> "short" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
-        | Byte -> "byte" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
-        | Float -> "float" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
-        | Double ->
-            "double" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
-        | Char -> "char" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
-        | String ->
-            "String" ^ array_code (get_array_dim typ) "" ^ " " ^ (v |> snd)
+        | Int -> "int" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Long -> "long" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Short -> "short" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Byte -> "byte" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Float -> "float" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Double -> "double" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Char -> "char" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | String -> "String" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
         | Object name ->
-            (name |> get_short_class_name |> Utils.replace_nested_symbol)
+            (get_short_class_name name |> Utils.replace_nested_symbol)
             ^ array_code (get_array_dim typ) ""
-            ^ " " ^ (v |> snd)
+            ^ " " ^ snd v
         | _ -> "")
     | _ -> ""
 
@@ -999,12 +993,11 @@ module AST = struct
     match recv with
     | Variable v -> (
         match v.variable with
-        | Var (_, id), Some idx when is_array_set func ->
-            id ^ (idx |> string_of_int)
-        | Var (_, id), Some idx -> id ^ (idx |> string_of_int) ^ "."
+        | Var (_, id), Some idx when is_array_set func -> id ^ string_of_int idx
+        | Var (_, id), Some idx -> id ^ string_of_int idx ^ "."
         | _ -> "")
     | ClassName c ->
-        (c |> get_short_class_name |> Utils.replace_nested_symbol) ^ "."
+        (get_short_class_name c |> Utils.replace_nested_symbol) ^ "."
     | _ -> "ID."
 
   let id_code = function
@@ -1017,17 +1010,17 @@ module AST = struct
     | Z z -> (
         match get_vinfo x |> fst with
         | Bool ->
-            if z = 0 then (false |> string_of_bool) ^ ";\n"
-            else (true |> string_of_bool) ^ ";\n"
-        | String -> "\"" ^ (z |> string_of_int) ^ "\";\n"
-        | _ -> (z |> string_of_int) ^ ";\n")
+            if z = 0 then string_of_bool false ^ ";\n"
+            else string_of_bool true ^ ";\n"
+        | String -> "\"" ^ string_of_int z ^ "\";\n"
+        | _ -> string_of_int z ^ ";\n")
     | R r ->
         (* e.g., float --> 0.f, double --> 0. *)
         let type_cast =
           (match get_vinfo x |> fst with Float -> "f" | _ -> "") ^ ";\n"
         in
-        (r |> string_of_float) ^ type_cast
-    | B b -> (b |> string_of_bool) ^ ";\n"
+        string_of_float r ^ type_cast
+    | B b -> string_of_bool b ^ ";\n"
     | C c -> "\'" ^ String.make 1 c ^ "\';\n"
     | S s -> "\"" ^ s ^ "\";\n"
 

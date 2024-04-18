@@ -104,7 +104,7 @@ let parse_class_info filename =
   let json = Json.from_file filename in
   let elem = JsonUtil.to_list json |> List.hd in
   let info = Inheritance.of_json elem in
-  (info |> fst, info |> snd |> Modeling.add_java_package_inheritance)
+  (fst info, snd info |> Modeling.add_java_package_inheritance)
 
 let parse_enum_info filename =
   if not (Sys.file_exists filename) then InstanceInfo.M.empty
@@ -150,11 +150,10 @@ let execute_command_of_file file =
   s
 
 let modify_execute_command command t_file_name =
-  match Str.search_forward ("-encoding" |> Str.regexp) command 0 with
+  match Str.search_forward (Str.regexp "-encoding") command 0 with
   | exception Not_found -> command ^ " " ^ t_file_name
   | _ ->
-      Str.replace_first
-        ("-encoding" |> Str.regexp)
+      Str.replace_first (Str.regexp "-encoding")
         (t_file_name ^ " -encoding")
         command
 
@@ -188,8 +187,8 @@ let check_useless_npe error_trace =
   List.exists (fun ignored -> check_substring ignored error_trace) ignored_npes
 
 let run_type str =
-  if Str.string_match ("^javac" |> Str.regexp) str 0 then Compile
-  else if Str.string_match ("^java" |> Str.regexp) str 0 then Test
+  if Str.string_match (Str.regexp "^javac") str 0 then Compile
+  else if Str.string_match (Str.regexp "^java") str 0 then Test
   else failwith "not supported build type"
 
 let string_of_expected_bug file =
@@ -197,13 +196,12 @@ let string_of_expected_bug file =
   let ic = open_in file in
   let s = really_input_string ic (in_channel_length ic) in
   close_in ic;
-  s
-  |> Str.global_replace Regexp.dollar "\\$"
+  Str.global_replace Regexp.dollar "\\$" s
   |> Str.global_replace (Str.regexp "\n") "[ \t\r\n]+"
 
 let execute_command command =
   let close_channel (stdout, stdin, stderr) =
-    stdin |> close_out;
+    close_out stdin;
     (stdout, stderr)
   in
   let execute command =
@@ -233,21 +231,19 @@ let get_imports i_set =
         let path = Utils.rm_object_array_import i in
         if i = "" || (Utils.is_array i && path = i) || is_default_path i then s
         else
-          ImportSet.add
-            ("import " ^ (path |> Utils.replace_nested_symbol) ^ ";\n")
-            s)
+          ImportSet.add ("import " ^ Utils.replace_nested_symbol path ^ ";\n") s)
       i_set ImportSet.empty
   in
   ImportSet.fold (fun i s -> s ^ i) str_set ""
 
 let insert_test oc (file_num, tc, time) =
   let need_default_interface tc =
-    match Str.search_forward ("UnitconInterface" |> Str.regexp) tc 0 with
+    match Str.search_forward (Str.regexp "UnitconInterface") tc 0 with
     | exception _ -> ()
     | _ -> require_interface_class := true
   in
   let need_default_enum tc =
-    match Str.search_forward ("UnitconEnum" |> Str.regexp) tc 0 with
+    match Str.search_forward (Str.regexp "UnitconEnum") tc 0 with
     | exception _ -> ()
     | _ -> require_enum_class := true
   in
@@ -262,7 +258,7 @@ let insert_test oc (file_num, tc, time) =
     in
     need_default_class m_bodies;
     get_imports i_set ^ "\n" |> output_string oc;
-    time |> output_string oc;
+    output_string oc time;
     "public class UnitconTest" ^ string_of_int file_num ^ " {\n"
     |> output_string oc;
     start ^ m_bodies ^ "}\n}\n" |> output_string oc;
@@ -275,13 +271,13 @@ let add_default_class test_dir =
   let need_default_interface () =
     if !require_interface_class then (
       let oc = open_out (Filename.concat test_dir "UnitconInterface.java") in
-      "interface UnitconInterface {}\n" |> output_string oc;
+      output_string oc "interface UnitconInterface {}\n";
       close_out oc)
   in
   let need_default_enum () =
     if !require_enum_class then (
       let oc = open_out (Filename.concat test_dir "UnitconEnum.java") in
-      "enum UnitconEnum {}\n" |> output_string oc;
+      output_string oc "enum UnitconEnum {}\n";
       close_out oc)
   in
   need_default_interface ();
@@ -324,11 +320,10 @@ let get_compilation_error_files data =
   let get_f_name line =
     String.split_on_char ':' line |> List.hd |> Filename.basename
   in
-  let data = data |> String.split_on_char '\n' in
+  let data = String.split_on_char '\n' data in
   List.fold_left
     (fun f_list line ->
-      if Str.string_match (".*UnitconTest[0-9]+\\.java" |> Str.regexp) line 0
-      then
+      if Str.string_match (Str.regexp ".*UnitconTest[0-9]+\\.java") line 0 then
         let file_name = get_f_name line in
         file_name :: f_list
       else f_list)
@@ -336,9 +331,7 @@ let get_compilation_error_files data =
 
 let remove_last_file test_dir =
   decr num_of_tc_files;
-  let last_file =
-    "UnitconTest" ^ (!num_of_tc_files |> string_of_int) ^ ".java"
-  in
+  let last_file = "UnitconTest" ^ string_of_int !num_of_tc_files ^ ".java" in
   remove_file (Filename.concat test_dir last_file)
 
 let modify_files test_dir data =
@@ -350,14 +343,14 @@ let modify_files test_dir data =
 let checking_init_err data =
   match
     Str.search_forward
-      ("Error occurred during initialization of VM" |> Str.regexp)
+      (Str.regexp "Error occurred during initialization of VM")
       data 0
   with
   | exception Not_found -> false
   | _ -> true
 
 let checking_error_presence data =
-  match Str.search_forward ("[0-9]+ error" |> Str.regexp) data 0 with
+  match Str.search_forward (Str.regexp "[0-9]+ error") data 0 with
   | exception Not_found -> ()
   | _ -> raise Compilation_Error
 
@@ -411,8 +404,8 @@ let build_program info =
     let ic_out, ic_err = simple_compiler info.program_dir compile_cmd in
     let data_out = my_really_read_string ic_out in
     let data_err = my_really_read_string ic_err in
-    ic_out |> close_in;
-    ic_err |> close_in;
+    close_in ic_out;
+    close_in ic_err;
     if checking_init_err data_out then (
       remove_last_file info.test_dir;
       compile_loop ())
@@ -457,8 +450,8 @@ let run_testfile () =
       simple_compiler program_dir (modify_execute_command execute_cmd t_file)
     in
     let data = my_really_read_string ic_err in
-    ic_out |> close_in;
-    ic_err |> close_in;
+    close_in ic_out;
+    close_in ic_err;
     if checking_bug_presence data expected_bug then (
       if !first_success_tc = "" then first_success_tc := t_file;
       last_success_tc := t_file;
@@ -520,7 +513,7 @@ let run program_dir =
   let error_method_info = parse_error_summary !info.error_summary_file in
   (* for unknown bug detection *)
   error_method_name :=
-    Regexp.first_rm ("(.*)" |> Str.regexp) (error_method_info |> fst)
+    Regexp.first_rm (Str.regexp "(.*)") (fst error_method_info)
     |> Str.split Regexp.dot |> List.rev |> List.hd;
   run_test ~is_start:true !info [] error_method_info
     ( callgraph,

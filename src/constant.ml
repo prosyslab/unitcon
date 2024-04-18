@@ -105,13 +105,13 @@ let str_to_typ typ =
   else NonType
 
 let of_enum_json json =
-  let enum_info = json |> JsonUtil.to_list in
+  let enum_info = JsonUtil.to_list json in
   List.fold_left
     (fun mmap enum -> collect_enum_const enum mmap)
     InstanceInfo.M.empty enum_info
 
 let of_ginstance_json mmap json =
-  let ginst = json |> JsonUtil.member "Object" |> JsonUtil.to_list in
+  let ginst = JsonUtil.member "Object" json |> JsonUtil.to_list in
   List.fold_left (fun mmap inst -> collect_ginstance inst mmap) mmap ginst
 
 let of_primitive_json mmap json =

@@ -27,13 +27,10 @@ module G = struct
 end
 
 let get_super_classes_name assoc =
-  let class_name =
-    JsonUtil.member "super" assoc
-    |> JsonUtil.to_list
-    |> List.fold_left (fun lst super -> (super |> JsonUtil.to_string) :: lst) []
-    |> List.rev
-  in
-  class_name
+  JsonUtil.member "super" assoc
+  |> JsonUtil.to_list
+  |> List.fold_left (fun lst super -> JsonUtil.to_string super :: lst) []
+  |> List.rev
 
 let transitive_closure vertex graph =
   let get_children v = try G.succ graph v with Invalid_argument _ -> [] in

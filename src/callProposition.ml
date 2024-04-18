@@ -53,12 +53,9 @@ let mapping_callprop callprop mmap =
   if method_names = ("", "") then mmap
   else
     let callprop = parse_callprop callprop in
-    let callprop_map =
-      match CallPropMap.M.find_opt method_names mmap with
-      | Some props -> CallPropMap.M.add method_names (callprop :: props) mmap
-      | None -> CallPropMap.M.add method_names [ callprop ] mmap
-    in
-    callprop_map
+    match CallPropMap.M.find_opt method_names mmap with
+    | Some props -> CallPropMap.M.add method_names (callprop :: props) mmap
+    | None -> CallPropMap.M.add method_names [ callprop ] mmap
 
 let from_callprop_json json =
   let json = JsonUtil.to_list json in

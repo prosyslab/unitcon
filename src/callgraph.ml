@@ -32,38 +32,28 @@ module G = struct
   let edge_attributes _ = []
 end
 
+let split_name name =
+  if String.contains name ':' then Str.split Regexp.colon name |> List.hd
+  else name
+
 let get_caller_method_name assoc =
-  let split_name name =
-    if String.contains name ':' then name |> Str.split Regexp.colon |> List.hd
-    else name
-  in
-  let method_name =
-    JsonUtil.member "method" assoc
-    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> split_name
-  in
-  method_name
+  JsonUtil.member "method" assoc
+  |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> split_name
 
 let get_callee_method_name assoc =
-  let split_name name =
-    if String.contains name ':' then name |> Str.split Regexp.colon |> List.hd
-    else name
-  in
-  let method_name =
-    JsonUtil.member "callee" assoc
-    |> JsonUtil.to_list
-    |> List.fold_left (fun l m -> (JsonUtil.to_string m |> split_name) :: l) []
-    |> List.rev
-  in
-  method_name
+  JsonUtil.member "callee" assoc
+  |> JsonUtil.to_list
+  |> List.fold_left (fun l m -> (JsonUtil.to_string m |> split_name) :: l) []
+  |> List.rev
 
 let of_json json =
-  JsonUtil.to_list json
-  |> List.fold_left
-       (fun g element ->
-         let caller = get_caller_method_name element in
-         get_callee_method_name element
-         |> List.fold_left (fun g callee -> G.add_edge g callee caller) g)
-       G.empty
+  let json = JsonUtil.to_list json in
+  List.fold_left
+    (fun g element ->
+      let caller = get_caller_method_name element in
+      get_callee_method_name element
+      |> List.fold_left (fun g callee -> G.add_edge g callee caller) g)
+    G.empty json
 
 module Graphviz = Graph.Graphviz.Dot (G)
 include G

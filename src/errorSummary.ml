@@ -57,10 +57,7 @@ let parse_summary summary =
   }
 
 let get_method_name assoc =
-  let method_name =
-    JsonUtil.member "Procname" assoc |> JsonUtil.to_string |> Parser.split_name
-  in
-  method_name
+  JsonUtil.member "Procname" assoc |> JsonUtil.to_string |> Parser.split_name
 
 let from_error_summary_json json =
   if !Cmdline.basic_mode then (get_method_name json, empty_summary)

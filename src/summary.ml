@@ -33,7 +33,7 @@ let is_new_loc_field field summary =
           | Condition.RH_Symbol _ ->
               if
                 is_null (AST.get_rh_name x) |> not
-                && contains_symbol x (summary.precond |> snd) |> not
+                && contains_symbol x (snd summary.precond) |> not
               then true
               else check
           | _ -> check)
@@ -98,18 +98,12 @@ let parse_summary summary =
   }
 
 let get_method_name assoc =
-  let method_name =
-    JsonUtil.member "method" assoc
-    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> Parser.split_name
-  in
-  method_name
+  JsonUtil.member "method" assoc
+  |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> Parser.split_name
 
 let get_return assoc =
-  let return =
-    JsonUtil.member "method" assoc
-    |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> Parser.split_return
-  in
-  return
+  JsonUtil.member "method" assoc
+  |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string |> Parser.split_return
 
 let is_unnes_method fparam =
   let check_anony_class t =
@@ -118,12 +112,12 @@ let is_unnes_method fparam =
         let clist = Str.split Regexp.dollar o in
         List.fold_left
           (fun check name ->
-            match name |> int_of_string_opt with Some _ -> true | _ -> check)
+            match int_of_string_opt name with Some _ -> true | _ -> check)
           false clist
     | _ -> false
   in
   let check_lambda id =
-    if Str.string_match ("\\$bcvar" |> Str.regexp) id 0 then true else false
+    if Str.string_match (Str.regexp "\\$bcvar") id 0 then true else false
   in
   let check_unnes p =
     match p with
@@ -161,11 +155,11 @@ let mapping_method_info method_info mmap =
     MethodInfo.{ modifier; is_static; formal_params; return; filename }
   in
   if
-    Str.string_match (".*access\\$.*" |> Str.regexp) method_name 0
-    || Str.string_match (".*access_.*" |> Str.regexp) method_name 0
-    || Str.string_match (".*\\.clone()$" |> Str.regexp) method_name 0
+    Str.string_match (Str.regexp ".*access\\$.*") method_name 0
+    || Str.string_match (Str.regexp ".*access_.*") method_name 0
+    || Str.string_match (Str.regexp ".*\\.clone()$") method_name 0
     || Str.string_match
-         (".*\\[specialized with aliases\\]" |> Str.regexp)
+         (Str.regexp ".*\\[specialized with aliases\\]")
          method_name 0
     || is_unnes_method formal_params
   then mmap
@@ -188,12 +182,10 @@ let mapping_summary method_summaries minfo mmap =
 
 let from_method_json json =
   let json = JsonUtil.to_list json in
-  let method_info =
-    List.fold_left
-      (fun mmap method_info -> mapping_method_info method_info mmap)
-      MethodInfo.M.empty json
-  in
-  Modeling.add_java_package_method method_info
+  List.fold_left
+    (fun mmap method_info -> mapping_method_info method_info mmap)
+    MethodInfo.M.empty json
+  |> Modeling.add_java_package_method
 
 let from_method_type minfo =
   MethodInfo.M.fold
@@ -219,9 +211,7 @@ let from_method_type minfo =
 
 let from_summary_json minfo json =
   let json = JsonUtil.to_list json in
-  let summary_map =
-    List.fold_left
-      (fun mmap method_summaries -> mapping_summary method_summaries minfo mmap)
-      SummaryMap.M.empty json
-  in
-  Modeling.add_java_package_summary summary_map
+  List.fold_left
+    (fun mmap method_summaries -> mapping_summary method_summaries minfo mmap)
+    SummaryMap.M.empty json
+  |> Modeling.add_java_package_summary

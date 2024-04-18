@@ -1,24 +1,7 @@
-(executable
- (name main)
- (modules
-  main
-  language
-  utils
-  callgraph
-  cmdline
-  summary
-  errorSummary
-  callProposition
-  inheritance
-  setter
-  constant
-  modeling
-  parser
-  regexp
-  generator
-  runProgram)
- (libraries ocamlgraph unix yojson str core z3 logger)
- (instrumentation
-  (backend bisect_ppx))
- (preprocess
-  (pps ppx_compare)))
+executable (name main)
+  (modules main language utils callgraph cmdline summary errorSummary
+     callProposition inheritance setter constant modeling parser regexp
+     generator runProgram)
+  (libraries ocamlgraph unix yojson str core z3 logger)
+  (instrumentation (backend bisect_ppx))
+  (preprocess (pps ppx_compare))

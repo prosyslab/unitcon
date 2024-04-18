@@ -20,7 +20,7 @@ let mk_rh_type v =
   if check_symbol v then Condition.RH_Symbol v
   else if check_index v then
     Condition.RH_Index
-      (v |> Regexp.first_rm Regexp.open_bk |> Regexp.first_rm Regexp.end_bk)
+      (Regexp.first_rm Regexp.open_bk v |> Regexp.first_rm Regexp.end_bk)
   else if check_any_value v then Condition.RH_Any
   else Condition.RH_Var v
 
@@ -39,7 +39,7 @@ let parse_param param =
     | "java.lang.String*" | "java.lang.String" -> String
     | "" -> NonType
     | _ when Str.string_match Regexp.array t 0 ->
-        let typ = t |> Regexp.first_rm Regexp.rm_array |> get_type in
+        let typ = Regexp.first_rm Regexp.rm_array t |> get_type in
         Array typ
     | _ ->
         let typ = Regexp.global_rm (Str.regexp "\\*.*$") t in
@@ -179,7 +179,7 @@ let parse_citv is_err mem citv =
     Condition.M.fold
       (fun head tail val_map ->
         if Condition.M.cardinal tail > 1 then
-          Value.M.add (head |> AST.get_rh_name)
+          Value.M.add (AST.get_rh_name head)
             (Value.Neq Null |> value_maker is_err)
             val_map
         else val_map)
@@ -195,8 +195,7 @@ let parse_var var =
   if var = "[{ }]" then Condition.M.empty
   else
     let var_list =
-      var
-      |> Regexp.global_rm Regexp.open_bk
+      Regexp.global_rm Regexp.open_bk var
       |> Regexp.global_rm Regexp.end_bk
       |> Regexp.global_rm Regexp.remain_symbol
       |> String.split_on_char ','
@@ -209,13 +208,13 @@ let parse_var var =
         else if List.tl i_and_s = [] then mmap
         else
           let symbol = List.tl i_and_s |> List.hd |> Regexp.rm_space in
-          Condition.M.add (symbol |> mk_rh_type) (Condition.RH_Var id) mmap)
+          Condition.M.add (mk_rh_type symbol) (Condition.RH_Var id) mmap)
       Condition.M.empty var_list
 
 let rec mk_ref_map ref_trace mmap =
   match ref_trace with
   | hd :: tl -> (
-      if hd |> Regexp.rm_space = "" then mmap
+      if Regexp.rm_space hd = "" then mmap
       else
         let ref = Str.split (Str.regexp "->") hd in
         try
@@ -243,14 +242,13 @@ let parse_ref_mem ref mmap =
     in
     let trace = List.tl ref_trace |> List.cons partial_tl in
     let trace = mk_ref_map trace Condition.M.empty in
-    Condition.M.add (head |> mk_rh_type) trace mmap
+    Condition.M.add (mk_rh_type head) trace mmap
 
 let parse_mem mem =
   if mem = "[{ }]" then Condition.M.empty
   else
     let mem =
-      mem
-      |> Regexp.global_rm Regexp.remain_symbol2
+      Regexp.global_rm Regexp.remain_symbol2 mem
       |> Regexp.first_rm Regexp.o_bks
       |> Regexp.first_rm Regexp.c_bks
       |> Regexp.global_rm Regexp.o_bk
@@ -270,9 +268,8 @@ let parse_args args =
   |> List.rev
 
 let split_name m =
-  if String.contains m ':' then m |> Str.split Regexp.colon |> List.hd else m
+  if String.contains m ':' then Str.split Regexp.colon m |> List.hd else m
 
 let split_return m =
-  if String.contains m ':' then
-    m |> Str.split Regexp.colon |> List.rev |> List.hd
+  if String.contains m ':' then Str.split Regexp.colon m |> List.rev |> List.hd
   else ""

@@ -4,13 +4,11 @@ module ImportSet = Set.Make (struct
   let compare = compare
 end)
 
-let get_class_name m_name =
-  Regexp.first_rm ("\\.[^\\.]+(.*)" |> Str.regexp) m_name
+let get_class_name m_name = Regexp.first_rm (Str.regexp "\\.[^\\.]+(.*)") m_name
 
 let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 
-let is_init_method m_name =
-  Str.string_match (".*\\.<init>" |> Str.regexp) m_name 0
+let is_init_method m_name = Str.string_match (Str.regexp ".*\\.<init>") m_name 0
 
 let is_anonymous m_name =
   let check_int name =
@@ -19,7 +17,7 @@ let is_anonymous m_name =
   let rec check lst =
     match lst with hd :: tl -> check_int hd || check tl | _ -> false
   in
-  Str.string_match (".*\\$Lambda\\$_[0-9]+.*" |> Str.regexp) m_name 0
+  Str.string_match (Str.regexp ".*\\$Lambda\\$_[0-9]+.*") m_name 0
   || get_class_name m_name |> String.split_on_char '$' |> check
 
 let get_array_class_name name =
@@ -99,7 +97,7 @@ let is_array package =
   check arr
 
 let rm_object_array_import i =
-  if Str.string_match ("Object.+Array[0-9]*$" |> Str.regexp) i 0 then
+  if Str.string_match (Str.regexp "Object.+Array[0-9]*$") i 0 then
     Regexp.first_rm (Str.regexp "^Object") i
     |> Regexp.first_rm (Str.regexp "Array[0-9]*$")
   else i
@@ -109,4 +107,4 @@ let get_array_dim_from_class_name f =
 
 let is_modeling_set fname =
   is_array_set fname
-  || Str.string_match ("java.util.Map.put" |> Str.regexp) fname 0
+  || Str.string_match (Str.regexp "java.util.Map.put") fname 0
