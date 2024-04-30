@@ -14,6 +14,8 @@ let max_run_time = ref (20 * 60) (* max running time except synthesis time *)
 
 let unknown_bug = ref false
 
+let mock = ref false
+
 let options =
   [
     ( "-outdir",
@@ -34,6 +36,9 @@ let options =
     ( "-unknown-bug",
       Arg.Set unknown_bug,
       "Run unknown bug searching mode (default: false)" );
+    ( "-mock",
+      Arg.Set mock,
+      "Use mock (default: false)" );
   ]
 
 let parse_arg (x : string) =

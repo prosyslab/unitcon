@@ -234,7 +234,10 @@ let get_imports i_set =
           ImportSet.add ("import " ^ Utils.replace_nested_symbol path ^ ";\n") s)
       i_set ImportSet.empty
   in
-  ImportSet.fold (fun i s -> s ^ i) str_set ""
+  let init =
+    if !Cmdline.mock then "import static org.mockito.Mockito.mock;\n" else ""
+  in
+  ImportSet.fold (fun i s -> s ^ i) str_set init
 
 let insert_test oc (file_num, tc, time) =
   let need_default_interface tc =

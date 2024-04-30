@@ -2380,16 +2380,31 @@ let one_unroll p summary m_info type_info c_info s_map i_info p_info =
   match p with
   | AST.Seq _ when AST.void p -> void_unroll p
   | Const _ when AST.const p -> const_unroll p summary m_info i_info p_info
-  | Assign _ when AST.fcall_in_assign p ->
+  | Assign _ when AST.fcall_in_assign p -> (
       (* fcall_in_assign --> recv_in_assign --> arg_in_assign *)
-      fcall_in_assign_unroll p summary m_info type_info c_info s_map
-      |> List.fold_left
-           (fun acc_lst x ->
-             recv_in_assign_unroll x m_info c_info |> append acc_lst)
-           []
-      |> List.fold_left
-           (fun acc_lst x -> arg_in_assign_unroll x |> append acc_lst)
-           []
+      match fcall_in_assign_unroll p summary m_info type_info c_info s_map with
+      | exception Not_found_get_object ->
+          if !Cmdline.mock then [ (0, AST.mk_mock_statement p) ]
+          else raise Not_found_get_object
+      | p_lst ->
+          let lst =
+            p_lst
+            |> List.fold_left
+                 (fun acc_lst x ->
+                   recv_in_assign_unroll x m_info c_info |> append acc_lst)
+                 []
+            |> List.fold_left
+                 (fun acc_lst x -> arg_in_assign_unroll x |> append acc_lst)
+                 []
+          in
+          if
+            !Cmdline.mock
+            && List.filter
+                 (fun (_, x) -> AST.count_params x < 2 (* at least receiver *))
+                 p_lst
+               = []
+          then (0, AST.mk_mock_statement p) :: lst
+          else lst)
   | Void _ when AST.fcall1_in_void p ->
       (* fcall1_in_void --> recv_in_void --> arg_in_void *)
       fcall_in_void_unroll p summary m_info c_info s_map

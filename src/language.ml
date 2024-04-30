@@ -445,6 +445,12 @@ module AST = struct
 
   and count_texp = function Exp -> 0 | _ -> 1
 
+  let rec count_params = function
+    | Assign (_, _, _, p) -> count_param p
+    | _ -> 0
+
+  and count_param = function Arg a -> List.length a | Param p -> List.length p
+
   let is_array_init f = Utils.is_array_init (get_func f).method_name
 
   let is_array_set f = Utils.is_array_set (get_func f).method_name
@@ -539,6 +545,34 @@ module AST = struct
             }
         in
         Assign (new_x0, x1, f, arg)
+    | _ -> s
+
+  let mk_mock_statement s =
+    match s with
+    | Assign (x0, _, _, _) ->
+        let class_name = get_vinfo x0 |> fst |> get_class_name in
+        let x1 = ClassName "Mockito" in
+        let f =
+          F
+            {
+              typ = "";
+              method_name = "mock";
+              import = "";
+              summary = empty_summary;
+            }
+        in
+        let arg =
+          Param
+            [
+              {
+                import = "";
+                variable = (Var (NonType, class_name), None);
+                field = FieldSet.empty;
+                summary = empty_summary;
+              };
+            ]
+        in
+        Assign (x0, x1, f, arg)
     | _ -> s
 
   (* 3 *)
@@ -915,6 +949,8 @@ module AST = struct
           List.fold_left
             (fun pc p ->
               match p.variable with
+              | Var (_, id), None ->
+                  (id |> get_short_class_name) ^ ".class" (* mock *)
               | Var (_, id), Some idx -> cc pc id idx
               | _ -> pc)
             "" p
@@ -996,6 +1032,7 @@ module AST = struct
         | Var (_, id), Some idx when is_array_set func -> id ^ string_of_int idx
         | Var (_, id), Some idx -> id ^ string_of_int idx ^ "."
         | _ -> "")
+    | ClassName c when c = "Mockito" -> "" (* mock *)
     | ClassName c ->
         (get_short_class_name c |> Utils.replace_nested_symbol) ^ "."
     | _ -> "ID."
