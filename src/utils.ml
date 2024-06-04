@@ -4,7 +4,14 @@ module ImportSet = Set.Make (struct
   let compare = compare
 end)
 
+let dot_to_dir_sep path =
+  Str.global_replace (Str.regexp "\\.") Filename.dir_sep path
+
 let get_class_name m_name = Regexp.first_rm (Str.regexp "\\.[^\\.]+(.*)") m_name
+
+let get_package_name c_name =
+  Regexp.first_rm (Str.regexp "\\$.*") c_name
+  |> Regexp.first_rm (Str.regexp "\\.[^\\.]+$")
 
 let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 

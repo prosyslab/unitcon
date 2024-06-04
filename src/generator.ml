@@ -58,8 +58,6 @@ let recv = ref 0
 
 let new_var = ref 0
 
-let pkg = ref ""
-
 let z3ctx =
   Z3.mk_context
     [
@@ -759,6 +757,19 @@ let is_abstract_class class_name (c_info, _) =
       | _ -> false)
   | _ -> false
 
+let is_usable_default_class class_name c_info =
+  if !Cmdline.extension = "" then false
+  else
+    match ClassInfo.M.find_opt class_name c_info with
+    | Some typ -> (
+        match typ.ClassInfo.class_type with
+        | Default | Default_Static | Default_Static_Abstract | Default_Abstract
+          ->
+            if !Cmdline.extension = Utils.get_package_name class_name then true
+            else false
+        | _ -> false)
+    | None -> false
+
 let is_abstract_method method_name class_name_list m_info c_info =
   let target_class = Utils.get_class_name method_name in
   let m_name =
@@ -785,6 +796,10 @@ let is_static_class name (c_info, _) =
   | Some typ -> (
       match typ.ClassInfo.class_type with
       | Public_Static | Public_Static_Abstract -> true
+      | (Default_Static | Default_Static_Abstract)
+        when !Cmdline.extension <> ""
+             && !Cmdline.extension = Utils.get_package_name name ->
+          true
       | _ -> false)
   | None -> false
 
@@ -820,6 +835,27 @@ let is_public m_name m_info =
       match info.MethodInfo.modifier with
       | Public when is_test_file info.MethodInfo.filename |> not -> true
       | _ -> false)
+
+let is_usable_default m_name m_info =
+  if !Cmdline.extension = "" then false
+  else
+    match MethodInfo.M.find_opt m_name m_info with
+    | None -> false
+    | Some info -> (
+        let is_test_file file_name =
+          (* If this method is a method in the test file,
+             don't use it even if the modifier is public or usable default *)
+          Str.string_match (Str.regexp ".*/test/.*") file_name 0
+        in
+        match info.MethodInfo.modifier with
+        | Default | Protected ->
+            if
+              !Cmdline.extension
+              = (Utils.get_class_name m_name |> Utils.get_package_name)
+              && is_test_file info.MethodInfo.filename |> not
+            then true
+            else false
+        | _ -> false)
 
 let is_same_summary s1 s2 =
   let all_equal std op =
@@ -878,7 +914,8 @@ let match_return_object class_name method_name m_info =
   String.equal class_name return
 
 let is_available_method m_name m_info =
-  is_public m_name m_info && Utils.is_anonymous m_name |> not
+  (is_public m_name m_info || is_usable_default m_name m_info)
+  && Utils.is_anonymous m_name |> not
 
 let get_m_lst x0 m_info (c_info, ig) =
   let class_name = AST.get_vinfo x0 |> fst |> get_class_name in
@@ -887,23 +924,24 @@ let get_m_lst x0 m_info (c_info, ig) =
     with Invalid_argument _ -> [ class_name ]
   in
   MethodInfo.M.fold
-    (fun method_name _ method_list ->
+    (fun m_name _ method_list ->
       List.fold_left
         (fun (c_lst, ret_c_lst) class_name_to_find ->
           if
-            is_public_class (Utils.get_class_name method_name) c_info
-            && is_available_method method_name m_info
+            (is_public_class (Utils.get_class_name m_name) c_info
+            || is_usable_default_class (Utils.get_class_name m_name) c_info)
+            && is_available_method m_name m_info
           then
             if
               is_abstract_class class_name_to_find (c_info, ig) |> not
-              && match_constructor_name class_name_to_find method_name
-            then (method_name :: c_lst, ret_c_lst)
+              && match_constructor_name class_name_to_find m_name
+            then (m_name :: c_lst, ret_c_lst)
             else if
-              match_return_object class_name_to_find method_name m_info
-              && is_abstract_method method_name class_to_find m_info (c_info, ig)
+              match_return_object class_name_to_find m_name m_info
+              && is_abstract_method m_name class_to_find m_info (c_info, ig)
                  |> not
-              && Utils.is_init_method method_name |> not
-            then (c_lst, method_name :: ret_c_lst)
+              && Utils.is_init_method m_name |> not
+            then (c_lst, m_name :: ret_c_lst)
             else (c_lst, ret_c_lst)
           else (c_lst, ret_c_lst))
         method_list class_to_find)
@@ -1587,7 +1625,7 @@ let find_global_var_list c_name t_var mem summary m_info =
       let _, init_mem = (List.hd init_summary).precond in
       if
         Str.string_match (c_name ^ "\\.<clinit>" |> Str.regexp) init_name 0
-        && is_public init_name m_info
+        && (is_public init_name m_info || is_usable_default init_name m_info)
       then
         match t_var with
         | Some v ->
@@ -1897,7 +1935,9 @@ let mk_arg ~is_s param s =
        VarListSet.empty
 
 let summary_filtering name m_info list =
-  List.filter (fun (_, c, _) -> is_public c m_info) list
+  List.filter
+    (fun (_, c, _) -> is_public c m_info || is_usable_default c m_info)
+    list
   |> List.filter (fun (_, c, _) -> is_recursive_param name c m_info |> not)
 
 let get_field_set ret s_map =
@@ -1921,7 +1961,10 @@ let error_entry_func ee es m_info c_info =
   let f_arg_list = mk_arg ~is_s:(is_static_method ee m_info) param es in
   let c_name = Utils.get_class_name ee in
   let typ_list =
-    if is_public_class c_name (fst c_info) |> not then
+    if
+      is_public_class c_name (fst c_info) |> not
+      || is_usable_default_class c_name (fst c_info) |> not
+    then
       try IG.succ (snd c_info) c_name |> List.cons c_name
       with Invalid_argument _ -> [ c_name ]
     else [ c_name ]
@@ -2551,7 +2594,7 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
            c_info)
     else caller_preconds
   in
-  if is_public e_method m_info then
+  if is_public e_method m_info || is_usable_default e_method m_info then
     ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty
   else
     let caller_list =

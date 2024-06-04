@@ -16,6 +16,8 @@ let unknown_bug = ref false
 
 let mock = ref false
 
+let extension = ref ""
+
 let options =
   [
     ( "-outdir",
@@ -36,9 +38,11 @@ let options =
     ( "-unknown-bug",
       Arg.Set unknown_bug,
       "Run unknown bug searching mode (default: false)" );
-    ( "-mock",
-      Arg.Set mock,
-      "Use mock (default: false)" );
+    ("-mock", Arg.Set mock, "Use mock (default: false)");
+    ( "-modifier-extension",
+      Arg.Set_string extension,
+      "Extend the available modifiers from public to package (default: \"\", \
+       e.g., \"com.a.b.c\")" );
   ]
 
 let parse_arg (x : string) =

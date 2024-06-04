@@ -223,6 +223,8 @@ let simple_compiler program_dir command =
   Sys.chdir current_dir;
   (ic_out, ic_err)
 
+let get_package p = if p = "" then p else "package " ^ p ^ ";\n"
+
 let get_imports i_set =
   let is_default_path i = String.contains i '.' |> not in
   let str_set =
@@ -260,6 +262,8 @@ let insert_test oc (file_num, tc, time) =
       "\npublic static void main(String args[]) throws Exception, Throwable {\n"
     in
     need_default_class m_bodies;
+    get_package !Cmdline.extension |> output_string oc;
+    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
     get_imports i_set ^ "\n" |> output_string oc;
     output_string oc time;
     "public class UnitconTest" ^ string_of_int file_num ^ " {\n"
@@ -274,12 +278,14 @@ let add_default_class test_dir =
   let need_default_interface () =
     if !require_interface_class then (
       let oc = open_out (Filename.concat test_dir "UnitconInterface.java") in
+      get_package !Cmdline.extension |> output_string oc;
       output_string oc "interface UnitconInterface {}\n";
       close_out oc)
   in
   let need_default_enum () =
     if !require_enum_class then (
       let oc = open_out (Filename.concat test_dir "UnitconEnum.java") in
+      get_package !Cmdline.extension |> output_string oc;
       output_string oc "enum UnitconEnum {}\n";
       close_out oc)
   in
@@ -308,16 +314,26 @@ let remove_all_test_classes test_dir = remove_files test_dir Regexp.test_class
 
 let remove_all_test_files test_dir = remove_files test_dir Regexp.test_file
 
+let make_folder path =
+  try Unix.mkdir path 0o775
+  with Unix.Unix_error (EEXIST, _, _) ->
+    remove_all_test_classes path;
+    remove_all_test_files path;
+    remove_file (Filename.concat path "UnitconInterface.java");
+    remove_file (Filename.concat path "UnitconEnum.java");
+    remove_file (Filename.concat path "UnitconInterface.class");
+    remove_file (Filename.concat path "UnitconEnum.class")
+
 let init_test_folder test_dir =
-  try Unix.mkdir test_dir 0o775
-  with Unix.Unix_error (Unix.EEXIST, _, _) ->
-    ();
-    remove_all_test_classes test_dir;
-    remove_all_test_files test_dir;
-    remove_file (Filename.concat test_dir "UnitconInterface.java");
-    remove_file (Filename.concat test_dir "UnitconEnum.java");
-    remove_file (Filename.concat test_dir "UnitconInterface.class");
-    remove_file (Filename.concat test_dir "UnitconEnum.class")
+  let folders = Str.split (Str.regexp Filename.dir_sep) test_dir in
+  let rec make_folders path = function
+    | [] -> ()
+    | f :: dep ->
+        let p = path ^ Filename.dir_sep ^ f in
+        make_folder p;
+        make_folders p dep
+  in
+  make_folders "" folders
 
 let get_compilation_error_files data =
   let get_f_name line =
@@ -376,6 +392,10 @@ let init program_dir =
     if Filename.is_relative program_dir then cons (Unix.getcwd ()) program_dir
     else program_dir
   in
+  let t_dir =
+    if !Cmdline.extension = "" then "unitcon_tests"
+    else Utils.dot_to_dir_sep !Cmdline.extension
+  in
   info :=
     {
       program_dir;
@@ -389,7 +409,7 @@ let init program_dir =
       constant_file = cons con_path "extra_constant.json" |> cons program_dir;
       compile_command = cons con_path "compile_command" |> cons program_dir;
       execute_command = cons con_path "execute_command" |> cons program_dir;
-      test_dir = cons program_dir "unitcon_tests";
+      test_dir = cons program_dir t_dir;
       expected_bug = cons con_path "expected_bug" |> cons program_dir;
     };
   init_test_folder !info.test_dir;
@@ -438,6 +458,10 @@ let interrupt pid =
   Unix.sleep !Cmdline.max_run_time;
   Unix.kill pid Sys.sigusr2
 
+let get_test_path path =
+  if path = "" then test_basename
+  else Utils.dot_to_dir_sep path ^ Filename.dir_sep ^ test_basename
+
 let run_testfile () =
   Sys.set_signal Sys.sigusr2 abnormal_exit;
   Thread.create interrupt (Unix.getpid ()) |> ignore;
@@ -468,7 +492,7 @@ let run_testfile () =
   let rec execute_test current_f_num program_dir test_dir expected_bug =
     if current_f_num < !num_of_tc_files then (
       execute program_dir test_dir expected_bug
-        (test_basename ^ string_of_int current_f_num);
+        (get_test_path !Cmdline.extension ^ string_of_int current_f_num);
       execute_test (current_f_num + 1) program_dir test_dir expected_bug)
   in
   execute_test 1 !info.program_dir !info.test_dir !info.expected_bug;
