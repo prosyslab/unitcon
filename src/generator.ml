@@ -1151,7 +1151,7 @@ let calc_value_list from_error org_list default =
   List.fold_left (fun lst x -> (prec, x) :: lst) org_list default
 
 let filter_size id lst =
-  if id = "size" || id = "index" then
+  if id = "size" || id = "index" || id = "capacity" then
     List.filter
       (fun x -> match snd x with AST.Primitive (Z x) -> x >= 0 | _ -> false)
       lst
