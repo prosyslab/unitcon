@@ -259,6 +259,97 @@ let obj_postmem =
   |> Condition.M.add (Condition.RH_Symbol "v1")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
 
+let random_var =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+
+let random_premem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
+
+let random_postmem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
+
+let stringwriter_var =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+
+let stringwriter_premem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
+
+let stringwriter_postmem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
+
+let parseposition_var =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "index")
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+
+let parseposition_premem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "index") (Condition.RH_Symbol "v5")
+       )
+
+let parseposition_postmem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "val") (Condition.RH_Symbol "v5"))
+  |> Condition.M.add (Condition.RH_Symbol "v5")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+
+let bigdecimal_var =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "val")
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+
+let bigdecimal_premem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "val") (Condition.RH_Symbol "v5"))
+
+let bigdecimal_postmem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var "val") (Condition.RH_Symbol "v5"))
+  |> Condition.M.add (Condition.RH_Symbol "v5")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+
 let string_var =
   Condition.M.empty
   |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "s")
@@ -491,6 +582,46 @@ let obj_summary =
     args = [];
   }
 
+let random_summary =
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    use_field = UseFieldMap.M.empty;
+    precond = (random_var, random_premem);
+    postcond = (random_var, random_postmem);
+    args = [];
+  }
+
+let stringwriter_summary =
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    use_field = UseFieldMap.M.empty;
+    precond = (stringwriter_var, stringwriter_premem);
+    postcond = (stringwriter_var, stringwriter_postmem);
+    args = [];
+  }
+
+let parseposition_summary =
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    use_field = UseFieldMap.M.empty;
+    precond = (parseposition_var, parseposition_premem);
+    postcond = (parseposition_var, parseposition_postmem);
+    args = [];
+  }
+
+let bigdecimal_summary =
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    use_field = UseFieldMap.M.empty;
+    precond = (bigdecimal_var, bigdecimal_premem);
+    postcond = (bigdecimal_var, bigdecimal_postmem);
+    args = [];
+  }
+
 let string_summary =
   {
     relation = Relation.M.empty;
@@ -639,6 +770,52 @@ let obj_info =
       modifier = Public;
       is_static = false;
       formal_params = [ this ];
+      return = "";
+      filename = "";
+    }
+
+let random_info =
+  let this = This (Object "java.util.Random") in
+  MethodInfo.
+    {
+      modifier = Public;
+      is_static = false;
+      formal_params = [ this ];
+      return = "";
+      filename = "";
+    }
+
+let stringwriter_info =
+  let this = This (Object "java.io.StringWriter") in
+  MethodInfo.
+    {
+      modifier = Public;
+      is_static = false;
+      formal_params = [ this ];
+      return = "";
+      filename = "";
+    }
+
+let parseposition_info =
+  let this = This (Object "java.io.StringWriter") in
+  let arg = Var (Int, "val") in
+  MethodInfo.
+    {
+      modifier = Public;
+      is_static = false;
+      formal_params = [ this; arg ];
+      return = "";
+      filename = "";
+    }
+
+let bigdecimal_info =
+  let this = This (Object "java.io.StringWriter") in
+  let arg = Var (Int, "val") in
+  MethodInfo.
+    {
+      modifier = Public;
+      is_static = false;
+      formal_params = [ this; arg ];
       return = "";
       filename = "";
     }
@@ -936,6 +1113,11 @@ let add_java_package_summary mmap =
   |> SummaryMap.M.add "java.io.FileInputStream.<init>(java.io.File)"
        ([ file_input_summary ], [])
   |> SummaryMap.M.add "java.lang.Object.<init>()" ([ obj_summary ], [])
+  |> SummaryMap.M.add "java.util.Random.<init>()" ([ random_summary ], [])
+  |> SummaryMap.M.add "java.io.StringWriter.<init>()"
+       ([ stringwriter_summary ], [])
+  |> SummaryMap.M.add "java.math.BigDecimal.<init>(int)"
+       ([ bigdecimal_summary ], [])
   |> SummaryMap.M.add "java.lang.String.<init>(java.lang.String)"
        ([ string_summary ], [])
   |> SummaryMap.M.add "IntArray.<init>(int)" ([ array_summary ], [])
@@ -976,6 +1158,9 @@ let add_java_package_method mmap =
   |> MethodInfo.M.add "java.io.FileInputStream.<init>(java.io.File)"
        file_input_info
   |> MethodInfo.M.add "java.lang.Object.<init>()" obj_info
+  |> MethodInfo.M.add "java.util.Random.<init>()" random_info
+  |> MethodInfo.M.add "java.io.StringWriter.<init>()" random_info
+  |> MethodInfo.M.add "java.math.BigDecimal.<init>(int)" bigdecimal_info
   |> MethodInfo.M.add "java.lang.String.<init>(java.lang.String)" string_info
   |> MethodInfo.M.add "IntArray.<init>(int)" int_array_info
   |> MethodInfo.M.add "LongArray.<init>(int)" long_array_info
@@ -1008,3 +1193,7 @@ let add_java_package_inheritance ig =
   |> add_inheritance "java.io.InputStream" "java.io.FileInputStream"
   |> add_inheritance "java.util.Map" "java.util.HashMap"
   |> add_inheritance "java.lang.Object" "java.lang.String"
+  |> add_inheritance "java.lang.Object" "java.lang.Number"
+  |> add_inheritance "java.lang.Number" "java.math.BigDecimal"
+  |> add_inheritance "java.lang.CharSequence" "java.lang.String"
+  |> add_inheritance "java.io.Writer" "java.io.StringWriter"
