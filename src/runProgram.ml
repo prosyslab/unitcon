@@ -26,6 +26,8 @@ let require_interface_class = ref false
 
 let error_method_name = ref ""
 
+let bug_type = ref ""
+
 type t = {
   program_dir : string;
   summary_file : string;
@@ -40,7 +42,7 @@ type t = {
   expected_bug : string;
 }
 
-type run_type = Compile | Test
+type run_type = Compile | Group | Test
 
 let info =
   ref
@@ -82,6 +84,14 @@ let parse_callgraph filename =
   Callgraph.of_json data
 
 let get_setter summary m_info = Setter.from_summary_map summary m_info
+
+let get_bug_type filename =
+  if not (Sys.file_exists filename) then
+    bug_type := "java.lang.NullPointerException"
+  else
+    let ic = open_in filename in
+    bug_type := really_input_string ic (in_channel_length ic);
+    close_in ic
 
 let parse_error_summary filename =
   if not (Sys.file_exists filename) then failwith (filename ^ " not found");
@@ -136,20 +146,30 @@ let my_really_read_string in_chan =
   loop ()
 
 let compile_command_of_file file =
-  if not (Sys.file_exists file) then failwith (file ^ " not found");
-  let ic = open_in file in
-  let s = really_input_string ic (in_channel_length ic) |> Regexp.rm_space in
-  close_in ic;
-  s
+  (* TODO: remove compile_command_file *)
+  if not (Sys.file_exists file) then
+    "find ./unitcon_tests/ -name \"*.java\" > test_files; "
+    ^ "javac -cp with_dependency_new.jar:../deps/junit-4.11.jar @test_files"
+  else
+    let ic = open_in file in
+    let s = really_input_string ic (in_channel_length ic) |> Regexp.rm_space in
+    close_in ic;
+    s
 
 let execute_command_of_file file =
-  if not (Sys.file_exists file) then failwith (file ^ " not found");
-  let ic = open_in file in
-  let s = really_input_string ic (in_channel_length ic) |> Regexp.rm_space in
-  close_in ic;
-  s
+  (* TODO: remove execute_command_file *)
+  if not (Sys.file_exists file) then
+    "java -cp \
+     with_dependency_new.jar:./unitcon_tests/:../deps/junit-4.11.jar:. \
+     org.junit.runner.JUnitCore"
+  else
+    let ic = open_in file in
+    let s = really_input_string ic (in_channel_length ic) |> Regexp.rm_space in
+    close_in ic;
+    s
 
 let modify_execute_command command t_file_name =
+  (* TODO: replace command to command ^ " " ^ t_file_name *)
   match Str.search_forward (Str.regexp "-encoding") command 0 with
   | exception Not_found -> command ^ " " ^ t_file_name
   | _ ->
@@ -164,7 +184,7 @@ let check_substring substr str =
 
 let compare_stack_trace target_trace error_trace =
   check_substring
-    ("java.lang.NullPointerException" ^ "[ \t\r\n]+" ^ target_trace)
+    (!bug_type ^ "[^\n]+" ^ "\n" ^ "[ \t\r]+" ^ target_trace)
     error_trace
 
 let check_package_name_presence package_name error_trace =
@@ -188,6 +208,7 @@ let check_useless_npe error_trace =
 
 let run_type str =
   if Str.string_match (Str.regexp "^javac") str 0 then Compile
+  else if Str.string_match (Str.regexp "^find") str 0 then Group
   else if Str.string_match (Str.regexp "^java") str 0 then Test
   else failwith "not supported build type"
 
@@ -213,7 +234,7 @@ let execute_command command =
     close_channel (stdout, stdin, stderr)
   in
   match run_type command with
-  | Compile -> execute command
+  | Compile | Group -> execute command
   | Test -> execute ("timeout 5s " ^ command)
 
 let simple_compiler program_dir command =
@@ -259,16 +280,19 @@ let insert_test oc (file_num, tc, time) =
   let insert oc (i_set, m_bodies) =
     let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
     let start =
-      "\npublic static void main(String args[]) throws Exception, Throwable {\n"
+      "@Test\npublic void test() {\n"
+      (* "\npublic static void main(String args[]) throws Exception, Throwable {\n" *)
     in
     need_default_class m_bodies;
     get_package !Cmdline.extension |> output_string oc;
     (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
-    get_imports i_set ^ "\n" |> output_string oc;
+    get_imports i_set ^ "import org.junit.Test;\n\n" |> output_string oc;
     output_string oc time;
     "public class UnitconTest" ^ string_of_int file_num ^ " {\n"
     |> output_string oc;
-    start ^ m_bodies ^ "}\n}\n" |> output_string oc;
+    start ^ "try {\n" ^ m_bodies
+    ^ "}\ncatch(Exception e) {\ne.printStackTrace();\n}\n" ^ "}\n}\n"
+    |> output_string oc;
     flush oc;
     close_out oc
   in
@@ -414,6 +438,7 @@ let init program_dir =
     };
   init_test_folder !info.test_dir;
   cons !info.test_dir "log.txt" |> Logger.from_file;
+  get_bug_type (cons con_path "expected_bug_type" |> cons !info.program_dir);
   Logger.info "Start UnitCon for %s" program_dir
 
 (* return: (testcase * list(partial testcase)) *)
