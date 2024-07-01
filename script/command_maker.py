@@ -4,81 +4,16 @@ import os
 import shutil
 import subprocess
 
-manifest_file_name = "Manifest"
 dependency_jar = "with_dependency.jar"
-test_dir = "unitcon_tests"
-test_file_name = "UnitconTest"
-
-
-def make_java_files(project_dir):
-    java_files = os.path.join(project_dir, "java_files")
-    unitcon_files = os.path.join(project_dir, "unitcon_files")
-    if os.path.isfile(java_files):
-        lines = []
-        with open(java_files, 'r') as f:
-            lines = f.readlines()
-        with open(unitcon_files, 'w') as f:
-            for line in lines:
-                if line.startswith("Main.java"):
-                    f.write("")
-                else:
-                    f.write(line)
-
-
-def copy_build_cmd(project_dir):
-    file_path = os.path.join(project_dir, "unitcon_properties")
-    lines = []
-    with open(os.path.join(file_path, "unitcon_build_command"), 'r') as f:
-        lines = f.readlines()
-    with open(os.path.join(file_path, "compile_command"), 'w') as f:
-        for line in lines:
-            if "@java_files" in line:
-                files = test_dir + "/*.java " + "@unitcon_files"
-                f.write(line.replace("@java_files", files))
-            else:
-                f.write(line)
-
-
-def modify_test_cmd(project_dir):
-    file_path = os.path.join(project_dir, "unitcon_properties")
-    lines = []
-    with open(os.path.join(file_path, "test_command"), 'r') as f:
-        lines = f.readlines()
-    with open(os.path.join(file_path, "execute_command"), 'w') as f:
-        for line in lines:
-            if ":. Main" in line:
-                f.write(line.replace(":. Main", ":unitcon_tests:."))
-            else:
-                f.write(line)
 
 
 def make_dependency_jar(project_dir, classpaths):
-    manifest_file = os.path.join(project_dir, manifest_file_name)
-    contents = 'Class-Path: ' + '\n  '.join(
-        classpaths) + '\nMain-Class: ' + test_file_name
-    with open(manifest_file, 'w') as f:
-        f.write(contents)
-        f.write('\n')
-
     command = [
-        'jar', '-cmf', manifest_file_name, dependency_jar,
-        '$(find . -name "*.jar")', '$(find . -name "classes")'
+        'jar', '-cf', dependency_jar, '$(find . -name "*.jar")',
+        '$(find . -name "*.class")'
     ]
     subprocess.run(' '.join(command), cwd=project_dir,
                    shell=True)  # make dependency_jar file
-
-
-def write_command(cmd_type, file):
-    command = []
-    if cmd_type == "compile":
-        command = ["javac", "-cp", dependency_jar, test_dir + "/*.java"]
-    elif cmd_type == "execute":
-        command = ["java", "-cp", dependency_jar + ":" + test_dir + ":."]
-    assert len(command) > 0, "Failed to make command line"
-
-    with open(file, 'w') as f:
-        f.write(' '.join(command))
-        f.write('\n')
 
 
 def collect_classpaths(project_dir):
@@ -101,16 +36,10 @@ def make_build_command(project_dir):
     classpaths = [os.path.relpath(p, start=project_dir) for p in abspaths]
     make_dependency_jar(project_dir, classpaths)
 
-    file_path = os.path.join(project_dir, "unitcon_properties")
-    build_file = os.path.join(file_path, "compile_command")
-    execute_file = os.path.join(file_path, "execute_command")
-    write_command("compile", build_file)
-    write_command("execute", execute_file)
-
 
 def execute_build_cmd(project_dir):
     build_cmd_file = os.path.join(project_dir, "unitcon_properties",
-                                  "unitcon_build_command")
+                                  "build_command")
     assert os.path.isfile(build_cmd_file), f"Failed to build {project_dir}"
     with open(build_cmd_file, "r") as f:
         for cmd in f.readlines():
@@ -124,20 +53,10 @@ def main():
         type=pathlib.Path,
         default=None,
         help='Project directory where need to create build command files')
-    parser.add_argument("build_type",
-                        type=str,
-                        default=None,
-                        help='[maven | javac]')
     args = parser.parse_args()
 
-    if args.build_type == "maven":
-        execute_build_cmd(args.project)
-        make_build_command(args.project)
-    elif args.build_type == "javac":
-        path = os.path.join(args.project, 'source')
-        make_java_files(path)
-        copy_build_cmd(path)
-        modify_test_cmd(path)
+    execute_build_cmd(args.project)
+    make_build_command(args.project)
 
 
 if __name__ == "__main__":
