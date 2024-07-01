@@ -1104,43 +1104,42 @@ let default_value_list typ import p_info =
   let lst = List.rev_append predef extra in
   match typ with
   | Int | Long | Short | Byte ->
-      List.fold_left
-        (fun acc x ->
-          match int_of_string_opt x with
-          | Some i -> AST.Primitive (Z i) :: acc
-          | _ -> acc)
-        [] lst
+      let f acc x =
+        match int_of_string_opt x with
+        | Some i -> AST.Primitive (Z i) :: acc
+        | _ -> acc
+      in
+      List.fold_left f [] lst
   | Float | Double ->
-      List.fold_left
-        (fun acc x ->
-          match float_of_string_opt x with
-          | Some i -> AST.Primitive (R i) :: acc
-          | _ -> acc)
-        [] lst
+      let f acc x =
+        match float_of_string_opt x with
+        | Some i -> AST.Primitive (R i) :: acc
+        | _ -> acc
+      in
+      List.fold_left f [] lst
   | Bool ->
-      List.fold_left
-        (fun acc x ->
-          match bool_of_string_opt x with
-          | Some i -> AST.Primitive (B i) :: acc
-          | _ -> acc)
-        [] lst
+      let f acc x =
+        match bool_of_string_opt x with
+        | Some i -> AST.Primitive (B i) :: acc
+        | _ -> acc
+      in
+      List.fold_left f [] lst
   | Char ->
-      List.fold_left
-        (fun acc x ->
-          if String.length x = 1 then AST.Primitive (C x.[0]) :: acc else acc)
-        [] lst
+      let f acc x =
+        if String.length x = 1 then AST.Primitive (C x.[0]) :: acc else acc
+      in
+      List.fold_left f [] lst
   | String ->
       (* String constant is already expanded when finding error entries *)
-      List.fold_left
-        (fun acc x ->
-          if List.mem (AST.Primitive (S x)) acc then acc
-          else if x = "NULL" then AST.Null :: acc
-          else AST.Primitive (S x) :: acc)
-        [] predef
+      let f acc x =
+        if List.mem (AST.Primitive (S x)) acc then acc
+        else if x = "NULL" then AST.Null :: acc
+        else AST.Primitive (S x) :: acc
+      in
+      List.fold_left f [] predef
   | _ ->
-      List.fold_left
-        (fun acc x -> if x = "NULL" then AST.Null :: acc else acc)
-        [] lst
+      let f acc x = if x = "NULL" then AST.Null :: acc else acc in
+      List.fold_left f [] lst
 
 let not_found_value v =
   match v.Value.value with Value.Eq NonValue -> true | _ -> false
@@ -1157,36 +1156,82 @@ let filter_size id lst =
       lst
   else lst
 
+let get_z3_val (v : Value.const) =
+  match v with
+  | Int i | Long i | Short i | Byte i ->
+      Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
+  | Float f | Double f ->
+      Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f)
+  | _ -> failwith "not implemented other number"
+
+let get_z3_id (v : Value.const) id =
+  match v with
+  | Int _ | Long _ | Short _ | Byte _ ->
+      Z3.Arithmetic.Integer.mk_const_s z3ctx id
+  | Float _ | Double _ -> Z3.Arithmetic.Real.mk_const_s z3ctx id
+  | _ -> failwith "not implemented other number"
+
+let get_z3_result (op : Value.op) id =
+  match op with
+  | Eq v ->
+      let var = get_z3_id v id in
+      calc_z3 var [ Z3.Boolean.mk_eq z3ctx var (get_z3_val v) ]
+  | Neq v ->
+      let var = get_z3_id v id in
+      calc_z3 var
+        [ Z3.Boolean.mk_eq z3ctx var (get_z3_val v) |> Z3.Boolean.mk_not z3ctx ]
+  | Le v ->
+      let var = get_z3_id v id in
+      calc_z3 var [ Z3.Arithmetic.mk_le z3ctx var (get_z3_val v) ]
+  | Lt v ->
+      let var = get_z3_id v id in
+      calc_z3 var [ Z3.Arithmetic.mk_lt z3ctx var (get_z3_val v) ]
+  | Ge v ->
+      let var = get_z3_id v id in
+      calc_z3 var [ Z3.Arithmetic.mk_ge z3ctx var (get_z3_val v) ]
+  | Gt v ->
+      let var = get_z3_id v id in
+      calc_z3 var [ Z3.Arithmetic.mk_gt z3ctx var (get_z3_val v) ]
+  | Between (v1, v2) ->
+      let var = get_z3_id v1 id in
+      calc_z3 var
+        [
+          Z3.Arithmetic.mk_ge z3ctx var (get_z3_val v1);
+          Z3.Arithmetic.mk_le z3ctx var (get_z3_val v2);
+        ]
+  | Outside (v1, v2) ->
+      let var = get_z3_id v1 id in
+      calc_z3 var
+        [
+          Z3.Arithmetic.mk_lt z3ctx var (get_z3_val v1);
+          Z3.Arithmetic.mk_gt z3ctx var (get_z3_val v2);
+        ]
+
 let calc_value id value default =
   let prec = if value.Value.from_error then 2 else 0 in
+  let calc_int result =
+    match int_of_string_opt result with
+    | Some i ->
+        calc_value_list value.Value.from_error
+          [ (prec, AST.Primitive (Z i)) ]
+          default
+        |> filter_size id
+    | _ -> calc_value_list false [] default |> filter_size id
+  in
+  let calc_float result =
+    match float_of_string_opt result with
+    | Some f ->
+        calc_value_list value.Value.from_error
+          [ (prec, AST.Primitive (R f)) ]
+          default
+    | _ -> calc_value_list false [] default
+  in
   match value.Value.value with
   | Eq v -> (
+      let result = get_z3_result value.Value.value id in
       match v with
-      | Int i | Long i | Short i | Byte i -> (
-          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
-            |> Z3.Boolean.mk_eq z3ctx var
-          in
-          match calc_z3 var [ exp ] |> int_of_string_opt with
-          | Some z3_i ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (Z z3_i)) ]
-                default
-              |> filter_size id
-          | _ -> calc_value_list false [] default |> filter_size id)
-      | Float f | Double f -> (
-          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f)
-            |> Z3.Boolean.mk_eq z3ctx var
-          in
-          match calc_z3 var [ exp ] |> float_of_string_opt with
-          | Some z3_f ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (R z3_f)) ]
-                default
-          | _ -> calc_value_list false [] default)
+      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
+      | Float _ | Double _ -> calc_float result
       | Bool b ->
           calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (B b)) ]
@@ -1202,31 +1247,10 @@ let calc_value id value default =
       | Null -> [ (prec, AST.Null) ]
       | _ -> failwith "not implemented eq")
   | Neq v -> (
+      let result = get_z3_result value.Value.value id in
       match v with
-      | Int i | Long i | Short i | Byte i -> (
-          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
-            |> Z3.Boolean.mk_eq z3ctx var |> Z3.Boolean.mk_not z3ctx
-          in
-          match calc_z3 var [ exp ] |> int_of_string_opt with
-          | Some z3_i ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (Z z3_i)) ]
-                default
-          | _ -> calc_value_list false [] default)
-      | Float f | Double f -> (
-          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f)
-            |> Z3.Boolean.mk_eq z3ctx var |> Z3.Boolean.mk_not z3ctx
-          in
-          match calc_z3 var [ exp ] |> float_of_string_opt with
-          | Some z3_f ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (R z3_f)) ]
-                default
-          | _ -> calc_value_list false [] default)
+      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
+      | Float _ | Double _ -> calc_float result
       | Bool b ->
           calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (B (not b))) ]
@@ -1243,192 +1267,41 @@ let calc_value id value default =
             [] default
       | _ -> failwith "not implemented neq")
   | Le v -> (
+      let result = get_z3_result value.Value.value id in
       match v with
-      | Int i | Long i | Short i | Byte i -> (
-          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
-            |> Z3.Arithmetic.mk_le z3ctx var
-          in
-          match calc_z3 var [ exp ] |> int_of_string_opt with
-          | Some z3_i ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (Z z3_i)) ]
-                default
-          | _ -> calc_value_list false [] default)
-      | Float f | Double f -> (
-          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f)
-            |> Z3.Arithmetic.mk_le z3ctx var
-          in
-          match calc_z3 var [ exp ] |> float_of_string_opt with
-          | Some z3_f ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (R z3_f)) ]
-                default
-          | _ -> calc_value_list false [] default)
+      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
+      | Float _ | Double _ -> calc_float result
       | _ -> failwith "not implemented le")
   | Lt v -> (
+      let result = get_z3_result value.Value.value id in
       match v with
-      | Int i | Long i | Short i | Byte i -> (
-          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
-            |> Z3.Arithmetic.mk_lt z3ctx var
-          in
-          match calc_z3 var [ exp ] |> int_of_string_opt with
-          | Some z3_i ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (Z z3_i)) ]
-                default
-          | _ -> calc_value_list false [] default)
-      | Float f | Double f -> (
-          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f)
-            |> Z3.Arithmetic.mk_lt z3ctx var
-          in
-          match calc_z3 var [ exp ] |> float_of_string_opt with
-          | Some z3_f ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (R z3_f)) ]
-                default
-          | _ -> calc_value_list false [] default)
+      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
+      | Float _ | Double _ -> calc_float result
       | _ -> failwith "not implemented lt")
   | Ge v -> (
+      let result = get_z3_result value.Value.value id in
       match v with
-      | Int i | Long i | Short i | Byte i -> (
-          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
-            |> Z3.Arithmetic.mk_ge z3ctx var
-          in
-          match calc_z3 var [ exp ] |> int_of_string_opt with
-          | Some z3_i ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (Z z3_i)) ]
-                default
-              |> filter_size id
-          | _ -> calc_value_list false [] default |> filter_size id)
-      | Float f | Double f -> (
-          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f)
-            |> Z3.Arithmetic.mk_ge z3ctx var
-          in
-          match calc_z3 var [ exp ] |> float_of_string_opt with
-          | Some z3_f ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (R z3_f)) ]
-                default
-          | _ -> calc_value_list false [] default)
+      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
+      | Float _ | Double _ -> calc_float result
       | _ -> failwith "not implemented ge")
   | Gt v -> (
+      let result = get_z3_result value.Value.value id in
       match v with
-      | Int i | Long i | Short i | Byte i -> (
-          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Integer.mk_numeral_i z3ctx i
-            |> Z3.Arithmetic.mk_gt z3ctx var
-          in
-          match calc_z3 var [ exp ] |> int_of_string_opt with
-          | Some z3_i ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (Z z3_i)) ]
-                default
-          | _ -> calc_value_list false [] default)
-      | Float f | Double f -> (
-          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let exp =
-            Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f)
-            |> Z3.Arithmetic.mk_gt z3ctx var
-          in
-          match calc_z3 var [ exp ] |> float_of_string_opt with
-          | Some z3_f ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (R z3_f)) ]
-                default
-          | _ -> calc_value_list false [] default)
+      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
+      | Float _ | Double _ -> calc_float result
       | _ -> failwith "not implemented gt")
   | Between (v1, v2) -> (
+      let result = get_z3_result value.Value.value id in
       match (v1, v2) with
-      | Int i1, Int i2 | Long i1, Long i2 | Int i1, Long i2 | Long i1, Int i2
-        -> (
-          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let exp =
-            [
-              Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1
-              |> Z3.Arithmetic.mk_ge z3ctx var;
-              Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2
-              |> Z3.Arithmetic.mk_le z3ctx var;
-            ]
-          in
-          match calc_z3 var exp |> int_of_string_opt with
-          | Some z3_i ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (Z z3_i)) ]
-                default
-          | _ -> calc_value_list false [] default)
-      | Float f1, Float f2
-      | Double f1, Double f2
-      | Float f1, Double f2
-      | Double f1, Float f2 -> (
-          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let exp =
-            [
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f1)
-              |> Z3.Arithmetic.mk_ge z3ctx var;
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f2)
-              |> Z3.Arithmetic.mk_le z3ctx var;
-            ]
-          in
-          match calc_z3 var exp |> float_of_string_opt with
-          | Some z3_f ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (R z3_f)) ]
-                default
-          | _ -> calc_value_list false [] default)
+      | Int _, _ | Long _, _ -> calc_int result
+      | Float _, _ | Double _, _ -> calc_float result
       | MinusInf, PlusInf -> calc_value_list value.Value.from_error [] default
       | _ -> failwith "not implemented between")
   | Outside (v1, v2) -> (
+      let result = get_z3_result value.Value.value id in
       match (v1, v2) with
-      | Int i1, Int i2 | Long i1, Long i2 | Int i1, Long i2 | Long i1, Int i2
-        -> (
-          let var = Z3.Arithmetic.Integer.mk_const_s z3ctx id in
-          let exp =
-            [
-              Z3.Arithmetic.Integer.mk_numeral_i z3ctx i1
-              |> Z3.Arithmetic.mk_lt z3ctx var;
-              Z3.Arithmetic.Integer.mk_numeral_i z3ctx i2
-              |> Z3.Arithmetic.mk_gt z3ctx var;
-            ]
-          in
-          match calc_z3 var exp |> int_of_string_opt with
-          | Some z3_i ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (Z z3_i)) ]
-                default
-          | _ -> calc_value_list false [] default)
-      | Float f1, Float f2
-      | Double f1, Double f2
-      | Float f1, Double f2
-      | Double f1, Float f2 -> (
-          let var = Z3.Arithmetic.Real.mk_const_s z3ctx id in
-          let exp =
-            [
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f1)
-              |> Z3.Arithmetic.mk_lt z3ctx var;
-              Z3.Arithmetic.Real.mk_numeral_s z3ctx (string_of_float f2)
-              |> Z3.Arithmetic.mk_gt z3ctx var;
-            ]
-          in
-          match calc_z3 var exp |> float_of_string_opt with
-          | Some z3_f ->
-              calc_value_list value.Value.from_error
-                [ (prec, AST.Primitive (R z3_f)) ]
-                default
-          | _ -> calc_value_list false [] default)
+      | Int _, _ | Long _, _ -> calc_int result
+      | Float _, _ | Double _, _ -> calc_float result
       | _ -> failwith "not implemented outside")
 
 let find_value_from_variable memory value target_variable =
@@ -1552,27 +1425,25 @@ let satisfied_c m_summary id candidate_constructor summary =
   in
   if target_symbol = "" then [ (true, List.hd c_summaries) ]
   else
-    List.fold_left
-      (fun lst c_summary ->
-        ( [
-            ( find_relation target_symbol m_summary.relation,
-              AST.get_id_symbol (fst c_summary.postcond) "this"
-              |> AST.get_rh_name );
-          ]
-          |> check_intersect ~is_init:true m_summary c_summary,
-          c_summary )
-        :: lst)
-      [] c_summaries
-    |> List.fold_left
-         (fun lst (check_summary, c_summary) ->
-           if List.filter (fun (_, c) -> c = false) check_summary = [] then
-             ( true,
-               c_summary
-               |> new_value_summary
-                    (combine_value c_summary.value check_summary) )
-             :: lst
-           else (false, c_summary) :: lst)
-         []
+    let meet lst c_summary =
+      ( [
+          ( find_relation target_symbol m_summary.relation,
+            AST.get_id_symbol (fst c_summary.postcond) "this" |> AST.get_rh_name
+          );
+        ]
+        |> check_intersect ~is_init:true m_summary c_summary,
+        c_summary )
+      :: lst
+    in
+    let sat lst (check_summary, c_summary) =
+      if List.filter (fun (_, c) -> c = false) check_summary = [] then
+        ( true,
+          c_summary
+          |> new_value_summary (combine_value c_summary.value check_summary) )
+        :: lst
+      else (false, c_summary) :: lst
+    in
+    List.fold_left meet [] c_summaries |> List.fold_left sat []
 
 let find_class_file =
   List.fold_left
@@ -1750,27 +1621,27 @@ let add_new_mmap f1 f2 org_key field map =
       |> Condition.M.add f1 (Condition.M.add RH_Any f2 Condition.M.empty)
 
 let mk_new_memory org_key t_key_lst t_summary new_mem =
-  List.fold_left
-    (fun (sym, value, new_pre_mem, new_post_mem) (_, field, key) ->
-      let field_name = AST.get_rh_name ~is_var:true field in
-      if field_name = "" then (sym, value, new_pre_mem, new_post_mem)
-      else
-        let fn1 = get_fresh_num 1 in
-        let fn2 = get_fresh_num fn1 in
-        let fv1 = string_of_int fn1 |> String.cat "u" |> mk_symbol in
-        let fv2 = string_of_int fn2 |> String.cat "u" |> mk_symbol in
-        let new_value =
-          try
-            Value.M.find
-              (AST.get_tail_symbol "" key (snd t_summary.precond)
-              |> AST.get_rh_name)
-              t_summary.value
-          with _ -> value
-        in
-        let new_pre_mem = add_new_mmap fv1 fv2 org_key field new_pre_mem in
-        let new_post_mem = add_new_mmap fv1 fv2 org_key field new_post_mem in
-        (fv2, new_value, new_pre_mem, new_post_mem))
-    new_mem t_key_lst
+  let func (sym, value, new_pre_mem, new_post_mem) (_, field, key) =
+    let field_name = AST.get_rh_name ~is_var:true field in
+    if field_name = "" then (sym, value, new_pre_mem, new_post_mem)
+    else
+      let fn1 = get_fresh_num 1 in
+      let fn2 = get_fresh_num fn1 in
+      let fv1 = string_of_int fn1 |> String.cat "u" |> mk_symbol in
+      let fv2 = string_of_int fn2 |> String.cat "u" |> mk_symbol in
+      let new_value =
+        try
+          Value.M.find
+            (AST.get_tail_symbol "" key (snd t_summary.precond)
+            |> AST.get_rh_name)
+            t_summary.value
+        with _ -> value
+      in
+      let new_pre_mem = add_new_mmap fv1 fv2 org_key field new_pre_mem in
+      let new_post_mem = add_new_mmap fv1 fv2 org_key field new_post_mem in
+      (fv2, new_value, new_pre_mem, new_post_mem)
+  in
+  List.fold_left func new_mem t_key_lst
 
 let rec forward count var_symbol this_symbol t_summary c_summary new_memory =
   let t_key_list = n_forward count var_symbol (snd t_summary.precond) in
@@ -1860,28 +1731,23 @@ let get_param v summary =
   let get_field id =
     AST.get_field_from_ufmap id (fst summary.precond) summary.use_field
   in
+  let make_new_var id =
+    AST.
+      {
+        import = get_package_from_v v;
+        variable = (v, mk_some !new_var);
+        field = get_field id;
+        summary;
+      }
+  in
   match v with
   | Var (typ, _) when typ = NonType -> None
   | This _ ->
       incr new_var;
-      AST.
-        {
-          import = get_package_from_v v;
-          variable = (v, mk_some !new_var);
-          field = get_field "this";
-          summary;
-        }
-      |> mk_some
+      make_new_var "this" |> mk_some
   | Var (_, id) ->
       incr new_var;
-      AST.
-        {
-          import = get_package_from_v v;
-          variable = (v, mk_some !new_var);
-          field = get_field id;
-          summary;
-        }
-      |> mk_some
+      make_new_var id |> mk_some
 
 let get_org_params_list summary org_param =
   List.fold_left
@@ -2264,6 +2130,15 @@ let get_arg_seq (args : AST.id list) =
             x))
     [ AST.Skip ] args
 
+let mk_arg_seq arg class_name =
+  let modified_x x =
+    if is_primitive_from_v x then AST.modify_import class_name x else x
+  in
+  get_arg_seq
+    (List.fold_left
+       (fun lst x -> AST.Variable (modified_x x) :: lst)
+       [] (AST.get_arg arg))
+
 let const_unroll p summary m_info i_info p_info =
   let get_r3 x =
     List.fold_left
@@ -2340,15 +2215,7 @@ let rec arg_in_assign_unroll (prec, p) =
   match p with
   | AST.Assign (_, _, f, arg) when AST.arg_in_assign p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
-      get_arg_seq
-        (List.fold_left
-           (fun lst x ->
-             let x =
-               if is_primitive_from_v x then AST.modify_import class_name x
-               else x
-             in
-             AST.Variable x :: lst)
-           [] (AST.get_arg arg))
+      mk_arg_seq arg class_name
       |> List.fold_left
            (fun lst x ->
              (prec, AST.arg_in_assign_rule p x (AST.Param (AST.get_arg arg)))
@@ -2391,15 +2258,7 @@ let rec arg_in_void_unroll (prec, p) =
   match p with
   | AST.Void (_, f, arg) when AST.arg_in_void p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
-      get_arg_seq
-        (List.fold_left
-           (fun lst x ->
-             let x =
-               if is_primitive_from_v x then AST.modify_import class_name x
-               else x
-             in
-             AST.Variable x :: lst)
-           [] (AST.get_arg arg))
+      mk_arg_seq arg class_name
       |> List.fold_left
            (fun lst x ->
              (prec, AST.arg_in_void_rule p x (AST.Param (AST.get_arg arg)))
