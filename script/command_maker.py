@@ -4,16 +4,7 @@ import os
 import shutil
 import subprocess
 
-dependency_jar = "with_dependency.jar"
-
-
-def make_dependency_jar(project_dir, classpaths):
-    command = [
-        'jar', '-cf', dependency_jar, '$(find . -name "*.jar")',
-        '$(find . -name "*.class")'
-    ]
-    subprocess.run(' '.join(command), cwd=project_dir,
-                   shell=True)  # make dependency_jar file
+DEPENDENCY_JAR = "with_dependency.jar"
 
 
 def collect_classpaths(project_dir):
@@ -25,38 +16,59 @@ def collect_classpaths(project_dir):
             for filename in filenames:
                 if filename.endswith(".jar"):
                     classpaths.append(os.path.join(dirpath, filename))
-            for dirname in dirnames:
-                if dirname.endswith("classes"):
-                    classpaths.append(os.path.join(dirpath, dirname))
+                elif filename.endswith(".class"):
+                    classpaths.append(os.path.join(dirpath, filename))
     return classpaths
 
 
-def make_build_command(project_dir):
+def make_jar_with_dependencies(project_dir):
     abspaths = collect_classpaths(project_dir)
     classpaths = [os.path.relpath(p, start=project_dir) for p in abspaths]
-    make_dependency_jar(project_dir, classpaths)
+    with open(os.path.join(project_dir, "jar_files"), "w") as f:
+        f.write("\n".join(classpaths))
+        f.write("\n")
+
+    command = "jar -cf with_dependency.jar @jar_files"
+    try:
+        output = subprocess.check_output(command,
+                                         cwd=project_dir,
+                                         stderr=subprocess.STDOUT,
+                                         shell=True)
+    except subprocess.CalledProcessError as ex:
+        output = e.output
+    return output.decode()
 
 
 def execute_build_cmd(project_dir):
-    build_cmd_file = os.path.join(project_dir, "unitcon_properties",
-                                  "build_command")
-    assert os.path.isfile(build_cmd_file), f"Failed to build {project_dir}"
+    build_cmd_file = os.path.join(project_dir, "unitcon_properties", "build_command")
+    assert os.path.isfile(build_cmd_file), f"Failed to find build command file {build_cmd_file}"
+
     with open(build_cmd_file, "r") as f:
-        for cmd in f.readlines():
-            subprocess.run(cmd, cwd=project_dir, shell=True)
+        commands = f.readlines()
+
+    outputs = []
+    try:
+        for cmd in commands:
+            output = subprocess.check_output(cmd,
+                                             cwd=project_dir,
+                                             stderr=subprocess.STDOUT,
+                                             shell=True)
+            outputs.append(output.decode())
+    except subprocess.CalledProcessError as e:
+        outputs.append(e.output.decode())
+    return "\n".join(outputs)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "project",
-        type=pathlib.Path,
-        default=None,
-        help='Project directory where need to create build command files')
+    parser.add_argument("project",
+                        type=pathlib.Path,
+                        default=None,
+                        help='Project directory where need to create build command files')
     args = parser.parse_args()
 
     execute_build_cmd(args.project)
-    make_build_command(args.project)
+    make_jar_with_dependencies(args.project)
 
 
 if __name__ == "__main__":
