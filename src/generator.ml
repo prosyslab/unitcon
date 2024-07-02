@@ -1228,10 +1228,13 @@ let calc_value id value default =
   in
   match value.Value.value with
   | Eq v -> (
-      let result = get_z3_result value.Value.value id in
       match v with
-      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
-      | Float _ | Double _ -> calc_float result
+      | Int _ | Long _ | Short _ | Byte _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_int result
+      | Float _ | Double _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_float result
       | Bool b ->
           calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (B b)) ]
@@ -1247,10 +1250,13 @@ let calc_value id value default =
       | Null -> [ (prec, AST.Null) ]
       | _ -> failwith "not implemented eq")
   | Neq v -> (
-      let result = get_z3_result value.Value.value id in
       match v with
-      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
-      | Float _ | Double _ -> calc_float result
+      | Int _ | Long _ | Short _ | Byte _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_int result
+      | Float _ | Double _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_float result
       | Bool b ->
           calc_value_list value.Value.from_error
             [ (prec, AST.Primitive (B (not b))) ]
@@ -1267,41 +1273,59 @@ let calc_value id value default =
             [] default
       | _ -> failwith "not implemented neq")
   | Le v -> (
-      let result = get_z3_result value.Value.value id in
       match v with
-      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
-      | Float _ | Double _ -> calc_float result
+      | Int _ | Long _ | Short _ | Byte _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_int result
+      | Float _ | Double _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_float result
       | _ -> failwith "not implemented le")
   | Lt v -> (
-      let result = get_z3_result value.Value.value id in
       match v with
-      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
-      | Float _ | Double _ -> calc_float result
+      | Int _ | Long _ | Short _ | Byte _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_int result
+      | Float _ | Double _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_float result
       | _ -> failwith "not implemented lt")
   | Ge v -> (
-      let result = get_z3_result value.Value.value id in
       match v with
-      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
-      | Float _ | Double _ -> calc_float result
+      | Int _ | Long _ | Short _ | Byte _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_int result
+      | Float _ | Double _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_float result
       | _ -> failwith "not implemented ge")
   | Gt v -> (
-      let result = get_z3_result value.Value.value id in
       match v with
-      | Int _ | Long _ | Short _ | Byte _ -> calc_int result
-      | Float _ | Double _ -> calc_float result
+      | Int _ | Long _ | Short _ | Byte _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_int result
+      | Float _ | Double _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_float result
       | _ -> failwith "not implemented gt")
   | Between (v1, v2) -> (
-      let result = get_z3_result value.Value.value id in
       match (v1, v2) with
-      | Int _, _ | Long _, _ -> calc_int result
-      | Float _, _ | Double _, _ -> calc_float result
+      | Int _, _ | Long _, _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_int result
+      | Float _, _ | Double _, _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_float result
       | MinusInf, PlusInf -> calc_value_list value.Value.from_error [] default
       | _ -> failwith "not implemented between")
   | Outside (v1, v2) -> (
-      let result = get_z3_result value.Value.value id in
       match (v1, v2) with
-      | Int _, _ | Long _, _ -> calc_int result
-      | Float _, _ | Double _, _ -> calc_float result
+      | Int _, _ | Long _, _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_int result
+      | Float _, _ | Double _, _ ->
+          let result = get_z3_result value.Value.value id in
+          calc_float result
       | _ -> failwith "not implemented outside")
 
 let find_value_from_variable memory value target_variable =
