@@ -90,7 +90,7 @@ let get_bug_type filename =
     bug_type := "java.lang.NullPointerException"
   else
     let ic = open_in filename in
-    bug_type := really_input_string ic (in_channel_length ic);
+    bug_type := really_input_string ic (in_channel_length ic) |> Regexp.rm_space;
     close_in ic
 
 let parse_error_summary filename =
@@ -149,7 +149,7 @@ let compile_command_of_file file =
   (* TODO: remove compile_command_file *)
   if not (Sys.file_exists file) then
     "find ./unitcon_tests/ -name \"*.java\" > test_files; "
-    ^ "javac -cp with_dependency_new.jar:../deps/junit-4.11.jar @test_files"
+    ^ "javac -cp with_dependency.jar:../deps/junit-4.11.jar @test_files"
   else
     let ic = open_in file in
     let s = really_input_string ic (in_channel_length ic) |> Regexp.rm_space in
@@ -159,8 +159,7 @@ let compile_command_of_file file =
 let execute_command_of_file file =
   (* TODO: remove execute_command_file *)
   if not (Sys.file_exists file) then
-    "java -cp \
-     with_dependency_new.jar:./unitcon_tests/:../deps/junit-4.11.jar:. \
+    "java -cp with_dependency.jar:./unitcon_tests/:../deps/junit-4.11.jar:. \
      org.junit.runner.JUnitCore"
   else
     let ic = open_in file in
@@ -183,9 +182,7 @@ let check_substring substr str =
   | _ -> true
 
 let compare_stack_trace target_trace error_trace =
-  check_substring
-    (!bug_type ^ "[^\n]+" ^ "\n" ^ "[ \t\r]+" ^ target_trace)
-    error_trace
+  check_substring (!bug_type ^ ".*" ^ "[ \t\r\n]+" ^ target_trace) error_trace
 
 let check_package_name_presence package_name error_trace =
   check_substring package_name error_trace
