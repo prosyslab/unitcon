@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 
+MANIFEST_FILE = "Manifest"
 DEPENDENCY_JAR = "with_dependency.jar"
 
 
@@ -24,18 +25,23 @@ def collect_classpaths(project_dir):
 def make_jar_with_dependencies(project_dir):
     abspaths = collect_classpaths(project_dir)
     classpaths = [os.path.relpath(p, start=project_dir) for p in abspaths]
+
+    with open(os.path.join(project_dir, MANIFEST_FILE), 'w') as f:
+        f.write('Class-Path: ' + '\n  '.join(classpaths))
+        f.write("\n")
+
     with open(os.path.join(project_dir, "jar_files"), "w") as f:
         f.write("\n".join(classpaths))
         f.write("\n")
 
-    command = "jar -cf with_dependency.jar @jar_files"
+    command = "jar -cmf Manifest with_dependency.jar @jar_files"
     try:
         output = subprocess.check_output(command,
                                          cwd=project_dir,
                                          stderr=subprocess.STDOUT,
                                          shell=True)
     except subprocess.CalledProcessError as ex:
-        output = e.output
+        output = ex.output
     return output.decode()
 
 
@@ -54,8 +60,8 @@ def execute_build_cmd(project_dir):
                                              stderr=subprocess.STDOUT,
                                              shell=True)
             outputs.append(output.decode())
-    except subprocess.CalledProcessError as e:
-        outputs.append(e.output.decode())
+    except subprocess.CalledProcessError as ex:
+        outputs.append(ex.output.decode())
     return "\n".join(outputs)
 
 
