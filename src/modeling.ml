@@ -5,28 +5,63 @@ module IG = Inheritance.G
    Method Summary
  * ************************************** *)
 
-let map_put_var =
+(* # of formal parameters is 0 *)
+let zero_var =
   Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var "value")
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "key")
   |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
-let map_put_premem =
-  let value_map = Condition.M.empty in
+(* # of formal parameters is 1
+   p is parameter's name *)
+let one_var p =
   Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v4")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "key") (Condition.RH_Symbol "v7")
-       |> Condition.M.add (Condition.RH_Var "value") (Condition.RH_Symbol "v8")
-       )
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var p)
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
 
-let map_put_postmem =
+(* # of formal parameters is 2
+   p1 is first parameter's name
+   p2 is second parameter's name *)
+let two_var p1 p2 =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var p2)
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var p1)
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+
+(* # of formal parameters is 3
+   p1 is first parameter's name
+   p2 is second parameter's name
+   p3 is third parameter's name *)
+let three_var p1 p2 p3 =
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v4") (Condition.RH_Var p3)
+  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var p2)
+  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var p1)
+  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+
+(* when # of formal parameters is 0, post_mem is same to pre_mem *)
+let zero_mem =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
+
+let one_premem p =
+  let value_map = Condition.M.empty in
+  Condition.M.empty
+  |> Condition.M.add (Condition.RH_Symbol "v1")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v2")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Condition.M.add (Condition.RH_Symbol "v3")
+       (value_map
+       |> Condition.M.add (Condition.RH_Var p) (Condition.RH_Symbol "v5"))
+
+let one_postmem p =
+  let value_map = Condition.M.empty in
+  one_premem p
+  |> Condition.M.add (Condition.RH_Symbol "v5")
+       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+
+let two_premem p1 p2 =
   let value_map = Condition.M.empty in
   Condition.M.empty
   |> Condition.M.add (Condition.RH_Symbol "v1")
@@ -37,83 +72,18 @@ let map_put_postmem =
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
   |> Condition.M.add (Condition.RH_Symbol "v4")
        (value_map
-       |> Condition.M.add (Condition.RH_Var "key") (Condition.RH_Symbol "v7")
-       |> Condition.M.add (Condition.RH_Var "value") (Condition.RH_Symbol "v8")
-       )
+       |> Condition.M.add (Condition.RH_Var p1) (Condition.RH_Symbol "v7")
+       |> Condition.M.add (Condition.RH_Var p2) (Condition.RH_Symbol "v8"))
+
+let two_postmem p1 p2 =
+  let value_map = Condition.M.empty in
+  two_premem p1 p2
   |> Condition.M.add (Condition.RH_Symbol "v7")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
   |> Condition.M.add (Condition.RH_Symbol "v8")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
 
-let array_list_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let array_list_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let array_list_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let file_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "file")
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let file_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "file") (Condition.RH_Symbol "v5"))
-
-let file_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "file") (Condition.RH_Symbol "v5"))
-  |> Condition.M.add (Condition.RH_Symbol "v5")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-
-(* let file_create_var =
-     Condition.M.empty
-     |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-   let file_create_premem =
-     let value_map = Condition.M.empty in
-     Condition.M.empty
-     |> Condition.M.add (Condition.RH_Symbol "v1")
-          (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-   let file_create_postmem =
-     let value_map = Condition.M.empty in
-     Condition.M.empty
-     |> Condition.M.add (Condition.RH_Symbol "v1")
-          (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map) *)
-
-let image_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v4") (Condition.RH_Var "t")
-  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var "h")
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "w")
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let image_premem =
+let three_premem p1 p2 p3 =
   let value_map = Condition.M.empty in
   Condition.M.empty
   |> Condition.M.add (Condition.RH_Symbol "v1")
@@ -126,26 +96,13 @@ let image_premem =
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v8") value_map)
   |> Condition.M.add (Condition.RH_Symbol "v5")
        (value_map
-       |> Condition.M.add (Condition.RH_Var "w") (Condition.RH_Symbol "v9")
-       |> Condition.M.add (Condition.RH_Var "h") (Condition.RH_Symbol "v10")
-       |> Condition.M.add (Condition.RH_Var "t") (Condition.RH_Symbol "v11"))
+       |> Condition.M.add (Condition.RH_Var p1) (Condition.RH_Symbol "v9")
+       |> Condition.M.add (Condition.RH_Var p2) (Condition.RH_Symbol "v10")
+       |> Condition.M.add (Condition.RH_Var p3) (Condition.RH_Symbol "v11"))
 
-let image_postmem =
+let three_postmem p1 p2 p3 =
   let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v7") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v4")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v8") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v5")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "w") (Condition.RH_Symbol "v9")
-       |> Condition.M.add (Condition.RH_Var "h") (Condition.RH_Symbol "v10")
-       |> Condition.M.add (Condition.RH_Var "t") (Condition.RH_Symbol "v11"))
+  three_premem p1 p2 p3
   |> Condition.M.add (Condition.RH_Symbol "v9")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
   |> Condition.M.add (Condition.RH_Symbol "v10")
@@ -153,352 +110,14 @@ let image_postmem =
   |> Condition.M.add (Condition.RH_Symbol "v11")
        (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v8") value_map)
 
-let image_create_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let image_create_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let image_create_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let class_get_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let class_get_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let class_get_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let print_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "file")
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let print_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "file") (Condition.RH_Symbol "v5"))
-
-let print_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "file") (Condition.RH_Symbol "v5"))
-  |> Condition.M.add (Condition.RH_Symbol "v5")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-
-let file_input_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "file")
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let file_input_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "file") (Condition.RH_Symbol "v5"))
-
-let file_input_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "file") (Condition.RH_Symbol "v5"))
-  |> Condition.M.add (Condition.RH_Symbol "v5")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-
-let obj_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let obj_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let obj_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let random_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let random_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let random_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let stringwriter_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let stringwriter_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let stringwriter_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
-
-let parseposition_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "index")
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let parseposition_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "index") (Condition.RH_Symbol "v5")
-       )
-
-let parseposition_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "val") (Condition.RH_Symbol "v5"))
-  |> Condition.M.add (Condition.RH_Symbol "v5")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-
-let bigdecimal_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "val")
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let bigdecimal_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "val") (Condition.RH_Symbol "v5"))
-
-let bigdecimal_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "val") (Condition.RH_Symbol "v5"))
-  |> Condition.M.add (Condition.RH_Symbol "v5")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-
-let string_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "s")
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let string_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "s") (Condition.RH_Symbol "v5"))
-
-let string_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "s") (Condition.RH_Symbol "v5"))
-  |> Condition.M.add (Condition.RH_Symbol "v5")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-
-let array_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "size")
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let array_value =
-  Value.M.empty
-  |> Value.M.add "v4" Value.{ from_error = false; value = Value.Ge (Int 1) }
-
-let array_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "size") (Condition.RH_Symbol "v5"))
-
-let array_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "size") (Condition.RH_Symbol "v5"))
-  |> Condition.M.add (Condition.RH_Symbol "v5")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-
-let array_set_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var "elem")
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "index")
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let array_set_value =
-  Value.M.empty
-  |> Value.M.add "v5" Value.{ from_error = false; value = Value.Ge (Int 0) }
-
-let array_set_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v4")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "index") (Condition.RH_Symbol "v7")
-       |> Condition.M.add (Condition.RH_Var "elem") (Condition.RH_Symbol "v8"))
-
-let array_set_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v4")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "index") (Condition.RH_Symbol "v7")
-       |> Condition.M.add (Condition.RH_Var "elem") (Condition.RH_Symbol "v8"))
-  |> Condition.M.add (Condition.RH_Symbol "v7")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v8")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
-
-let point_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var "y")
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var "x")
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-
-let point_premem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v7") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v4")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "x") (Condition.RH_Symbol "v8")
-       |> Condition.M.add (Condition.RH_Var "y") (Condition.RH_Symbol "v9"))
-
-let point_postmem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v7") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v4")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var "x") (Condition.RH_Symbol "v8")
-       |> Condition.M.add (Condition.RH_Var "y") (Condition.RH_Symbol "v9"))
-  |> Condition.M.add (Condition.RH_Symbol "v6")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v8") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v7")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v9") value_map)
-
 let map_put_summary =
+  let map_put_var = two_var "key" "value" in
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (map_put_var, map_put_premem);
-    postcond = (map_put_var, map_put_postmem);
+    precond = (map_put_var, two_premem "key" "value");
+    postcond = (map_put_var, two_postmem "key" "value");
     args = [];
   }
 
@@ -507,28 +126,30 @@ let array_list_summary =
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (array_list_var, array_list_premem);
-    postcond = (array_list_var, array_list_postmem);
+    precond = (zero_var, zero_mem);
+    postcond = (zero_var, zero_mem);
     args = [];
   }
 
 let file_summary =
+  let file_var = one_var "file" in
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (file_var, file_premem);
-    postcond = (file_var, file_postmem);
+    precond = (file_var, one_premem "file");
+    postcond = (file_var, one_postmem "file");
     args = [];
   }
 
 let image_summary =
+  let image_var = three_var "w" "h" "t" in
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (image_var, image_premem);
-    postcond = (image_var, image_postmem);
+    precond = (image_var, three_premem "w" "h" "t");
+    postcond = (image_var, three_postmem "w" "h" "t");
     args = [];
   }
 
@@ -537,8 +158,8 @@ let image_create_summary =
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (image_create_var, image_create_premem);
-    postcond = (image_create_var, image_create_postmem);
+    precond = (zero_var, zero_mem);
+    postcond = (zero_var, zero_mem);
     args = [];
   }
 
@@ -547,28 +168,30 @@ let class_get_summary =
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (class_get_var, class_get_premem);
-    postcond = (class_get_var, class_get_postmem);
+    precond = (zero_var, zero_mem);
+    postcond = (zero_var, zero_mem);
     args = [];
   }
 
 let print_summary =
+  let print_var = one_var "file" in
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (print_var, print_premem);
-    postcond = (print_var, print_postmem);
+    precond = (print_var, one_premem "file");
+    postcond = (print_var, one_postmem "file");
     args = [];
   }
 
 let file_input_summary =
+  let file_input_var = one_var "file" in
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (file_input_var, file_input_premem);
-    postcond = (file_input_var, file_input_postmem);
+    precond = (file_input_var, one_premem "file");
+    postcond = (file_input_var, one_postmem "file");
     args = [];
   }
 
@@ -577,8 +200,8 @@ let obj_summary =
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (obj_var, obj_premem);
-    postcond = (obj_var, obj_postmem);
+    precond = (zero_var, zero_mem);
+    postcond = (zero_var, zero_mem);
     args = [];
   }
 
@@ -587,8 +210,8 @@ let random_summary =
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (random_var, random_premem);
-    postcond = (random_var, random_postmem);
+    precond = (zero_var, zero_mem);
+    postcond = (zero_var, zero_mem);
     args = [];
   }
 
@@ -597,68 +220,82 @@ let stringwriter_summary =
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (stringwriter_var, stringwriter_premem);
-    postcond = (stringwriter_var, stringwriter_postmem);
+    precond = (zero_var, zero_mem);
+    postcond = (zero_var, zero_mem);
     args = [];
   }
 
 let parseposition_summary =
+  let parseposition_var = one_var "index" in
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (parseposition_var, parseposition_premem);
-    postcond = (parseposition_var, parseposition_postmem);
+    precond = (parseposition_var, one_premem "index");
+    postcond = (parseposition_var, one_postmem "index");
     args = [];
   }
 
 let bigdecimal_summary =
+  let bigdecimal_var = one_var "val" in
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (bigdecimal_var, bigdecimal_premem);
-    postcond = (bigdecimal_var, bigdecimal_postmem);
+    precond = (bigdecimal_var, one_premem "val");
+    postcond = (bigdecimal_var, one_postmem "val");
     args = [];
   }
 
 let string_summary =
+  let string_var = one_var "s" in
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (string_var, string_premem);
-    postcond = (string_var, string_postmem);
+    precond = (string_var, one_premem "s");
+    postcond = (string_var, one_postmem "s");
     args = [];
   }
 
 let array_summary =
+  let array_var = one_var "size" in
+  let array_value =
+    Value.M.empty
+    |> Value.M.add "v4" Value.{ from_error = false; value = Value.Ge (Int 1) }
+  in
   {
     relation = Relation.M.empty;
     value = array_value;
     use_field = UseFieldMap.M.empty;
-    precond = (array_var, array_premem);
-    postcond = (array_var, array_postmem);
+    precond = (array_var, one_premem "size");
+    postcond = (array_var, one_postmem "size");
     args = [];
   }
 
 let array_set_summary =
+  let array_set_var = two_var "index" "elem" in
+  let array_set_value =
+    Value.M.empty
+    |> Value.M.add "v5" Value.{ from_error = false; value = Value.Ge (Int 0) }
+  in
   {
     relation = Relation.M.empty;
     value = array_set_value;
     use_field = UseFieldMap.M.empty;
-    precond = (array_set_var, array_set_premem);
-    postcond = (array_set_var, array_set_postmem);
+    precond = (array_set_var, two_premem "index" "elem");
+    postcond = (array_set_var, two_postmem "index" "elem");
     args = [];
   }
 
 let point_summary =
+  let point_var = two_var "x" "y" in
   {
     relation = Relation.M.empty;
     value = Value.M.empty;
     use_field = UseFieldMap.M.empty;
-    precond = (point_var, point_premem);
-    postcond = (point_var, point_postmem);
+    precond = (point_var, two_premem "x" "y");
+    postcond = (point_var, two_postmem "x" "y");
     args = [];
   }
 
@@ -798,7 +435,7 @@ let stringwriter_info =
 
 let parseposition_info =
   let this = This (Object "java.io.StringWriter") in
-  let arg = Var (Int, "val") in
+  let arg = Var (Int, "index") in
   MethodInfo.
     {
       modifier = Public;
