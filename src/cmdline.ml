@@ -8,9 +8,7 @@ let pruning_mode = ref false
 
 let priority_mode = ref false
 
-let time_out = ref (5 * 60) (* max synthesis time *)
-
-let max_run_time = ref (20 * 60) (* max running time except synthesis time *)
+let time_out = ref (20 * 60) (* total running time *)
 
 let unknown_bug = ref false
 
@@ -34,7 +32,7 @@ let options =
       "Run with only prioritization (default: false)" );
     ( "-time-out",
       Arg.Set_int time_out,
-      "Time Budget except Static Analysis (default: 5m)" );
+      "Time Budget except Static Analysis (default: 20m)" );
     ( "-unknown-bug",
       Arg.Set unknown_bug,
       "Run unknown bug searching mode (default: false)" );

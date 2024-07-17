@@ -8,11 +8,15 @@ exception Compilation_Error
 
 let con_path = "unitcon_properties"
 
+let unitcon_path = Unix.getcwd ()
+
 let test_basename = "UnitconTest"
 
 let time = ref 0.0
 
 let num_of_tc_files = ref 1
+
+let num_of_last_exec_tc = ref 0
 
 let num_of_success = ref 0
 
@@ -36,8 +40,6 @@ type t = {
   inheritance_file : string;
   enum_file : string;
   constant_file : string;
-  compile_command : string;
-  execute_command : string;
   test_dir : string;
   expected_bug : string;
 }
@@ -54,8 +56,6 @@ let info =
       inheritance_file = "";
       enum_file = "";
       constant_file = "";
-      compile_command = "";
-      execute_command = "";
       test_dir = "";
       expected_bug = "";
     }
@@ -90,7 +90,10 @@ let get_bug_type filename =
     bug_type := "java.lang.NullPointerException"
   else
     let ic = open_in filename in
-    bug_type := really_input_string ic (in_channel_length ic) |> Regexp.rm_space;
+    bug_type :=
+      really_input_string ic (in_channel_length ic)
+      |> Str.global_replace Regexp.dollar "\\$"
+      |> Regexp.rm_space;
     close_in ic
 
 let parse_error_summary filename =
@@ -145,36 +148,7 @@ let my_really_read_string in_chan =
   in
   loop ()
 
-let compile_command_of_file file =
-  (* TODO: remove compile_command_file *)
-  if not (Sys.file_exists file) then
-    "find ./unitcon_tests/ -name \"*.java\" > test_files; "
-    ^ "javac -cp with_dependency.jar:../deps/junit-4.11.jar @test_files"
-  else
-    let ic = open_in file in
-    let s = really_input_string ic (in_channel_length ic) |> Regexp.rm_space in
-    close_in ic;
-    s
-
-let execute_command_of_file file =
-  (* TODO: remove execute_command_file *)
-  if not (Sys.file_exists file) then
-    "java -cp with_dependency.jar:./unitcon_tests/:../deps/junit-4.11.jar:. \
-     org.junit.runner.JUnitCore"
-  else
-    let ic = open_in file in
-    let s = really_input_string ic (in_channel_length ic) |> Regexp.rm_space in
-    close_in ic;
-    s
-
-let modify_execute_command command t_file_name =
-  (* TODO: replace command to command ^ " " ^ t_file_name *)
-  match Str.search_forward (Str.regexp "-encoding") command 0 with
-  | exception Not_found -> command ^ " " ^ t_file_name
-  | _ ->
-      Str.replace_first (Str.regexp "-encoding")
-        (t_file_name ^ " -encoding")
-        command
+let modify_execute_command command t_file_name = command ^ " " ^ t_file_name
 
 let check_substring substr str =
   match Str.search_forward (Str.regexp substr) str 0 with
@@ -374,6 +348,13 @@ let remove_last_file test_dir =
   let last_file = "UnitconTest" ^ string_of_int !num_of_tc_files ^ ".java" in
   remove_file (Filename.concat test_dir last_file)
 
+let rec remove_no_exec_files curr_num test_dir =
+  if curr_num >= !num_of_tc_files then ()
+  else
+    let curr_tc = "UnitconTest" ^ string_of_int curr_num ^ ".java" in
+    remove_file (Filename.concat test_dir curr_tc);
+    remove_no_exec_files (curr_num + 1) test_dir
+
 let modify_files test_dir data =
   let error_files = get_compilation_error_files data in
   List.iter
@@ -428,8 +409,6 @@ let init program_dir =
         cons con_path "inheritance_info.json" |> cons program_dir;
       enum_file = cons con_path "enum_info.json" |> cons program_dir;
       constant_file = cons con_path "extra_constant.json" |> cons program_dir;
-      compile_command = cons con_path "compile_command" |> cons program_dir;
-      execute_command = cons con_path "execute_command" |> cons program_dir;
       test_dir = cons program_dir t_dir;
       expected_bug = cons con_path "expected_bug" |> cons program_dir;
     };
@@ -442,9 +421,13 @@ let init program_dir =
 let make_testcase ~is_start queue e_method_info program_info =
   Generator.mk_testcases ~is_start queue e_method_info program_info
 
+let compile_cmd =
+  "find ./unitcon_tests/ -name \"*.java\" > test_files; "
+  ^ "javac -cp with_dependency.jar:"
+  ^ Filename.concat unitcon_path "lib/junit-4.11.jar"
+  ^ " @test_files"
+
 let build_program info =
-  let compile_cmd = compile_command_of_file info.compile_command in
-  (* javac *)
   let rec compile_loop () =
     let ic_out, ic_err = simple_compiler info.program_dir compile_cmd in
     let data_out = my_really_read_string ic_out in
@@ -473,35 +456,35 @@ let abnormal_exit =
         (Unix.gettimeofday () -. !time);
       Logger.info "First Success Test: %s" !first_success_tc;
       Logger.info "Last Success Test: %s" !last_success_tc;
+      remove_no_exec_files !num_of_last_exec_tc !info.test_dir;
       Unix._exit 0)
-
-(* if the max running time is exceeded, UnitCon is forced to shut down *)
-let interrupt pid =
-  Unix.sleep !Cmdline.max_run_time;
-  Unix.kill pid Sys.sigusr2
 
 let get_test_path path =
   if path = "" then test_basename
   else Utils.dot_to_dir_sep path ^ Filename.dir_sep ^ test_basename
 
+let execute_cmd =
+  "java -cp with_dependency.jar:./unitcon_tests/:"
+  ^ Filename.concat unitcon_path "lib/junit-4.11.jar:. "
+  ^ "org.junit.runner.JUnitCore"
+
 let run_testfile () =
-  Sys.set_signal Sys.sigusr2 abnormal_exit;
-  Thread.create interrupt (Unix.getpid ()) |> ignore;
   let compile_start = Unix.gettimeofday () in
   add_default_class !info.test_dir;
   Logger.info "Start compilation! (# of test files: %d)" (!num_of_tc_files - 1);
   build_program !info;
   Logger.info "End compilation! (duration: %f)"
     (Unix.gettimeofday () -. compile_start);
-  let execute_cmd = execute_command_of_file !info.execute_command in
-  let execute program_dir test_dir expected_bug t_file =
+  let execute program_dir test_dir expected_bug t_file num_of_t_file =
     let ic_out, ic_err =
       simple_compiler program_dir (modify_execute_command execute_cmd t_file)
     in
     let data = my_really_read_string ic_err in
     close_in ic_out;
     close_in ic_err;
+    num_of_last_exec_tc := num_of_t_file;
     if checking_bug_presence data expected_bug then (
+      Logger.info "Success Test: %s" t_file;
       if !first_success_tc = "" then first_success_tc := t_file;
       last_success_tc := t_file;
       incr num_of_success)
@@ -514,38 +497,30 @@ let run_testfile () =
   let rec execute_test current_f_num program_dir test_dir expected_bug =
     if current_f_num < !num_of_tc_files then (
       execute program_dir test_dir expected_bug
-        (get_test_path !Cmdline.extension ^ string_of_int current_f_num);
+        (get_test_path !Cmdline.extension ^ string_of_int current_f_num)
+        current_f_num;
       execute_test (current_f_num + 1) program_dir test_dir expected_bug)
   in
-  execute_test 1 !info.program_dir !info.test_dir !info.expected_bug;
-  Logger.info "Normal End UnitCon for %s: %b(%d) (total time: %f)\n"
-    !info.program_dir
-    (if !num_of_success > 0 then true else false)
-    !num_of_success
-    (Unix.gettimeofday () -. !time);
-  Logger.info "First Success Test: %s" !first_success_tc
-
-let abnormal_run =
-  Sys.Signal_handle
-    (fun _ ->
-      Unix.alarm 0 |> ignore;
-      run_testfile ())
+  execute_test (!num_of_last_exec_tc + 1) !info.program_dir !info.test_dir
+    !info.expected_bug
 
 (* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start info queue e_method_info p_info =
   let tc, tc_list = make_testcase ~is_start queue e_method_info p_info in
-  if tc = (ImportSet.empty, "") then
+  if tc = (ImportSet.empty, "") then (
     (* early stopping *)
-    Unix.kill (Unix.getpid ()) Sys.sigusr1
+    if !num_of_last_exec_tc < !num_of_tc_files then run_testfile () else ();
+    Unix.kill (Unix.getpid ()) Sys.sigusr1)
   else
     let time = Unix.gettimeofday () -. !time in
     add_testcase info.test_dir !num_of_tc_files (tc, time);
     incr num_of_tc_files;
+    if !num_of_tc_files mod 16 = 0 then run_testfile () else ();
     run_test ~is_start:false info tc_list e_method_info p_info
 
 let run program_dir =
   (* for early stopping *)
-  Sys.set_signal Sys.sigusr1 abnormal_run;
+  Sys.set_signal Sys.sigusr1 abnormal_exit;
   time := Unix.gettimeofday ();
   init program_dir;
   let method_info = parse_method_info !info.summary_file in

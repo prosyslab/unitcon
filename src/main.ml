@@ -8,19 +8,13 @@ let initialize () =
 let main () =
   let usage = "Usage: unitcon [options] [target_program]" in
   Arg.parse Cmdline.options Cmdline.parse_arg usage;
+  ignore (Unix.alarm !Cmdline.time_out);
   match !Cmdline.target_program with
   | None -> failwith "Error: Target Program is not given"
   | Some p ->
       initialize ();
       RunProgram.run p
 
-let run_testfile =
-  Sys.Signal_handle
-    (fun _ ->
-      RunProgram.run_testfile ();
-      Unix._exit 0)
-
 let _ =
-  Sys.set_signal Sys.sigalrm run_testfile;
-  ignore (Unix.alarm !Cmdline.time_out);
+  Sys.set_signal Sys.sigalrm RunProgram.abnormal_exit;
   main ()
