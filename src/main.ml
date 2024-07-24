@@ -16,5 +16,5 @@ let main () =
       RunProgram.run p
 
 let _ =
-  Sys.set_signal Sys.sigalrm RunProgram.abnormal_exit;
+  Sys.set_signal Sys.sigalrm RunProgram.normal_exit;
   main ()

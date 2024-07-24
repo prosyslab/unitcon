@@ -14,7 +14,7 @@ let test_basename = "UnitconTest"
 
 let time = ref 0.0
 
-let num_of_tc_files = ref 1
+let num_of_tc_files = ref 0
 
 let num_of_last_exec_tc = ref 0
 
@@ -352,7 +352,9 @@ let rec remove_no_exec_files curr_num test_dir =
   if curr_num >= !num_of_tc_files then ()
   else
     let curr_tc = "UnitconTest" ^ string_of_int curr_num ^ ".java" in
+    let curr_class = "UnitconTest" ^ string_of_int curr_num ^ ".class" in
     remove_file (Filename.concat test_dir curr_tc);
+    remove_file (Filename.concat test_dir curr_class);
     remove_no_exec_files (curr_num + 1) test_dir
 
 let modify_files test_dir data =
@@ -446,10 +448,10 @@ let build_program info =
   in
   compile_loop ()
 
-let abnormal_exit =
+let normal_exit =
   Sys.Signal_handle
     (fun _ ->
-      Logger.info "Abnormal End UnitCon for %s: %b(%d) (total time: %f)"
+      Logger.info "Normal End UnitCon for %s: %b(%d) (total time: %f)"
         !info.program_dir
         (if !num_of_success > 0 then true else false)
         !num_of_success
@@ -471,7 +473,7 @@ let execute_cmd =
 let run_testfile () =
   let compile_start = Unix.gettimeofday () in
   add_default_class !info.test_dir;
-  Logger.info "Start compilation! (# of test files: %d)" (!num_of_tc_files - 1);
+  Logger.info "Start compilation! (# of test files: %d)" !num_of_tc_files;
   build_program !info;
   Logger.info "End compilation! (duration: %f)"
     (Unix.gettimeofday () -. compile_start);
@@ -513,14 +515,30 @@ let rec run_test ~is_start info queue e_method_info p_info =
     Unix.kill (Unix.getpid ()) Sys.sigusr1)
   else
     let time = Unix.gettimeofday () -. !time in
-    add_testcase info.test_dir !num_of_tc_files (tc, time);
     incr num_of_tc_files;
-    if !num_of_tc_files mod 16 = 0 then run_testfile () else ();
+    add_testcase info.test_dir !num_of_tc_files (tc, time);
+    if !num_of_tc_files mod 15 = 0 then run_testfile () else ();
     run_test ~is_start:false info tc_list e_method_info p_info
+
+(* force stop if generated test cases are not executed and only synthesis is long *)
+let abnormal_run_test =
+  Sys.Signal_handle
+    (fun _ ->
+      if !num_of_tc_files mod 15 <> 0 then (
+        Logger.info "Abnormal Run Test";
+        run_testfile ();
+        Unix.kill (Unix.getpid ()) Sys.sigusr1)
+      else Logger.info "Keep Going")
+
+let interrupt pid =
+  Unix.sleep (!Cmdline.time_out - 10);
+  Unix.kill pid Sys.sigusr2
 
 let run program_dir =
   (* for early stopping *)
-  Sys.set_signal Sys.sigusr1 abnormal_exit;
+  Sys.set_signal Sys.sigusr1 normal_exit;
+  Sys.set_signal Sys.sigusr2 abnormal_run_test;
+  Thread.create interrupt (Unix.getpid ()) |> ignore;
   time := Unix.gettimeofday ();
   init program_dir;
   let method_info = parse_method_info !info.summary_file in
