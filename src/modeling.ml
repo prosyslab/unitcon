@@ -195,6 +195,16 @@ let file_input_summary =
     args = [];
   }
 
+let ba_output_summary =
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    use_field = UseFieldMap.M.empty;
+    precond = (zero_var, zero_mem);
+    postcond = (zero_var, zero_mem);
+    args = [];
+  }
+
 let obj_summary =
   {
     relation = Relation.M.empty;
@@ -396,6 +406,17 @@ let file_input_info =
       modifier = Public;
       is_static = false;
       formal_params = [ this; arg ];
+      return = "";
+      filename = "";
+    }
+
+let ba_output_info =
+  let this = This (Object "java.io.ByteArrayOutputStream") in
+  MethodInfo.
+    {
+      modifier = Public;
+      is_static = false;
+      formal_params = [ this ];
       return = "";
       filename = "";
     }
@@ -749,6 +770,8 @@ let add_java_package_summary mmap =
        ([ print_summary ], [])
   |> SummaryMap.M.add "java.io.FileInputStream.<init>(java.io.File)"
        ([ file_input_summary ], [])
+  |> SummaryMap.M.add "java.io.java.io.ByteArrayOutputStream.<init>()"
+       ([ ba_output_summary ], [])
   |> SummaryMap.M.add "java.lang.Object.<init>()" ([ obj_summary ], [])
   |> SummaryMap.M.add "java.util.Random.<init>()" ([ random_summary ], [])
   |> SummaryMap.M.add "java.io.StringWriter.<init>()"
@@ -794,9 +817,10 @@ let add_java_package_method mmap =
   |> MethodInfo.M.add "java.io.PrintStream.<init>(java.io.File)" print_info
   |> MethodInfo.M.add "java.io.FileInputStream.<init>(java.io.File)"
        file_input_info
+  |> MethodInfo.M.add "java.io.ByteArrayOutputStream.<init>()" ba_output_info
   |> MethodInfo.M.add "java.lang.Object.<init>()" obj_info
   |> MethodInfo.M.add "java.util.Random.<init>()" random_info
-  |> MethodInfo.M.add "java.io.StringWriter.<init>()" random_info
+  |> MethodInfo.M.add "java.io.StringWriter.<init>()" stringwriter_info
   |> MethodInfo.M.add "java.math.BigDecimal.<init>(int)" bigdecimal_info
   |> MethodInfo.M.add "java.lang.String.<init>(java.lang.String)" string_info
   |> MethodInfo.M.add "IntArray.<init>(int)" int_array_info
@@ -834,3 +858,5 @@ let add_java_package_inheritance ig =
   |> add_inheritance "java.lang.Number" "java.math.BigDecimal"
   |> add_inheritance "java.lang.CharSequence" "java.lang.String"
   |> add_inheritance "java.io.Writer" "java.io.StringWriter"
+  |> add_inheritance "java.io.Serializable" "java.text.Format"
+  |> add_inheritance "java.io.OutputStream" "java.io.ByteArrayOutputStream"
