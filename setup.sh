@@ -3,7 +3,7 @@ set -e
 export OPAMYES=1
 
 NCPU="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
-OCAML_VERSION="4.13.1"
+OCAML_VERSION="4.14.2"
 UNITCON_OPAM_SWITCH=unitcon-"$OCAML_VERSION"+flambda
 UNITCON_OPAM_SWITCH_OPTION="--package=ocaml-variants.${OCAML_VERSION}+options,ocaml-option-flambda"
 opam init --reinit --bare -j $NCPU --no-setup
@@ -36,6 +36,6 @@ fi
 
 eval $(SHELL=bash opam config env --switch=$UNITCON_OPAM_SWITCH)
 opam pin add git+https://github.com/prosyslab/logger.git
-opam install -j $NCPU dune ocamlgraph yojson ppx_compare z3 core logger ounit bisect_ppx
+opam install -j $NCPU dune ocamlgraph yojson ppx_compare z3 core logger ounit bisect_ppx hex
 opam upgrade dune
 make
