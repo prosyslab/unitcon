@@ -12,9 +12,13 @@ let unitcon_path = Unix.getcwd ()
 
 let test_basename = "UnitconTest"
 
+let driver_basename = "UnitconDriver"
+
 let time = ref 0.0
 
 let num_of_tc_files = ref 0
+
+let num_of_driver_files = ref 0
 
 let num_of_last_exec_tc = ref 0
 
@@ -40,11 +44,13 @@ type t = {
   inheritance_file : string;
   enum_file : string;
   constant_file : string;
+  fuzz_constant_file : string;
   test_dir : string;
+  driver_dir : string;
   expected_bug : string;
 }
 
-type run_type = Compile | Group | Test
+type run_type = Compile | Group | Fuzzer | Test
 
 let info =
   ref
@@ -56,7 +62,9 @@ let info =
       inheritance_file = "";
       enum_file = "";
       constant_file = "";
+      fuzz_constant_file = "";
       test_dir = "";
+      driver_dir = "";
       expected_bug = "";
     }
 
@@ -156,7 +164,9 @@ let check_substring substr str =
   | _ -> true
 
 let compare_stack_trace target_trace error_trace =
-  check_substring (!bug_type ^ ".*" ^ "[ \t\r\n]+" ^ target_trace) error_trace
+  check_substring
+    (!bug_type ^ ".*" ^ "[ \t\r\n]+[^a]*" ^ target_trace)
+    error_trace
 
 let check_package_name_presence package_name error_trace =
   check_substring package_name error_trace
@@ -181,6 +191,10 @@ let run_type str =
   if Str.string_match (Str.regexp "^javac") str 0 then Compile
   else if Str.string_match (Str.regexp "^find") str 0 then Group
   else if Str.string_match (Str.regexp "^java") str 0 then Test
+  else if
+    let start_cmd = "^" ^ Filename.concat unitcon_path "deps/jazzer" in
+    Str.string_match (Str.regexp start_cmd) str 0
+  then Fuzzer
   else failwith "not supported build type"
 
 let string_of_expected_bug file =
@@ -190,6 +204,39 @@ let string_of_expected_bug file =
   close_in ic;
   Str.global_replace Regexp.dollar "\\$" s
   |> Str.global_replace (Str.regexp "\n") "[ \t\r\n]+"
+
+let get_index_of_substring substr str start =
+  match Str.search_forward (Str.regexp substr) str start with
+  | exception Not_found -> None
+  | i -> Some i
+
+let get_rep_file error_trace expected_bug =
+  let expect = string_of_expected_bug expected_bug in
+  let target = !bug_type ^ ".*" ^ "[ \t\r\n]+[^a]*" ^ expect in
+  (* == Java Exception: ... reproducer_path= ... Java reproducer written to ... *)
+  let trace = get_index_of_substring target error_trace 0 in
+  let s_idx =
+    match trace with
+    | None -> None
+    | Some i ->
+        get_index_of_substring "Java reproducer written to" error_trace i
+  in
+  let fs_idx =
+    match s_idx with
+    | None -> None
+    | Some i -> get_index_of_substring "Crash_" error_trace i
+  in
+  let fe_idx =
+    match s_idx with
+    | None -> None
+    | Some i -> get_index_of_substring "\\.java" error_trace i
+  in
+  let f_name =
+    match (fs_idx, fe_idx) with
+    | None, _ | _, None -> ""
+    | Some s, Some e -> String.sub error_trace s (e + 5 - s)
+  in
+  f_name
 
 let execute_command command =
   let close_channel (stdout, stdin, stderr) =
@@ -205,7 +252,7 @@ let execute_command command =
     close_channel (stdout, stdin, stderr)
   in
   match run_type command with
-  | Compile | Group -> execute command
+  | Compile | Group | Fuzzer -> execute command
   | Test -> execute ("timeout 5s " ^ command)
 
 let simple_compiler program_dir command =
@@ -250,10 +297,7 @@ let insert_test oc (file_num, tc, time) =
   in
   let insert oc (i_set, m_bodies) =
     let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
-    let start =
-      "@Test\npublic void test() {\n"
-      (* "\npublic static void main(String args[]) throws Exception, Throwable {\n" *)
-    in
+    let start = "@Test\npublic void test() {\n" in
     need_default_class m_bodies;
     get_package !Cmdline.extension |> output_string oc;
     (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
@@ -264,6 +308,78 @@ let insert_test oc (file_num, tc, time) =
     start ^ "try {\n" ^ m_bodies
     ^ "}\ncatch(Exception e) {\ne.printStackTrace();\n}\n" ^ "}\n}\n"
     |> output_string oc;
+    flush oc;
+    close_out oc
+  in
+  insert oc tc
+
+let insert_driver oc (file_num, tc, time) =
+  let need_default_interface tc =
+    match Str.search_forward (Str.regexp "UnitconInterface") tc 0 with
+    | exception _ -> ()
+    | _ -> require_interface_class := true
+  in
+  let need_default_enum tc =
+    match Str.search_forward (Str.regexp "UnitconEnum") tc 0 with
+    | exception _ -> ()
+    | _ -> require_enum_class := true
+  in
+  let need_default_class tc =
+    need_default_interface tc;
+    need_default_enum tc
+  in
+  let insert oc (i_set, m_bodies) =
+    let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
+    let start =
+      "public static void fuzzerTestOneInput(FuzzedDataProvider data) throws \
+       Exception, Throwable {\n"
+    in
+    need_default_class m_bodies;
+    get_package !Cmdline.extension |> output_string oc;
+    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
+    get_imports i_set
+    ^ "import com.code_intelligence.jazzer.api.FuzzedDataProvider;\n\n"
+    |> output_string oc;
+    output_string oc time;
+    "public class UnitconDriver" ^ string_of_int file_num ^ " {\n"
+    |> output_string oc;
+    start ^ m_bodies ^ "}\n}\n" |> output_string oc;
+    flush oc;
+    close_out oc
+  in
+  insert oc tc
+
+let insert_log_driver oc (file_num, tc, time) =
+  let get_id stmt =
+    if check_substring "data\\.consume" stmt then
+      Str.split (Str.regexp " ") stmt |> List.tl |> List.hd |> Regexp.rm_space
+    else ""
+  in
+  let log id = "System.err.println(\"UnitCon=\" + " ^ id ^ ");\n" in
+  let rec add_log lst =
+    match lst with
+    | hd :: tl ->
+        let id = get_id hd in
+        if id <> "" then hd ^ "\n" ^ log id ^ add_log tl
+        else hd ^ "\n" ^ add_log tl
+    | _ -> ""
+  in
+  let insert oc (i_set, m_bodies) =
+    let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
+    let start =
+      "public static void fuzzerTestOneInput(FuzzedDataProvider data) throws \
+       Exception, Throwable {\n"
+    in
+    get_package !Cmdline.extension |> output_string oc;
+    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
+    get_imports i_set
+    ^ "import com.code_intelligence.jazzer.api.FuzzedDataProvider;\n\n"
+    |> output_string oc;
+    output_string oc time;
+    "public class UnitconDriver" ^ string_of_int file_num ^ " {\n"
+    |> output_string oc;
+    let modified_m_bodies = Str.split (Str.regexp "\n") m_bodies |> add_log in
+    start ^ modified_m_bodies ^ "}\n}\n" |> output_string oc;
     flush oc;
     close_out oc
   in
@@ -295,6 +411,22 @@ let add_testcase test_dir file_num (tc, time) =
   in
   insert_test oc (file_num, tc, time)
 
+let add_driver driver_dir file_num (tc, time) =
+  let oc =
+    open_out
+      (Filename.concat driver_dir
+         (driver_basename ^ string_of_int file_num ^ ".java"))
+  in
+  insert_driver oc (file_num, tc, time)
+
+let add_log_driver driver_dir file_num (tc, time) =
+  let oc =
+    open_out
+      (Filename.concat driver_dir
+         (driver_basename ^ string_of_int file_num ^ ".java"))
+  in
+  insert_log_driver oc (file_num, tc, time)
+
 let remove_file fname = if Sys.file_exists fname then Unix.unlink fname
 
 let remove_files dir (pattern : Str.regexp) =
@@ -309,6 +441,8 @@ let remove_all_test_classes test_dir = remove_files test_dir Regexp.test_class
 
 let remove_all_test_files test_dir = remove_files test_dir Regexp.test_file
 
+let remove_all_files dir = remove_files dir (Str.regexp ".*")
+
 let make_folder path =
   try Unix.mkdir path 0o775
   with Unix.Unix_error (EEXIST, _, _) ->
@@ -319,8 +453,8 @@ let make_folder path =
     remove_file (Filename.concat path "UnitconInterface.class");
     remove_file (Filename.concat path "UnitconEnum.class")
 
-let init_test_folder test_dir =
-  let folders = Str.split (Str.regexp Filename.dir_sep) test_dir in
+let init_folder dir =
+  let folders = Str.split (Str.regexp Filename.dir_sep) dir in
   let rec make_folders path = function
     | [] -> ()
     | f :: dep ->
@@ -377,10 +511,6 @@ let checking_error_presence data =
   | exception Not_found -> ()
   | _ -> raise Compilation_Error
 
-(* let checking_bug_presence data expected_bug =
-   let check_bug bug = compare_stack_trace bug data in
-   check_bug (string_of_expected_bug expected_bug) *)
-
 let checking_bug_presence error_trace expected_bug =
   if !Cmdline.unknown_bug then
     check_package_name_presence
@@ -390,6 +520,70 @@ let checking_bug_presence error_trace expected_bug =
     && check_useless_npe error_trace |> not
   else compare_stack_trace (string_of_expected_bug expected_bug) error_trace
 
+let get_const_sequence tc =
+  let consume_func t =
+    get_consume_func t |> Str.replace_first Regexp.dot "\\."
+  in
+  let identify_const_type s =
+    if check_substring (consume_func Int) s then Int
+    else if check_substring (consume_func Long) s then Long
+    else if check_substring (consume_func Short) s then Short
+    else if check_substring (consume_func Byte) s then Byte
+    else if check_substring (consume_func Float) s then Float
+    else if check_substring (consume_func Double) s then Double
+    else if check_substring (consume_func Bool) s then Bool
+    else if check_substring (consume_func Char) s then Char
+    else if check_substring (consume_func String) s then String
+    else NonType
+  in
+  let rec collect lst =
+    match lst with
+    | hd :: tl when check_substring "data\\.consume" hd ->
+        identify_const_type hd :: collect tl
+    | _ :: tl -> collect tl
+    | _ -> []
+  in
+  Str.split (Str.regexp "\n") tc |> collect
+
+let driver_to_tc typs inputs tc =
+  let default_value typ =
+    (* for avoiding compilation error *)
+    match typ with
+    | Int | Short | Byte -> "0"
+    | Long -> "0l"
+    | Double -> "0."
+    | Float -> "0.f"
+    | Char -> "\'\\0\'"
+    | String -> "\"\""
+    | Bool -> "false"
+    | _ -> ""
+  in
+  let modify_format typ input =
+    match typ with
+    | Int | Short | Byte | Double | Bool -> input
+    | Long -> input ^ "l"
+    | Float -> input ^ "f"
+    | Char -> "\'" ^ input ^ "\'"
+    | String -> "\"" ^ input ^ "\""
+    | _ -> input
+  in
+  let consume_func t =
+    get_consume_func t |> Str.replace_first Regexp.dot "\\."
+  in
+  let rec func_to_value t_lst i_lst tc =
+    match (t_lst, i_lst) with
+    | typ :: t_tl, input :: i_tl ->
+        let f = consume_func typ in
+        let new_input = modify_format typ input in
+        Str.replace_first (Str.regexp f) new_input tc |> func_to_value t_tl i_tl
+    | typ :: t_tl, [] ->
+        let f = consume_func typ in
+        Str.replace_first (Str.regexp f) (default_value typ) tc
+        |> func_to_value t_tl []
+    | _ -> tc
+  in
+  func_to_value typs inputs tc
+
 let init program_dir =
   let cons = Filename.concat in
   let program_dir =
@@ -398,6 +592,10 @@ let init program_dir =
   in
   let t_dir =
     if !Cmdline.extension = "" then "unitcon_tests"
+    else Utils.dot_to_dir_sep !Cmdline.extension
+  in
+  let d_dir =
+    if !Cmdline.extension = "" then "unitcon_drivers"
     else Utils.dot_to_dir_sep !Cmdline.extension
   in
   info :=
@@ -411,10 +609,13 @@ let init program_dir =
         cons con_path "inheritance_info.json" |> cons program_dir;
       enum_file = cons con_path "enum_info.json" |> cons program_dir;
       constant_file = cons con_path "extra_constant.json" |> cons program_dir;
+      fuzz_constant_file = cons con_path "fuzz_constant" |> cons program_dir;
       test_dir = cons program_dir t_dir;
+      driver_dir = cons program_dir d_dir;
       expected_bug = cons con_path "expected_bug" |> cons program_dir;
     };
-  init_test_folder !info.test_dir;
+  init_folder !info.test_dir;
+  init_folder !info.driver_dir;
   cons !info.test_dir "log.txt" |> Logger.from_file;
   get_bug_type (cons con_path "expected_bug_type" |> cons !info.program_dir);
   Logger.info "Start UnitCon for %s" program_dir
@@ -426,8 +627,14 @@ let make_testcase ~is_start queue e_method_info program_info =
 let compile_cmd =
   "find ./unitcon_tests/ -name \"*.java\" > test_files; "
   ^ "javac -cp with_dependency.jar:"
-  ^ Filename.concat unitcon_path "lib/junit-4.11.jar"
-  ^ " @test_files"
+  ^ Filename.concat unitcon_path "deps/junit-4.11.jar"
+  ^ " @test_files -encoding ISO-8859-1"
+
+let driver_compile_cmd =
+  "find ./unitcon_drivers/ -name \"*.java\" > driver_files; "
+  ^ "javac -cp with_dependency.jar:"
+  ^ Filename.concat unitcon_path "deps/jazzer_standalone.jar"
+  ^ " @driver_files"
 
 let build_program info =
   let rec compile_loop () =
@@ -448,6 +655,11 @@ let build_program info =
   in
   compile_loop ()
 
+let build_driver info =
+  let ic_out, ic_err = simple_compiler info.program_dir driver_compile_cmd in
+  close_in ic_out;
+  close_in ic_err
+
 let normal_exit =
   Sys.Signal_handle
     (fun _ ->
@@ -461,14 +673,29 @@ let normal_exit =
       remove_no_exec_files !num_of_last_exec_tc !info.test_dir;
       Unix._exit 0)
 
-let get_test_path path =
-  if path = "" then test_basename
-  else Utils.dot_to_dir_sep path ^ Filename.dir_sep ^ test_basename
+let get_test_path path base_name =
+  if path = "" then base_name
+  else Utils.dot_to_dir_sep path ^ Filename.dir_sep ^ base_name
 
 let execute_cmd =
   "java -cp with_dependency.jar:./unitcon_tests/:"
-  ^ Filename.concat unitcon_path "lib/junit-4.11.jar:. "
+  ^ Filename.concat unitcon_path "deps/junit-4.11.jar:. "
   ^ "org.junit.runner.JUnitCore"
+
+let driver_execute_cmd d_file =
+  Filename.concat unitcon_path "deps/jazzer "
+  ^ "--cp=with_dependency.jar:./unitcon_drivers/:. " ^ "--target_class="
+  ^ d_file
+  ^ " --keep_going=30 --hooks=false --dedup=true \
+     --reproducer_path=./unitcon_drivers/"
+  ^ " -artifact_prefix=./unitcon_drivers/ -timeout=10 -max_total_time=10 \
+     -seed=1 -dict=" ^ !info.fuzz_constant_file
+
+let log_driver_execute_cmd crash_file =
+  "java -cp with_dependency.jar:"
+  ^ Filename.concat unitcon_path
+      "deps/jazzer_standalone.jar:./unitcon_drivers:. "
+  ^ crash_file
 
 let run_testfile () =
   let compile_start = Unix.gettimeofday () in
@@ -497,26 +724,98 @@ let run_testfile () =
       remove_file (Filename.concat test_dir (t_file ^ ".class")))
   in
   let rec execute_test current_f_num program_dir test_dir expected_bug =
-    if current_f_num < !num_of_tc_files then (
+    if current_f_num <= !num_of_tc_files then (
       execute program_dir test_dir expected_bug
-        (get_test_path !Cmdline.extension ^ string_of_int current_f_num)
+        (get_test_path !Cmdline.extension test_basename
+        ^ string_of_int current_f_num)
         current_f_num;
       execute_test (current_f_num + 1) program_dir test_dir expected_bug)
   in
   execute_test (!num_of_last_exec_tc + 1) !info.program_dir !info.test_dir
     !info.expected_bug
 
+let run_reproducer crash_file =
+  let rec get_input lst =
+    match lst with
+    | hd :: tl ->
+        if check_substring "UnitCon=" hd then
+          Str.replace_first (Str.regexp "UnitCon=") "" hd :: get_input tl
+        else get_input tl
+    | _ -> []
+  in
+  let compile_start = Unix.gettimeofday () in
+  Logger.info "Start reproducer! (# of driver: %d)" !num_of_driver_files;
+  build_driver !info;
+  let crash_file = get_test_path !Cmdline.extension crash_file in
+  let ic_out, ic_err =
+    simple_compiler !info.program_dir (log_driver_execute_cmd crash_file)
+  in
+  let data = my_really_read_string ic_err in
+  close_in ic_out;
+  close_in ic_err;
+  let input = Str.split (Str.regexp "\n") data |> get_input in
+  Logger.info "End reproducer! (duration: %f)"
+    (Unix.gettimeofday () -. compile_start);
+  input
+
+let run_fuzzer () =
+  let compile_start = Unix.gettimeofday () in
+  add_default_class !info.driver_dir;
+  Logger.info "Start fuzzer! (# of driver: %d)" !num_of_driver_files;
+  build_driver !info;
+  let d_file =
+    get_test_path !Cmdline.extension driver_basename
+    ^ string_of_int !num_of_driver_files
+  in
+  let ic_out, ic_err =
+    simple_compiler !info.program_dir (driver_execute_cmd d_file)
+  in
+  let data = my_really_read_string ic_err in
+  close_in ic_out;
+  close_in ic_err;
+  let found_rep_file =
+    if checking_bug_presence data !info.expected_bug then (
+      Logger.info "Found bug with fuzzer: %s" d_file;
+      get_rep_file data !info.expected_bug)
+    else ""
+  in
+  Logger.info "End fuzzer! (duration: %f)"
+    (Unix.gettimeofday () -. compile_start);
+  found_rep_file
+
 (* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start info queue e_method_info p_info =
-  let tc, tc_list = make_testcase ~is_start queue e_method_info p_info in
-  if tc = (ImportSet.empty, "") then (
+  let completion, tc, tc_list =
+    make_testcase ~is_start queue e_method_info p_info
+  in
+  if completion = Except_Const then (
+    (* clean before running fuzzer *)
+    remove_all_files info.driver_dir;
+    let _time = Unix.gettimeofday () -. !time in
+    incr num_of_driver_files;
+    add_driver info.driver_dir !num_of_driver_files (tc, _time);
+    let fuzz_seq = get_const_sequence (tc |> snd) in
+    let found_rep_file = run_fuzzer () |> Filename.remove_extension in
+    if found_rep_file = "" then
+      run_test ~is_start:false info tc_list e_method_info p_info
+    else
+      (* found crash input with fuzzer *)
+      let _time = Unix.gettimeofday () -. !time in
+      add_log_driver info.driver_dir !num_of_driver_files (tc, _time);
+      let input = run_reproducer found_rep_file in
+      incr num_of_tc_files;
+      let new_tc = driver_to_tc fuzz_seq input (tc |> snd) in
+      add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
+      if !num_of_tc_files mod 15 = 0 then run_testfile () else ();
+      run_test ~is_start:false info tc_list e_method_info p_info)
+  else if completion = Incomplete then (
     (* early stopping *)
     if !num_of_last_exec_tc < !num_of_tc_files then run_testfile () else ();
     Unix.kill (Unix.getpid ()) Sys.sigusr1)
   else
-    let time = Unix.gettimeofday () -. !time in
+    let _time = Unix.gettimeofday () -. !time in
     incr num_of_tc_files;
-    add_testcase info.test_dir !num_of_tc_files (tc, time);
+    add_testcase info.test_dir !num_of_tc_files (tc, _time);
     if !num_of_tc_files mod 15 = 0 then run_testfile () else ();
     run_test ~is_start:false info tc_list e_method_info p_info
 

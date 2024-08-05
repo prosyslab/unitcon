@@ -7,6 +7,8 @@ let compare_bool = Bool.compare
 
 let compare_list = List.compare
 
+type tc_completion = Complete | Except_Const | Incomplete
+
 type method_name = string [@@deriving compare]
 
 type class_name = string [@@deriving compare]
@@ -98,6 +100,20 @@ let get_class_name = function
       | _ -> "")
   | NonType -> ""
   | _ -> failwith "get_class_name: not supported"
+
+let get_consume_func t =
+  (match t with
+  | Int -> "Int()"
+  | Long -> "Long()"
+  | Short -> "Short()"
+  | Byte -> "Byte()"
+  | Float -> "Float()"
+  | Double -> "Double()"
+  | Bool -> "Boolean()"
+  | Char -> "Char()"
+  | String -> "RemainingAsString()"
+  | _ -> failwith "get_consume_func: not supported")
+  |> String.cat "data.consume"
 
 let modifier_of_json json : modifier =
   JsonUtil.to_string json |> function
@@ -403,6 +419,35 @@ module AST = struct
         not (is_id x0 || is_id x1 || is_func func || is_arg arg)
     | Void (x, func, arg) -> not (is_id x || is_func func || is_arg arg)
     | Seq (s1, s2) -> assign_ground s1 && assign_ground s2
+    | Skip -> true
+    | Stmt -> true
+
+  let rec ground_except_const = function
+    | Const (x, exp) -> (
+        (* when type of x is primitive, whether exp is grounded or not is no matter *)
+        match get_vinfo x |> fst with
+        | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
+            is_id x |> not
+        | _ -> not (is_id x || is_exp exp))
+    | Assign (x0, x1, func, arg) ->
+        not (is_id x0 || is_id x1 || is_func func || is_arg arg)
+    | Void (x, func, arg) -> not (is_id x || is_func func || is_arg arg)
+    | Seq (s1, s2) -> ground_except_const s1 && ground_except_const s2
+    | Skip -> true
+    | Stmt -> false
+
+  let rec assign_ground_except_const = function
+    | Const (x, exp) -> (
+        (* when type of x is primitive, whether exp is grounded or not is no matter *)
+        match get_vinfo x |> fst with
+        | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
+            is_id x |> not
+        | _ -> not (is_id x || is_exp exp))
+    | Assign (x0, x1, func, arg) ->
+        not (is_id x0 || is_id x1 || is_func func || is_arg arg)
+    | Void (x, func, arg) -> not (is_id x || is_func func || is_arg arg)
+    | Seq (s1, s2) ->
+        assign_ground_except_const s1 && assign_ground_except_const s2
     | Skip -> true
     | Stmt -> true
 
@@ -1069,12 +1114,19 @@ module AST = struct
         (* If type inference from the summaries is fail,
            correct it in the code output step. *)
         match get_vinfo x |> fst with
-        | Int | Long | Short | Byte | Char -> "0;\n"
+        | Int | Short | Byte | Char -> "0;\n"
+        | Long -> "0l;\n"
         | Float -> "0.f;\n"
         | Double -> "0.;\n"
         | Bool -> "false;\n"
         | _ -> "null;\n")
-    | Exp -> "Exp;\n"
+    | Exp ->
+        if !Cmdline.with_fuzz then
+          match get_vinfo x |> fst with
+          | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
+              get_consume_func (get_vinfo x |> fst) ^ ";\n"
+          | _ -> "Exp;\n"
+        else "Exp;\n"
 
   let rec code = function
     | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x

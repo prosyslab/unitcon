@@ -16,6 +16,8 @@ let mock = ref false
 
 let extension = ref ""
 
+let with_fuzz = ref false
+
 let options =
   [
     ( "-outdir",
@@ -41,6 +43,9 @@ let options =
       Arg.Set_string extension,
       "Extend the available modifiers from public to package (default: \"\", \
        e.g., \"com.a.b.c\")" );
+    ( "-with-fuzz",
+      Arg.Set with_fuzz,
+      "Use fuzzer for searching constant (default: false)" );
   ]
 
 let parse_arg (x : string) =

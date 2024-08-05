@@ -2358,7 +2358,8 @@ let one_unroll p summary m_info type_info c_info s_map i_info p_info =
 let rec all_unroll ?(assign_ground = false) p summary m_info type_info c_info
     s_map i_info p_info stmt_map =
   match p with
-  | _ when AST.ground p -> stmt_map
+  | _ when AST.ground p || (!Cmdline.with_fuzz && AST.ground_except_const p) ->
+      stmt_map
   | _ when assign_ground ->
       all_unroll_void p summary m_info type_info c_info s_map i_info p_info
         stmt_map
@@ -2378,7 +2379,8 @@ let rec all_unroll ?(assign_ground = false) p summary m_info type_info c_info
 and all_unroll_void p summary m_info type_info c_info s_map i_info p_info
     stmt_map =
   match p with
-  | _ when AST.ground p -> stmt_map
+  | _ when AST.ground p || (!Cmdline.with_fuzz && AST.ground_except_const p) ->
+      stmt_map
   | AST.Seq _ when AST.void p ->
       StmtMap.M.add p
         (one_unroll p summary m_info type_info c_info s_map i_info p_info)
@@ -2545,11 +2547,17 @@ let rec mk_testcase summary m_info type_info c_info s_map i_info p_info queue =
   in
   match queue with
   | p :: tl ->
-      if AST.ground p.tc then [ (pretty_format p.tc, tl) ]
+      if AST.ground p.tc then [ (Complete, pretty_format p.tc, tl) ]
+      else if !Cmdline.with_fuzz && AST.ground_except_const p.tc then
+        [ (Except_Const, pretty_format p.tc, tl) ]
       else
         (match
-           all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc summary
-             m_info type_info c_info s_map i_info p_info StmtMap.M.empty
+           all_unroll
+             ~assign_ground:
+               (AST.assign_ground p.tc
+               || (!Cmdline.with_fuzz && AST.assign_ground_except_const p.tc))
+             p.tc summary m_info type_info c_info s_map i_info p_info
+             StmtMap.M.empty
          with
         | exception Not_found_setter -> tl
         | exception Not_found_get_object -> tl
@@ -2597,4 +2605,5 @@ let mk_testcases ~is_start queue (e_method, error_summary)
   let result =
     mk_testcase summary m_info type_info c_info s_map i_info p_info init
   in
-  if result = [] then ((ImportSet.empty, ""), []) else List.hd result
+  if result = [] then (Incomplete, (ImportSet.empty, ""), [])
+  else List.hd result
