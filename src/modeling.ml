@@ -455,7 +455,7 @@ let stringwriter_info =
     }
 
 let parseposition_info =
-  let this = This (Object "java.io.StringWriter") in
+  let this = This (Object "java.text.ParsePosition") in
   let arg = Var (Int, "index") in
   MethodInfo.
     {
@@ -467,7 +467,7 @@ let parseposition_info =
     }
 
 let bigdecimal_info =
-  let this = This (Object "java.io.StringWriter") in
+  let this = This (Object "java.math.BigDecimal") in
   let arg = Var (Int, "val") in
   MethodInfo.
     {
@@ -776,6 +776,8 @@ let add_java_package_summary mmap =
   |> SummaryMap.M.add "java.util.Random.<init>()" ([ random_summary ], [])
   |> SummaryMap.M.add "java.io.StringWriter.<init>()"
        ([ stringwriter_summary ], [])
+  |> SummaryMap.M.add "java.text.ParsePosition.<init>(int)"
+       ([ parseposition_summary ], [])
   |> SummaryMap.M.add "java.math.BigDecimal.<init>(int)"
        ([ bigdecimal_summary ], [])
   |> SummaryMap.M.add "java.lang.String.<init>(java.lang.String)"
@@ -821,6 +823,7 @@ let add_java_package_method mmap =
   |> MethodInfo.M.add "java.lang.Object.<init>()" obj_info
   |> MethodInfo.M.add "java.util.Random.<init>()" random_info
   |> MethodInfo.M.add "java.io.StringWriter.<init>()" stringwriter_info
+  |> MethodInfo.M.add "java.text.ParsePosition.<init>(int)" parseposition_info
   |> MethodInfo.M.add "java.math.BigDecimal.<init>(int)" bigdecimal_info
   |> MethodInfo.M.add "java.lang.String.<init>(java.lang.String)" string_info
   |> MethodInfo.M.add "IntArray.<init>(int)" int_array_info
