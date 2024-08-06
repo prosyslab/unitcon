@@ -144,6 +144,10 @@ let parse_primitive_info filename =
    run program
  * ************************************** *)
 
+let lock_read_only dir = "chattr -R +i " ^ dir
+
+let unlock_read_only dir = "chattr -R -i " ^ dir
+
 let my_really_read_string in_chan =
   let res = Buffer.create 1024 in
   let rec loop () =
@@ -195,6 +199,7 @@ let run_type str =
     let start_cmd = "^" ^ Filename.concat unitcon_path "deps/jazzer" in
     Str.string_match (Str.regexp start_cmd) str 0
   then Fuzzer
+  else if Str.string_match (Str.regexp "^chattr") str 0 then Fuzzer
   else failwith "not supported build type"
 
 let string_of_expected_bug file =
@@ -628,7 +633,7 @@ let compile_cmd =
   "find ./unitcon_tests/ -name \"*.java\" > test_files; "
   ^ "javac -cp with_dependency.jar:"
   ^ Filename.concat unitcon_path "deps/junit-4.11.jar"
-  ^ " @test_files -encoding ISO-8859-1"
+  ^ " @test_files"
 
 let driver_compile_cmd =
   "find ./unitcon_drivers/ -name \"*.java\" > driver_files; "
@@ -670,6 +675,12 @@ let normal_exit =
         (Unix.gettimeofday () -. !time);
       Logger.info "First Success Test: %s" !first_success_tc;
       Logger.info "Last Success Test: %s" !last_success_tc;
+      (* unlock files and folders because they should not be locked when the process terminates *)
+      let ic_out, ic_err =
+        unlock_read_only !info.program_dir |> simple_compiler !info.program_dir
+      in
+      close_in ic_out;
+      close_in ic_err;
       remove_no_exec_files !num_of_last_exec_tc !info.test_dir;
       Unix._exit 0)
 
@@ -683,13 +694,18 @@ let execute_cmd =
   ^ "org.junit.runner.JUnitCore"
 
 let driver_execute_cmd d_file =
-  Filename.concat unitcon_path "deps/jazzer "
+  lock_read_only !info.program_dir
+  ^ "; "
+  ^ unlock_read_only !info.driver_dir
+  ^ "; "
+  ^ Filename.concat unitcon_path "deps/jazzer "
   ^ "--cp=with_dependency.jar:./unitcon_drivers/:. " ^ "--target_class="
   ^ d_file
   ^ " --keep_going=30 --hooks=false --dedup=true \
      --reproducer_path=./unitcon_drivers/"
   ^ " -artifact_prefix=./unitcon_drivers/ -timeout=10 -max_total_time=10 \
-     -seed=1 -dict=" ^ !info.fuzz_constant_file
+     -seed=1 -dict=" ^ !info.fuzz_constant_file ^ "; "
+  ^ unlock_read_only !info.program_dir
 
 let log_driver_execute_cmd crash_file =
   "java -cp with_dependency.jar:"
@@ -825,6 +841,13 @@ let abnormal_run_test =
     (fun _ ->
       if !num_of_tc_files mod 15 <> 0 then (
         Logger.info "Abnormal Run Test";
+        (* unlock files and folders because they should not be locked when the test cases execute *)
+        let ic_out, ic_err =
+          unlock_read_only !info.program_dir
+          |> simple_compiler !info.program_dir
+        in
+        close_in ic_out;
+        close_in ic_err;
         run_testfile ();
         Unix.kill (Unix.getpid ()) Sys.sigusr1)
       else Logger.info "Keep Going")
