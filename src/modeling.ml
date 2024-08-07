@@ -770,7 +770,7 @@ let add_java_package_summary mmap =
        ([ print_summary ], [])
   |> SummaryMap.M.add "java.io.FileInputStream.<init>(java.io.File)"
        ([ file_input_summary ], [])
-  |> SummaryMap.M.add "java.io.java.io.ByteArrayOutputStream.<init>()"
+  |> SummaryMap.M.add "java.io.ByteArrayOutputStream.<init>()"
        ([ ba_output_summary ], [])
   |> SummaryMap.M.add "java.lang.Object.<init>()" ([ obj_summary ], [])
   |> SummaryMap.M.add "java.util.Random.<init>()" ([ random_summary ], [])

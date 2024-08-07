@@ -1493,13 +1493,13 @@ let find_class_file =
     [ "UnitconInterface"; "UnitconEnum" ]
 
 let find_enum_var_list c_name i_info =
-  if InstanceInfo.M.mem c_name i_info then
-    List.fold_left
-      (fun gvar_list const ->
-        (0, AST.GlobalConstant (c_name ^ "." ^ const)) :: gvar_list)
-      []
-      (InstanceInfo.M.find c_name i_info)
-  else []
+  match InstanceInfo.M.find_opt c_name i_info with
+  | None -> []
+  | Some info ->
+      List.fold_left
+        (fun gvar_list const ->
+          (0, AST.GlobalConstant (c_name ^ "." ^ const)) :: gvar_list)
+        [] info
 
 let all_global_var c_name s_trace =
   Condition.M.fold
@@ -2473,7 +2473,10 @@ let combinate (prec, p) stmt_map =
 let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
   let propagation caller_method caller_preconds call_prop =
     let new_value, new_mem, check_match =
-      satisfy e_method e_summary call_prop m_info
+      try satisfy e_method e_summary call_prop m_info
+      with _ ->
+        Logger.info "Fail to find a satisfiable error entry method";
+        (Value.M.empty, Condition.M.empty, false)
     in
     let new_uf = mk_new_uf e_method e_summary call_prop m_info in
     if !Cmdline.basic_mode then
