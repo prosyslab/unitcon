@@ -357,7 +357,12 @@ module AST = struct
 
   type primitive = Z of int | R of float | B of bool | C of char | S of string
 
-  type exp = Primitive of primitive | GlobalConstant of string | Null | Exp
+  type exp =
+    | Primitive of primitive
+    | GlobalConstant of string
+    | Null
+    | WithFuzz
+    | Exp
 
   type t =
     | Const of (id * exp)
@@ -404,6 +409,8 @@ module AST = struct
 
   and is_exp = function Exp -> true | _ -> false
 
+  and is_fuzz = function WithFuzz -> true | _ -> false
+
   let rec ground = function
     | Const (x, exp) -> not (is_id x || is_exp exp)
     | Assign (x0, x1, func, arg) ->
@@ -422,34 +429,13 @@ module AST = struct
     | Skip -> true
     | Stmt -> true
 
-  let rec ground_except_const = function
-    | Const (x, exp) -> (
-        (* when type of x is primitive, whether exp is grounded or not is no matter *)
-        match get_vinfo x |> fst with
-        | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
-            is_id x |> not
-        | _ -> not (is_id x || is_exp exp))
-    | Assign (x0, x1, func, arg) ->
-        not (is_id x0 || is_id x1 || is_func func || is_arg arg)
-    | Void (x, func, arg) -> not (is_id x || is_func func || is_arg arg)
-    | Seq (s1, s2) -> ground_except_const s1 && ground_except_const s2
-    | Skip -> true
+  let rec with_withfuzz = function
+    | Const (_, exp) -> is_fuzz exp
+    | Assign _ -> false
+    | Void _ -> false
+    | Seq (s1, s2) -> with_withfuzz s1 || with_withfuzz s2
+    | Skip -> false
     | Stmt -> false
-
-  let rec assign_ground_except_const = function
-    | Const (x, exp) -> (
-        (* when type of x is primitive, whether exp is grounded or not is no matter *)
-        match get_vinfo x |> fst with
-        | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
-            is_id x |> not
-        | _ -> not (is_id x || is_exp exp))
-    | Assign (x0, x1, func, arg) ->
-        not (is_id x0 || is_id x1 || is_func func || is_arg arg)
-    | Void (x, func, arg) -> not (is_id x || is_func func || is_arg arg)
-    | Seq (s1, s2) ->
-        assign_ground_except_const s1 && assign_ground_except_const s2
-    | Skip -> true
-    | Stmt -> true
 
   let modify_import import v =
     { import; variable = v.variable; field = v.field; summary = v.summary }
@@ -1120,13 +1106,14 @@ module AST = struct
         | Double -> "0.;\n"
         | Bool -> "false;\n"
         | _ -> "null;\n")
-    | Exp ->
+    | WithFuzz ->
         if !Cmdline.with_fuzz then
           match get_vinfo x |> fst with
           | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
               get_consume_func (get_vinfo x |> fst) ^ ";\n"
           | _ -> "Exp;\n"
         else "Exp;\n"
+    | Exp -> "Exp;\n"
 
   let rec code = function
     | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x
