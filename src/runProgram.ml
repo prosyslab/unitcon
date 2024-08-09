@@ -432,7 +432,9 @@ let add_log_driver driver_dir file_num (tc, time) =
   in
   insert_log_driver oc (file_num, tc, time)
 
-let remove_file fname = if Sys.file_exists fname then Unix.unlink fname
+let remove_file fname =
+  if Sys.file_exists fname then
+    try Unix.unlink fname with _ -> Logger.info "Fail delete %s" fname
 
 let remove_files dir (pattern : Str.regexp) =
   let remove_file file =
@@ -488,7 +490,8 @@ let remove_last_file test_dir =
   remove_file (Filename.concat test_dir last_file)
 
 let rec remove_no_exec_files curr_num test_dir =
-  if curr_num >= !num_of_tc_files then ()
+  if !num_of_tc_files = !num_of_last_exec_tc || curr_num > !num_of_tc_files then
+    ()
   else
     let curr_tc = "UnitconTest" ^ string_of_int curr_num ^ ".java" in
     let curr_class = "UnitconTest" ^ string_of_int curr_num ^ ".class" in
@@ -668,6 +671,12 @@ let build_driver info =
 let normal_exit =
   Sys.Signal_handle
     (fun _ ->
+      (* unlock files and folders because they should not be locked when the process terminates *)
+      let ic_out, ic_err =
+        unlock_read_only !info.program_dir |> simple_compiler !info.program_dir
+      in
+      close_in ic_out;
+      close_in ic_err;
       Logger.info "Normal End UnitCon for %s: %b(%d) (total time: %f)"
         !info.program_dir
         (if !num_of_success > 0 then true else false)
@@ -675,12 +684,6 @@ let normal_exit =
         (Unix.gettimeofday () -. !time);
       Logger.info "First Success Test: %s" !first_success_tc;
       Logger.info "Last Success Test: %s" !last_success_tc;
-      (* unlock files and folders because they should not be locked when the process terminates *)
-      let ic_out, ic_err =
-        unlock_read_only !info.program_dir |> simple_compiler !info.program_dir
-      in
-      close_in ic_out;
-      close_in ic_err;
       remove_no_exec_files !num_of_last_exec_tc !info.test_dir;
       Unix._exit 0)
 
@@ -729,10 +732,10 @@ let run_testfile () =
     close_in ic_err;
     num_of_last_exec_tc := num_of_t_file;
     if checking_bug_presence data expected_bug then (
-      Logger.info "Success Test: %s" t_file;
       if !first_success_tc = "" then first_success_tc := t_file;
       last_success_tc := t_file;
-      incr num_of_success)
+      incr num_of_success;
+      Logger.info "Success Test: %s" t_file)
     else if not (Sys.file_exists (Filename.concat test_dir (t_file ^ ".java")))
     then ()
     else (
@@ -839,15 +842,14 @@ let rec run_test ~is_start info queue e_method_info p_info =
 let abnormal_run_test =
   Sys.Signal_handle
     (fun _ ->
+      (* unlock files and folders because they should not be locked when the test cases execute *)
+      let ic_out, ic_err =
+        unlock_read_only !info.program_dir |> simple_compiler !info.program_dir
+      in
+      close_in ic_out;
+      close_in ic_err;
       if !num_of_tc_files mod 15 <> 0 then (
         Logger.info "Abnormal Run Test";
-        (* unlock files and folders because they should not be locked when the test cases execute *)
-        let ic_out, ic_err =
-          unlock_read_only !info.program_dir
-          |> simple_compiler !info.program_dir
-        in
-        close_in ic_out;
-        close_in ic_err;
         run_testfile ();
         Unix.kill (Unix.getpid ()) Sys.sigusr1)
       else Logger.info "Keep Going")
