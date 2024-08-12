@@ -8,7 +8,10 @@ exception Compilation_Error
 
 let con_path = "unitcon_properties"
 
-let unitcon_path = Unix.getcwd ()
+let unitcon_path =
+  let path = Filename.dirname Sys.argv.(0) in
+  if Filename.is_relative path then Filename.concat (Unix.getcwd ()) path
+  else path
 
 let test_basename = "UnitconTest"
 
