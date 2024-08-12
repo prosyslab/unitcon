@@ -8,15 +8,11 @@ exception Not_found_setter
 exception Not_found_get_object
 
 module TypeSet = Set.Make (struct
-  type t = string
-
-  let compare = compare
+  type t = string [@@deriving compare]
 end)
 
 module VarSet = Set.Make (struct
-  type t = variable
-
-  let compare = compare
+  type t = variable [@@deriving compare]
 end)
 
 (* Set of VarSet *)
@@ -32,6 +28,10 @@ module ErrorEntrySet = Set.Make (struct
   type t = string * summary
 
   let compare = compare
+end)
+
+module ExploredMethod = Set.Make (struct
+  type t = string [@@deriving compare]
 end)
 
 module StmtMap = struct
@@ -57,6 +57,8 @@ let outer = ref 0
 let recv = ref 0
 
 let new_var = ref 0
+
+let explored_m = ref ExploredMethod.empty
 
 let z3ctx =
   Z3.mk_context
@@ -2515,7 +2517,13 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
         | Some prop_list ->
             List.fold_left
               (fun caller_preconds call_prop ->
-                propagation caller_method caller_preconds call_prop)
+                if ExploredMethod.mem caller_method !explored_m then
+                  (* if the caller method is included in the error entry set,
+                       avoiding duplicate calculation *)
+                  caller_preconds
+                else (
+                  explored_m := ExploredMethod.add caller_method !explored_m;
+                  propagation caller_method caller_preconds call_prop))
               ErrorEntrySet.empty prop_list)
         |> ErrorEntrySet.union set)
       ErrorEntrySet.empty caller_list

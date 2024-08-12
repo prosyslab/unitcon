@@ -253,7 +253,7 @@ let execute_command command =
       Unix.open_process_full command (Unix.environment ())
     in
     let pid = Unix.process_full_pid (stdout, stdin, stderr) in
-    Unix.waitpid [ Unix.WUNTRACED ] pid |> ignore;
+    (try Unix.waitpid [ Unix.WUNTRACED ] pid |> ignore with _ -> ());
     close_channel (stdout, stdin, stderr)
   in
   match run_type command with
