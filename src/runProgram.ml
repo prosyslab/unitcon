@@ -699,18 +699,31 @@ let execute_cmd =
   ^ Filename.concat unitcon_path "deps/junit-4.11.jar:. "
   ^ "org.junit.runner.JUnitCore"
 
+let is_empty_file file =
+  if not (Sys.file_exists file) then failwith (file ^ " not found");
+  let ic = open_in file in
+  let s = really_input_string ic (in_channel_length ic) in
+  close_in ic;
+  if Regexp.rm_space s = "" then true else false
+
 let driver_execute_cmd d_file =
+  let execute_cmd =
+    let common =
+      Filename.concat unitcon_path "deps/jazzer "
+      ^ "--cp=with_dependency.jar:./unitcon_drivers/:. " ^ "--target_class="
+      ^ d_file
+      ^ " --keep_going=30 --hooks=false --dedup=true \
+         --reproducer_path=./unitcon_drivers/"
+      ^ " -artifact_prefix=./unitcon_drivers/ -timeout=10 -max_total_time=10 \
+         -seed=1"
+    in
+    if is_empty_file !info.fuzz_constant_file then common ^ "; "
+    else common ^ " -dict=" ^ !info.fuzz_constant_file ^ "; "
+  in
   lock_read_only !info.program_dir
   ^ "; "
   ^ unlock_read_only !info.driver_dir
-  ^ "; "
-  ^ Filename.concat unitcon_path "deps/jazzer "
-  ^ "--cp=with_dependency.jar:./unitcon_drivers/:. " ^ "--target_class="
-  ^ d_file
-  ^ " --keep_going=30 --hooks=false --dedup=true \
-     --reproducer_path=./unitcon_drivers/"
-  ^ " -artifact_prefix=./unitcon_drivers/ -timeout=10 -max_total_time=10 \
-     -seed=1 -dict=" ^ !info.fuzz_constant_file ^ "; "
+  ^ "; " ^ execute_cmd
   ^ unlock_read_only !info.program_dir
 
 let log_driver_execute_cmd crash_file =
