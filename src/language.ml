@@ -7,7 +7,7 @@ let compare_bool = Bool.compare
 
 let compare_list = List.compare
 
-type tc_completion = Complete | Except_Const | Incomplete
+type tc_completion = Complete | Need_Fuzzer | Need_Loop | Incomplete
 
 type method_name = string [@@deriving compare]
 
@@ -362,6 +362,7 @@ module AST = struct
     | GlobalConstant of string
     | Null
     | WithFuzz
+    | WithLoop
     | Exp
 
   type t =
@@ -371,6 +372,16 @@ module AST = struct
     | Seq of (t * t)
     | Skip
     | Stmt
+
+  module LoopIdMap = struct
+    module M = Map.Make (struct
+      type t = id
+
+      let compare = compare
+    end)
+
+    type t = exp list M.t
+  end
 
   let empty_var =
     {
@@ -411,6 +422,8 @@ module AST = struct
 
   and is_fuzz = function WithFuzz -> true | _ -> false
 
+  and is_loop = function WithLoop -> true | _ -> false
+
   let rec ground = function
     | Const (x, exp) -> not (is_id x || is_exp exp)
     | Assign (x0, x1, func, arg) ->
@@ -434,6 +447,14 @@ module AST = struct
     | Assign _ -> false
     | Void _ -> false
     | Seq (s1, s2) -> with_withfuzz s1 || with_withfuzz s2
+    | Skip -> false
+    | Stmt -> false
+
+  let rec with_withloop = function
+    | Const (_, exp) -> is_loop exp
+    | Assign _ -> false
+    | Void _ -> false
+    | Seq (s1, s2) -> with_withloop s1 || with_withloop s2
     | Skip -> false
     | Stmt -> false
 
@@ -561,6 +582,9 @@ module AST = struct
   let const_rule2 s g = match s with Const (x, _) -> Const (x, g) | _ -> s
 
   let const_rule3 s = match s with Const (x, _) -> Const (x, Null) | _ -> s
+
+  let const_rule_loop s =
+    match s with Const (x, _) -> Const (x, WithLoop) | _ -> s
 
   (* 2 *)
   let fcall_in_assign_rule s field f arg =
@@ -1077,46 +1101,58 @@ module AST = struct
     match p with
     | Z z -> (
         match get_vinfo x |> fst with
-        | Bool ->
-            if z = 0 then string_of_bool false ^ ";\n"
-            else string_of_bool true ^ ";\n"
-        | String -> "\"" ^ string_of_int z ^ "\";\n"
-        | _ -> string_of_int z ^ ";\n")
+        | Bool -> if z = 0 then string_of_bool false else string_of_bool true
+        | String -> "\"" ^ string_of_int z ^ "\""
+        | _ -> string_of_int z)
     | R r ->
         (* e.g., float --> 0.f, double --> 0. *)
         let type_cast =
-          (match get_vinfo x |> fst with Float -> "f" | _ -> "") ^ ";\n"
+          match get_vinfo x |> fst with Float -> "f" | _ -> ""
         in
         string_of_float r ^ type_cast
-    | B b -> string_of_bool b ^ ";\n"
-    | C c -> "\'" ^ String.make 1 c ^ "\';\n"
-    | S s -> "\"" ^ s ^ "\";\n"
+    | B b -> string_of_bool b
+    | C c -> "\'" ^ String.make 1 c ^ "\'"
+    | S s -> "\"" ^ s ^ "\""
+
+  let loop_id_lvar_code v =
+    match (get_v v).variable with
+    | Var (typ, id), Some idx -> (typ, "unitcon_" ^ id ^ string_of_int idx)
+    | _, None -> (NonType, "")
+    | This _, _ -> (NonType, "")
 
   let exp_code exp x =
     match exp with
     | Primitive p -> primitive_code p x
-    | GlobalConstant g -> Utils.replace_nested_symbol g ^ ";\n"
+    | GlobalConstant g -> Utils.replace_nested_symbol g
     | Null -> (
         (* If type inference from the summaries is fail,
            correct it in the code output step. *)
         match get_vinfo x |> fst with
-        | Int | Short | Byte | Char -> "0;\n"
-        | Long -> "0l;\n"
-        | Float -> "0.f;\n"
-        | Double -> "0.;\n"
-        | Bool -> "false;\n"
-        | _ -> "null;\n")
+        | Int | Short | Byte | Char -> "0"
+        | Long -> "0l"
+        | Float -> "0.f"
+        | Double -> "0."
+        | Bool -> "false"
+        | _ -> "null")
     | WithFuzz ->
         if !Cmdline.with_fuzz then
           match get_vinfo x |> fst with
           | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
-              get_consume_func (get_vinfo x |> fst) ^ ";\n"
-          | _ -> "Exp;\n"
-        else "Exp;\n"
-    | Exp -> "Exp;\n"
+              get_consume_func (get_vinfo x |> fst)
+          | _ -> "Exp"
+        else "Exp"
+    | WithLoop ->
+        if !Cmdline.with_loop then
+          let v_type, v_id = loop_id_lvar_code x in
+          match v_type with
+          | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
+              v_id ^ "[" ^ v_id ^ "_index]"
+          | _ -> "Exp"
+        else "Exp"
+    | Exp -> "Exp"
 
   let rec code = function
-    | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x
+    | Const (x, exp) -> id_code x ^ " = " ^ exp_code exp x ^ ";\n"
     | Assign (x0, x1, func, arg) ->
         if is_var x1 then
           id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
@@ -1138,4 +1174,27 @@ module AST = struct
     | Seq (s1, s2) -> code s1 ^ code s2
     | Skip -> ""
     | Stmt -> "Stmt"
+
+  let loop_id_code loop_id exp_list =
+    let v = loop_id_lvar_code loop_id in
+    let lval =
+      match fst v with
+      | Int -> "int[] " ^ snd v
+      | Long -> "long[] " ^ snd v
+      | Short -> "short[] " ^ snd v
+      | Byte -> "byte[] " ^ snd v
+      | Float -> "float[] " ^ snd v
+      | Double -> "double[] " ^ snd v
+      | Bool -> "boolean[] " ^ snd v
+      | Char -> "char[] " ^ snd v
+      | String -> "String[] " ^ snd v
+      | Object name ->
+          (get_short_class_name name |> Utils.replace_nested_symbol)
+          ^ "[] " ^ snd v
+      | _ -> ""
+    in
+    let rec rval id exps =
+      match exps with hd :: tl -> ", " ^ exp_code hd id ^ rval id tl | _ -> ""
+    in
+    lval ^ " = " ^ "{" ^ Regexp.rm_first_rest (rval loop_id exp_list) ^ "};\n"
 end

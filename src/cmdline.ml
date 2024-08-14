@@ -16,6 +16,8 @@ let mock = ref false
 
 let extension = ref ""
 
+let with_loop = ref false
+
 let with_fuzz = ref false
 
 let options =
@@ -43,6 +45,9 @@ let options =
       Arg.Set_string extension,
       "Extend the available modifiers from public to package (default: \"\", \
        e.g., \"com.a.b.c\")" );
+    ( "-with-loop",
+      Arg.Set with_loop,
+      "Execute multiple test cases using loop at once (default: false)" );
     ( "-with-fuzz",
       Arg.Set with_fuzz,
       "Use fuzzer for searching constant (default: false)" );

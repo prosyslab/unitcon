@@ -50,6 +50,7 @@ type partial_tc = {
   t_cost : int;
   prec : int; (* number of precise statement *)
   tc : AST.t;
+  loop_ids : AST.LoopIdMap.t;
 }
 
 let outer = ref 0
@@ -75,16 +76,27 @@ let solver = Z3.Solver.mk_solver z3ctx None
 let get_cost p =
   if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec) else (0, 0, 0)
 
-let mk_cost prev_p curr_tc prec =
+let mk_cost prev_p curr_tc curr_loop_id prec =
   {
     unroll = prev_p.unroll + 1;
     nt_cost = AST.count_nt curr_tc;
     t_cost = AST.count_t curr_tc;
     prec;
     tc = curr_tc;
+    loop_ids = curr_loop_id;
   }
 
-let empty_p = { unroll = 0; nt_cost = 0; t_cost = 0; prec = 0; tc = AST.Skip }
+let empty_id_map = AST.LoopIdMap.M.empty
+
+let empty_p =
+  {
+    unroll = 0;
+    nt_cost = 0;
+    t_cost = 0;
+    prec = 0;
+    tc = AST.Skip;
+    loop_ids = empty_id_map;
+  }
 
 let mk_some x = Some x
 
@@ -2181,18 +2193,27 @@ let mk_arg_seq arg class_name =
        (fun lst x -> AST.Variable (modified_x x) :: lst)
        [] (AST.get_arg arg))
 
+let loop_id_merge old_ids new_ids =
+  AST.LoopIdMap.M.merge
+    (fun _ v1 v2 ->
+      match (v1, v2) with
+      | None, None -> None
+      | Some _, _ -> v1
+      | None, Some _ -> v2)
+    old_ids new_ids
+
 let const_unroll p summary m_info i_info p_info =
   let get_r3 x =
     List.fold_left
       (fun lst x1 ->
         match snd x1 with
         | AST.Primitive _ -> lst
-        | _ -> (fst x1, AST.const_rule3 p) :: lst)
+        | _ -> (fst x1, AST.const_rule3 p, empty_id_map) :: lst)
       [] (get_value x p_info)
   in
   let get_r2 x =
     List.fold_left
-      (fun lst x1 -> (fst x1, AST.const_rule2 p (snd x1)) :: lst)
+      (fun lst x1 -> (fst x1, AST.const_rule2 p (snd x1), empty_id_map) :: lst)
       []
       (global_var_list
          (get_class_name (AST.get_vinfo x |> fst))
@@ -2201,9 +2222,24 @@ let const_unroll p summary m_info i_info p_info =
   match p with
   | AST.Const (x, _) ->
       if is_primitive x then
-        List.fold_left
-          (fun lst x1 -> (fst x1, AST.const_rule1 p (snd x1)) :: lst)
-          [] (get_value x p_info)
+        if !Cmdline.with_loop then
+          let prec, exps =
+            List.fold_left
+              (fun (prec, lst) x1 ->
+                let prec = if prec < fst x1 then fst x1 else prec in
+                (prec, snd x1 :: lst))
+              (min_int, []) (get_value x p_info)
+          in
+          [
+            ( prec,
+              AST.const_rule_loop p,
+              AST.LoopIdMap.M.add x exps empty_id_map );
+          ]
+        else
+          List.fold_left
+            (fun lst x1 ->
+              (fst x1, AST.const_rule1 p (snd x1), empty_id_map) :: lst)
+            [] (get_value x p_info)
       else
         let r2 = get_r2 x in
         if is_receiver (AST.get_vinfo x |> snd) then r2
@@ -2222,11 +2258,12 @@ let fcall_in_assign_unroll p summary m_info type_info c_info s_map =
           (get_ret_c x0 ret_c_lst summary m_info type_info c_info s_map)
         |> List.fold_left
              (fun lst (prec, (f, arg)) ->
-               (prec, AST.fcall_in_assign_rule p field_set f arg) :: lst)
+               (prec, AST.fcall_in_assign_rule p field_set f arg, empty_id_map)
+               :: lst)
              []
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
-let recv_in_assign_unroll (prec, p) m_info c_info =
+let recv_in_assign_unroll (prec, p, loop_ids) m_info c_info =
   match p with
   | AST.Assign (_, _, f, arg) when AST.recv_in_assign p ->
       if
@@ -2243,34 +2280,41 @@ let recv_in_assign_unroll (prec, p) m_info c_info =
           let r2 = AST.recv_in_assign_rule2_1 p recv f arg in
           let r3 = AST.recv_in_assign_rule3_1 p recv f arg in
           incr outer;
-          (prec, r2) :: [ (prec, r3) ])
+          (prec, r2, loop_ids) :: [ (prec, r3, loop_ids) ])
       else if cname_condition (AST.get_func f).method_name m_info c_info then
-        [ (prec, get_cname f |> AST.recv_in_assign_rule1 p) ]
+        [ (prec, get_cname f |> AST.recv_in_assign_rule1 p, loop_ids) ]
       else
         let r2 = AST.recv_in_assign_rule2 p "con_recv" !recv in
         let r3 = AST.recv_in_assign_rule3 p "con_recv" !recv in
         incr recv;
-        (prec, r2) :: [ (prec, r3) ]
+        (prec, r2, loop_ids) :: [ (prec, r3, loop_ids) ]
   | _ -> failwith "Fail: recv_in_assign_unroll"
 
-let rec arg_in_assign_unroll (prec, p) =
+let rec arg_in_assign_unroll (prec, p, loop_ids) =
   match p with
   | AST.Assign (_, _, f, arg) when AST.arg_in_assign p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
       mk_arg_seq arg class_name
       |> List.fold_left
            (fun lst x ->
-             (prec, AST.arg_in_assign_rule p x (AST.Param (AST.get_arg arg)))
+             ( prec,
+               AST.arg_in_assign_rule p x (AST.Param (AST.get_arg arg)),
+               loop_ids )
              :: lst)
            []
   | Seq (s1, s2) when AST.arg_in_assign s2 ->
-      arg_in_assign_unroll (prec, s2)
-      |> List.fold_left (fun lst x -> (fst x, AST.Seq (s1, snd x)) :: lst) []
+      arg_in_assign_unroll (prec, s2, loop_ids)
+      |> List.fold_left
+           (fun lst (p', s', loop') ->
+             (p', AST.Seq (s1, s'), loop_id_merge loop_ids loop') :: lst)
+           []
   | _ -> failwith "Fail: arg_in_assign_unroll"
 
 let void_unroll p =
-  (0, AST.void_rule1 p)
-  :: List.fold_left (fun lst x -> (0, x) :: lst) [] (AST.void_rule2 p)
+  (0, AST.void_rule1 p, empty_id_map)
+  :: List.fold_left
+       (fun lst x -> (0, x, empty_id_map) :: lst)
+       [] (AST.void_rule2 p)
 
 let fcall_in_void_unroll p summary m_info c_info s_map =
   match p with
@@ -2280,35 +2324,40 @@ let fcall_in_void_unroll p summary m_info c_info s_map =
       else
         List.fold_left
           (fun lst (prec, f, arg) ->
-            (prec, AST.fcall_in_void_rule p f (AST.Arg arg)) :: lst)
+            (prec, AST.fcall_in_void_rule p f (AST.Arg arg), empty_id_map)
+            :: lst)
           [] lst
   | _ -> failwith "Fail: fcall_in_void_unroll"
 
-let recv_in_void_unroll (prec, p) m_info c_info =
+let recv_in_void_unroll (prec, p, loop_ids) m_info c_info =
   match p with
   | AST.Void (_, f, _) when AST.recv_in_void p ->
       if cname_condition (AST.get_func f).method_name m_info c_info then
-        [ (prec, get_cname f |> AST.recv_in_void_rule1 p) ]
+        [ (prec, get_cname f |> AST.recv_in_void_rule1 p, loop_ids) ]
       else
         let r2 = AST.recv_in_void_rule2 p "con_recv" !recv in
         let r3 = AST.recv_in_void_rule3 p "con_recv" !recv in
         incr recv;
-        (prec, r2) :: [ (prec, r3) ]
+        (prec, r2, loop_ids) :: [ (prec, r3, loop_ids) ]
   | _ -> failwith "Fail: recv_in_void_unroll"
 
-let rec arg_in_void_unroll (prec, p) =
+let rec arg_in_void_unroll (prec, p, loop_ids) =
   match p with
   | AST.Void (_, f, arg) when AST.arg_in_void p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
       mk_arg_seq arg class_name
       |> List.fold_left
            (fun lst x ->
-             (prec, AST.arg_in_void_rule p x (AST.Param (AST.get_arg arg)))
+             ( prec,
+               AST.arg_in_void_rule p x (AST.Param (AST.get_arg arg)),
+               loop_ids )
              :: lst)
            []
   | Seq (s1, s2) when AST.arg_in_void s2 ->
-      arg_in_void_unroll (prec, s2)
-      |> List.fold_left (fun lst x -> (fst x, AST.Seq (s1, snd x)) :: lst) []
+      arg_in_void_unroll (prec, s2, loop_ids)
+      |> List.fold_left
+           (fun lst (p', s', loop') -> (p', AST.Seq (s1, s'), loop') :: lst)
+           []
   | _ -> failwith "Fail: arg_in_void_unroll"
 
 let append l1 l2 =
@@ -2328,7 +2377,7 @@ let one_unroll p summary m_info type_info c_info s_map i_info p_info =
       (* fcall_in_assign --> recv_in_assign --> arg_in_assign *)
       match fcall_in_assign_unroll p summary m_info type_info c_info s_map with
       | exception Not_found_get_object ->
-          if !Cmdline.mock then [ (0, AST.mk_mock_statement p) ]
+          if !Cmdline.mock then [ (0, AST.mk_mock_statement p, empty_id_map) ]
           else raise Not_found_get_object
       | p_lst ->
           let lst =
@@ -2344,10 +2393,11 @@ let one_unroll p summary m_info type_info c_info s_map i_info p_info =
           if
             !Cmdline.mock
             && List.filter
-                 (fun (_, x) -> AST.count_params x < 2 (* at least receiver *))
+                 (fun (_, x, _) ->
+                   AST.count_params x < 2 (* at least receiver *))
                  p_lst
                = []
-          then (0, AST.mk_mock_statement p) :: lst
+          then (0, AST.mk_mock_statement p, empty_id_map) :: lst
           else lst)
   | Void _ when AST.fcall1_in_void p ->
       (* fcall1_in_void --> recv_in_void --> arg_in_void *)
@@ -2367,7 +2417,7 @@ let one_unroll p summary m_info type_info c_info s_map i_info p_info =
            []
   | Void _ when AST.recv_in_void p ->
       (* unroll error entry *)
-      recv_in_void_unroll (0, p) m_info c_info
+      recv_in_void_unroll (0, p, empty_id_map) m_info c_info
       |> List.fold_left
            (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
            []
@@ -2402,7 +2452,9 @@ and all_unroll_void p summary m_info type_info c_info s_map i_info p_info
         (one_unroll p summary m_info type_info c_info s_map i_info p_info)
         stmt_map
   | Seq (s1, s2) -> (
-      let new_void s1 f = (fst f, AST.Seq (AST.modify_last_assign s1, snd f)) in
+      let new_void s1 (p', s', loop') =
+        (p', AST.Seq (AST.modify_last_assign s1, s'), loop')
+      in
       let new_void_list s1 s2 =
         one_unroll
           (AST.Seq (AST.last_code s1, s2))
@@ -2444,11 +2496,12 @@ let sort_stmts map stmts =
       | None, None -> 0)
     stmts
 
-let combinate (prec, p) stmt_map =
-  let combinate_stmt p s new_s_list =
+let combinate (prec, p, loop_ids) stmt_map =
+  let combinate_stmt (p', s', loop_ids') s new_s_list =
     List.fold_left
-      (fun lst new_s ->
-        (fst p + fst new_s, change_stmt (snd p) s (snd new_s)) :: lst)
+      (fun lst (new_p, new_s, new_loop) ->
+        (p' + new_p, change_stmt s' s new_s, loop_id_merge loop_ids' new_loop)
+        :: lst)
       [] new_s_list
   in
   let combinate_stmts s new_s_lst partial_lst =
@@ -2466,7 +2519,7 @@ let combinate (prec, p) stmt_map =
             []
         | Some new_s_list -> combinate_stmts s new_s_list lst
         | _ -> lst)
-      [ (prec, p) ]
+      [ (prec, p, loop_ids) ]
       stmts
   in
   return_stmts p |> sort_stmts stmt_map |> all_combinate |> List.rev
@@ -2573,8 +2626,11 @@ let rec mk_testcase summary m_info type_info c_info s_map i_info p_info queue =
   match queue with
   | p :: tl ->
       if !Cmdline.with_fuzz && AST.ground p.tc && AST.with_withfuzz p.tc then
-        [ (Except_Const, pretty_format p.tc, tl) ]
-      else if AST.ground p.tc then [ (Complete, pretty_format p.tc, tl) ]
+        [ (Need_Fuzzer, pretty_format p.tc, p.loop_ids, tl) ]
+      else if !Cmdline.with_loop && AST.ground p.tc && AST.with_withloop p.tc
+      then [ (Need_Loop, pretty_format p.tc, p.loop_ids, tl) ]
+      else if AST.ground p.tc then
+        [ (Complete, pretty_format p.tc, p.loop_ids, tl) ]
       else
         (match
            all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc summary
@@ -2583,9 +2639,10 @@ let rec mk_testcase summary m_info type_info c_info s_map i_info p_info queue =
         | exception Not_found_setter -> tl
         | exception Not_found_get_object -> tl
         | x ->
-            combinate (p.prec, p.tc) x
+            combinate (p.prec, p.tc, p.loop_ids) x
             |> List.fold_left
-                 (fun lst new_tc -> mk_cost p (snd new_tc) (fst new_tc) :: lst)
+                 (fun lst (new_p, new_s, new_loop) ->
+                   mk_cost p new_s new_loop new_p :: lst)
                  []
             |> List.rev_append (List.rev tl))
         |> mk_testcase summary m_info type_info c_info s_map i_info p_info
@@ -2616,7 +2673,8 @@ let mk_testcases ~is_start queue (e_method, error_summary)
             apply_rule
               (get_void_func AST.Id ~ee ~es:ee_s summary m_info c_info s_map)
             |> List.fold_left
-                 (fun lst new_tc -> mk_cost empty_p new_tc 0 :: lst)
+                 (fun lst new_tc ->
+                   mk_cost empty_p new_tc empty_id_map 0 :: lst)
                  []
             |> List.rev_append init_list ))
         (find_ee e_method error_summary cg summary call_prop_map m_info c_info)
@@ -2626,5 +2684,5 @@ let mk_testcases ~is_start queue (e_method, error_summary)
   let result =
     mk_testcase summary m_info type_info c_info s_map i_info p_info init
   in
-  if result = [] then (Incomplete, (ImportSet.empty, ""), [])
+  if result = [] then (Incomplete, (ImportSet.empty, ""), empty_id_map, [])
   else List.hd result

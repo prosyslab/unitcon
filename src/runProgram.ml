@@ -15,11 +15,15 @@ let unitcon_path =
 
 let test_basename = "UnitconTest"
 
+let multi_test_basename = "UnitconMultiTest"
+
 let driver_basename = "UnitconDriver"
 
 let time = ref 0.0
 
 let num_of_tc_files = ref 0
+
+let num_of_multi_tc_files = ref 0
 
 let num_of_driver_files = ref 0
 
@@ -49,6 +53,7 @@ type t = {
   constant_file : string;
   fuzz_constant_file : string;
   test_dir : string;
+  multi_test_dir : string;
   driver_dir : string;
   expected_bug : string;
 }
@@ -67,6 +72,7 @@ let info =
       constant_file = "";
       fuzz_constant_file = "";
       test_dir = "";
+      multi_test_dir = "";
       driver_dir = "";
       expected_bug = "";
     }
@@ -218,6 +224,36 @@ let get_index_of_substring substr str start =
   | exception Not_found -> None
   | i -> Some i
 
+let get_rep_input error_trace expected_bug =
+  let expect = string_of_expected_bug expected_bug in
+  let target = !bug_type ^ ".*" ^ "[ \t\r\n]+[^a]*" ^ expect in
+  (* Exception ... Unitcon=index= ... -----UnitConLogEnd----- *)
+  let s_idx = get_index_of_substring target error_trace 0 in
+  let e_idx =
+    match s_idx with
+    | None -> None
+    | Some i -> get_index_of_substring "-----UnitConLogEnd-----" error_trace i
+  in
+  let trace_and_input =
+    match (s_idx, e_idx) with
+    | None, _ | _, None -> ""
+    | Some s, Some e -> String.sub error_trace s (e - s)
+  in
+  let rec get_input lst =
+    match lst with
+    | hd :: tl ->
+        if check_substring "UnitCon=" hd then
+          let name_idx =
+            Str.replace_first (Str.regexp "UnitCon=") "" hd
+            |> Str.split (Str.regexp "=")
+          in
+          (name_idx |> List.hd, name_idx |> List.tl |> List.hd |> int_of_string)
+          :: get_input tl
+        else get_input tl
+    | _ -> []
+  in
+  Str.split (Str.regexp "\n") trace_and_input |> get_input
+
 let get_rep_file error_trace expected_bug =
   let expect = string_of_expected_bug expected_bug in
   let target = !bug_type ^ ".*" ^ "[ \t\r\n]+[^a]*" ^ expect in
@@ -288,21 +324,21 @@ let get_imports i_set =
   in
   ImportSet.fold (fun i s -> s ^ i) str_set init
 
+let need_default_interface tc_body =
+  match Str.search_forward (Str.regexp "UnitconInterface") tc_body 0 with
+  | exception _ -> ()
+  | _ -> require_interface_class := true
+
+let need_default_enum tc_body =
+  match Str.search_forward (Str.regexp "UnitconEnum") tc_body 0 with
+  | exception _ -> ()
+  | _ -> require_enum_class := true
+
+let need_default_class tc_body =
+  need_default_interface tc_body;
+  need_default_enum tc_body
+
 let insert_test oc (file_num, tc, time) =
-  let need_default_interface tc =
-    match Str.search_forward (Str.regexp "UnitconInterface") tc 0 with
-    | exception _ -> ()
-    | _ -> require_interface_class := true
-  in
-  let need_default_enum tc =
-    match Str.search_forward (Str.regexp "UnitconEnum") tc 0 with
-    | exception _ -> ()
-    | _ -> require_enum_class := true
-  in
-  let need_default_class tc =
-    need_default_interface tc;
-    need_default_enum tc
-  in
   let insert oc (i_set, m_bodies) =
     let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
     let start = "@Test\npublic void test() {\n" in
@@ -321,21 +357,60 @@ let insert_test oc (file_num, tc, time) =
   in
   insert oc tc
 
+let insert_loop loop_id =
+  let id = AST.loop_id_lvar_code loop_id |> snd in
+  let index = id ^ "_index" in
+  let init = index ^ " = 0; " in
+  let cond = index ^ " < " ^ id ^ ".length; " in
+  let incr = index ^ "++" in
+  "for(int " ^ init ^ cond ^ incr ^ ") {\n"
+
+let insert_loops loop_id_map =
+  AST.LoopIdMap.M.fold
+    (fun id _ (code, count) -> (code ^ insert_loop id, count + 1))
+    loop_id_map ("", 0)
+
+let rec close_bracket count =
+  if count <= 0 then "" else "}\n" ^ close_bracket (count - 1)
+
+let insert_multi_test_log loop_id_map =
+  let end_signal = "System.err.println(\"-----UnitConLogEnd-----\");\n" in
+  let log id =
+    "System.err.println(\"UnitCon=\" + \"" ^ id ^ "\" + \"=\" + " ^ id
+    ^ "_index" ^ ");\n"
+  in
+  AST.LoopIdMap.M.fold
+    (fun id _ code -> log (AST.loop_id_lvar_code id |> snd) ^ code)
+    loop_id_map end_signal
+
+let insert_multi_test oc (file_num, tc, loop_id_map, time) =
+  let insert oc (i_set, m_bodies) =
+    let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
+    let start = "@Test\npublic void test() {\n" in
+    let array_for_loop =
+      AST.LoopIdMap.M.fold
+        (fun id exps code -> code ^ AST.loop_id_code id exps)
+        loop_id_map ""
+    in
+    let loop_stmt, loop_cnt = insert_loops loop_id_map in
+    let loop_input_log = insert_multi_test_log loop_id_map in
+    need_default_class m_bodies;
+    get_package !Cmdline.extension |> output_string oc;
+    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
+    get_imports i_set ^ "import org.junit.Test;\n\n" |> output_string oc;
+    output_string oc time;
+    "public class UnitconMultiTest" ^ string_of_int file_num ^ " {\n"
+    |> output_string oc;
+    start ^ array_for_loop ^ loop_stmt ^ "try {\n" ^ m_bodies
+    ^ "}\ncatch(Exception e) {\ne.printStackTrace();\n" ^ loop_input_log ^ "}\n"
+    ^ close_bracket loop_cnt ^ "}\n}\n"
+    |> output_string oc;
+    flush oc;
+    close_out oc
+  in
+  insert oc tc
+
 let insert_driver oc (file_num, tc, time) =
-  let need_default_interface tc =
-    match Str.search_forward (Str.regexp "UnitconInterface") tc 0 with
-    | exception _ -> ()
-    | _ -> require_interface_class := true
-  in
-  let need_default_enum tc =
-    match Str.search_forward (Str.regexp "UnitconEnum") tc 0 with
-    | exception _ -> ()
-    | _ -> require_enum_class := true
-  in
-  let need_default_class tc =
-    need_default_interface tc;
-    need_default_enum tc
-  in
   let insert oc (i_set, m_bodies) =
     let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
     let start =
@@ -418,6 +493,14 @@ let add_testcase test_dir file_num (tc, time) =
          (test_basename ^ string_of_int file_num ^ ".java"))
   in
   insert_test oc (file_num, tc, time)
+
+let add_multi_testcase test_dir file_num (tc, loop_ids, time) =
+  let oc =
+    open_out
+      (Filename.concat test_dir
+         (multi_test_basename ^ string_of_int file_num ^ ".java"))
+  in
+  insert_multi_test oc (file_num, tc, loop_ids, time)
 
 let add_driver driver_dir file_num (tc, time) =
   let oc =
@@ -595,6 +678,30 @@ let driver_to_tc typs inputs tc =
   in
   func_to_value typs inputs tc
 
+let loop_index_to_tc rep_input loop_id_map tc =
+  let rec find_input count exps =
+    match exps with
+    | hd :: _ when count = 0 -> hd
+    | _ :: tl -> find_input (count - 1) tl
+    | _ -> AST.Exp
+  in
+  let find_id str_id =
+    AST.LoopIdMap.M.fold
+      (fun id _ found ->
+        if str_id = (AST.loop_id_lvar_code id |> snd) then id else found)
+      loop_id_map AST.Id
+  in
+  List.fold_left
+    (fun old_tc (id, idx) ->
+      let to_be_modified = id ^ "\\[" ^ id ^ "_index\\]" in
+      let ast_id = find_id id in
+      let real_input =
+        find_input idx (AST.LoopIdMap.M.find ast_id loop_id_map)
+      in
+      let input_code = AST.exp_code real_input ast_id in
+      Str.replace_first (Str.regexp to_be_modified) input_code old_tc)
+    tc rep_input
+
 let init program_dir =
   let cons = Filename.concat in
   let program_dir =
@@ -607,6 +714,10 @@ let init program_dir =
   in
   let d_dir =
     if !Cmdline.extension = "" then "unitcon_drivers"
+    else Utils.dot_to_dir_sep !Cmdline.extension
+  in
+  let mt_dir =
+    if !Cmdline.extension = "" then "unitcon_multi_tests"
     else Utils.dot_to_dir_sep !Cmdline.extension
   in
   info :=
@@ -622,10 +733,12 @@ let init program_dir =
       constant_file = cons con_path "extra_constant.json" |> cons program_dir;
       fuzz_constant_file = cons con_path "fuzz_constant" |> cons program_dir;
       test_dir = cons program_dir t_dir;
+      multi_test_dir = cons program_dir mt_dir;
       driver_dir = cons program_dir d_dir;
       expected_bug = cons con_path "expected_bug" |> cons program_dir;
     };
   init_folder !info.test_dir;
+  init_folder !info.multi_test_dir;
   init_folder !info.driver_dir;
   cons !info.test_dir "log.txt" |> Logger.from_file;
   get_bug_type (cons con_path "expected_bug_type" |> cons !info.program_dir);
@@ -640,6 +753,12 @@ let compile_cmd =
   ^ "javac -cp with_dependency.jar:"
   ^ Filename.concat unitcon_path "deps/junit-4.11.jar"
   ^ " @test_files"
+
+let multi_test_compile_cmd =
+  "find ./unitcon_multi_tests/ -name \"*.java\" > multi_test_files; "
+  ^ "javac -cp with_dependency.jar:"
+  ^ Filename.concat unitcon_path "deps/junit-4.11.jar"
+  ^ " @multi_test_files"
 
 let driver_compile_cmd =
   "find ./unitcon_drivers/ -name \"*.java\" > driver_files; "
@@ -666,6 +785,13 @@ let build_program info =
   in
   compile_loop ()
 
+let build_multi_test info =
+  let ic_out, ic_err =
+    simple_compiler info.program_dir multi_test_compile_cmd
+  in
+  close_in ic_out;
+  close_in ic_err
+
 let build_driver info =
   let ic_out, ic_err = simple_compiler info.program_dir driver_compile_cmd in
   close_in ic_out;
@@ -687,7 +813,14 @@ let normal_exit =
         (Unix.gettimeofday () -. !time);
       Logger.info "First Success Test: %s" !first_success_tc;
       Logger.info "Last Success Test: %s" !last_success_tc;
+      (* clean up useless files and directories *)
       remove_no_exec_files !num_of_last_exec_tc !info.test_dir;
+      remove_file (Filename.concat !info.program_dir "multi_test_files");
+      remove_file (Filename.concat !info.program_dir "driver_files");
+      remove_all_files !info.multi_test_dir;
+      remove_all_files !info.driver_dir;
+      Unix.rmdir !info.multi_test_dir;
+      Unix.rmdir !info.driver_dir;
       Unix._exit 0)
 
 let get_test_path path base_name =
@@ -696,6 +829,11 @@ let get_test_path path base_name =
 
 let execute_cmd =
   "java -cp with_dependency.jar:./unitcon_tests/:"
+  ^ Filename.concat unitcon_path "deps/junit-4.11.jar:. "
+  ^ "org.junit.runner.JUnitCore"
+
+let multi_test_execute_cmd =
+  "java -cp with_dependency.jar:./unitcon_multi_tests/:"
   ^ Filename.concat unitcon_path "deps/junit-4.11.jar:. "
   ^ "org.junit.runner.JUnitCore"
 
@@ -769,6 +907,32 @@ let run_testfile () =
   execute_test (!num_of_last_exec_tc + 1) !info.program_dir !info.test_dir
     !info.expected_bug
 
+let run_multi_testfile () =
+  let compile_start = Unix.gettimeofday () in
+  add_default_class !info.driver_dir;
+  Logger.info "Start multi-test! (# of multi-test: %d)" !num_of_multi_tc_files;
+  build_multi_test !info;
+  let mt_file =
+    get_test_path !Cmdline.extension multi_test_basename
+    ^ string_of_int !num_of_multi_tc_files
+  in
+  let ic_out, ic_err =
+    simple_compiler !info.program_dir
+      (modify_execute_command multi_test_execute_cmd mt_file)
+  in
+  let data = my_really_read_string ic_err in
+  close_in ic_out;
+  close_in ic_err;
+  let found_rep_inputs =
+    if checking_bug_presence data !info.expected_bug then (
+      Logger.info "Found bug with loop: %s" mt_file;
+      get_rep_input data !info.expected_bug)
+    else []
+  in
+  Logger.info "End multi-test! (duration: %f)"
+    (Unix.gettimeofday () -. compile_start);
+  found_rep_inputs
+
 let run_reproducer crash_file =
   let rec get_input lst =
     match lst with
@@ -820,10 +984,28 @@ let run_fuzzer () =
 
 (* queue: (testcase * list(partial testcase)) *)
 let rec run_test ~is_start info queue e_method_info p_info =
-  let completion, tc, tc_list =
+  let completion, tc, loop_id_map, tc_list =
     make_testcase ~is_start queue e_method_info p_info
   in
-  if completion = Except_Const then (
+  if completion = Need_Loop then (
+    (* clean before executing multi tests *)
+    remove_all_files info.multi_test_dir;
+    let _time = Unix.gettimeofday () -. !time in
+    incr num_of_multi_tc_files;
+    add_multi_testcase info.multi_test_dir !num_of_multi_tc_files
+      (tc, loop_id_map, _time);
+    let found_rep_input = run_multi_testfile () in
+    if found_rep_input = [] then
+      run_test ~is_start:false info tc_list e_method_info p_info
+    else
+      (* found crash input with loop *)
+      let new_tc = loop_index_to_tc found_rep_input loop_id_map (tc |> snd) in
+      let _time = Unix.gettimeofday () -. !time in
+      incr num_of_tc_files;
+      add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
+      if !num_of_tc_files mod 15 = 0 then run_testfile () else ();
+      run_test ~is_start:false info tc_list e_method_info p_info)
+  else if completion = Need_Fuzzer then (
     (* clean before running fuzzer *)
     remove_all_files info.driver_dir;
     let _time = Unix.gettimeofday () -. !time in
@@ -840,6 +1022,7 @@ let rec run_test ~is_start info queue e_method_info p_info =
       let input = run_reproducer found_rep_file in
       incr num_of_tc_files;
       let new_tc = driver_to_tc fuzz_seq input (tc |> snd) in
+      let _time = Unix.gettimeofday () -. !time in
       add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
       if !num_of_tc_files mod 15 = 0 then run_testfile () else ();
       run_test ~is_start:false info tc_list e_method_info p_info)
