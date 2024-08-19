@@ -338,6 +338,12 @@ let need_default_class tc_body =
   need_default_interface tc_body;
   need_default_enum tc_body
 
+let print_stack_trace =
+  "System.err.println(e.toString());\n"
+  ^ "StackTraceElement[] stackTrace = e.getStackTrace();\n"
+  ^ "for (int i = 0; i < Math.min(10, stackTrace.length); i++) {\n"
+  ^ "System.err.println(\"\tat \" + stackTrace[i]);\n" ^ "}\n"
+
 let insert_test oc (file_num, tc, time) =
   let insert oc (i_set, m_bodies) =
     let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
@@ -402,7 +408,7 @@ let insert_multi_test oc (file_num, tc, loop_id_map, time) =
     "public class UnitconMultiTest" ^ string_of_int file_num ^ " {\n"
     |> output_string oc;
     start ^ array_for_loop ^ loop_stmt ^ "try {\n" ^ m_bodies
-    ^ "}\ncatch(Exception e) {\ne.printStackTrace();\n" ^ loop_input_log ^ "}\n"
+    ^ "}\ncatch(Exception e) {\n" ^ print_stack_trace ^ loop_input_log ^ "}\n"
     ^ close_bracket loop_cnt ^ "}\n}\n"
     |> output_string oc;
     flush oc;
