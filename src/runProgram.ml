@@ -343,7 +343,7 @@ let print_stack_trace =
   ^ "StackTraceElement[] stackTrace = e.getStackTrace();\n"
   ^ "for (int i = 0; i < stackTrace.length; i++) {\n"
   ^ "if ((stackTrace[i].toString()).contains(\"UnitconMultiTest\")) break;\n"
-  ^ "System.err.println(stackTrace[i]);\n" ^ "}\n"
+  ^ "System.err.println(\"at \" + stackTrace[i]);\n" ^ "}\n"
 
 let insert_test oc (file_num, tc, time) =
   let insert oc (i_set, m_bodies) =
