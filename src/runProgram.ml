@@ -227,12 +227,12 @@ let get_index_of_substring substr str start =
 let get_rep_input error_trace expected_bug =
   let expect = string_of_expected_bug expected_bug in
   let target = !bug_type ^ ".*" ^ "[ \t\r\n]+[^a]*" ^ expect in
-  (* Exception ... Unitcon=index= ... -----UnitConLogEnd----- *)
+  (* Exception ... Log=index= ... -----LogEnd----- *)
   let s_idx = get_index_of_substring target error_trace 0 in
   let e_idx =
     match s_idx with
     | None -> None
-    | Some i -> get_index_of_substring "-----UnitConLogEnd-----" error_trace i
+    | Some i -> get_index_of_substring "-----LogEnd-----" error_trace i
   in
   let trace_and_input =
     match (s_idx, e_idx) with
@@ -242,9 +242,9 @@ let get_rep_input error_trace expected_bug =
   let rec get_input lst =
     match lst with
     | hd :: tl ->
-        if check_substring "UnitCon=" hd then
+        if check_substring "Log=" hd then
           let name_idx =
-            Str.replace_first (Str.regexp "UnitCon=") "" hd
+            Str.replace_first (Str.regexp "Log=") "" hd
             |> Str.split (Str.regexp "=")
           in
           (name_idx |> List.hd, name_idx |> List.tl |> List.hd |> int_of_string)
@@ -341,8 +341,9 @@ let need_default_class tc_body =
 let print_stack_trace =
   "System.err.println(e.toString());\n"
   ^ "StackTraceElement[] stackTrace = e.getStackTrace();\n"
-  ^ "for (int i = 0; i < Math.min(10, stackTrace.length); i++) {\n"
-  ^ "System.err.println(\"\tat \" + stackTrace[i]);\n" ^ "}\n"
+  ^ "for (int i = 0; i < stackTrace.length; i++) {\n"
+  ^ "if ((stackTrace[i].toString()).contains(\"UnitconMultiTest\")) break;\n"
+  ^ "System.err.println(stackTrace[i]);\n" ^ "}\n"
 
 let insert_test oc (file_num, tc, time) =
   let insert oc (i_set, m_bodies) =
@@ -380,10 +381,10 @@ let rec close_bracket count =
   if count <= 0 then "" else "}\n" ^ close_bracket (count - 1)
 
 let insert_multi_test_log loop_id_map =
-  let end_signal = "System.err.println(\"-----UnitConLogEnd-----\");\n" in
+  let end_signal = "System.err.println(\"-----LogEnd-----\");\n" in
   let log id =
-    "System.err.println(\"UnitCon=\" + \"" ^ id ^ "\" + \"=\" + " ^ id
-    ^ "_index" ^ ");\n"
+    "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " ^ id ^ "_index"
+    ^ ");\n"
   in
   AST.LoopIdMap.M.fold
     (fun id _ code -> log (AST.loop_id_lvar_code id |> snd) ^ code)
@@ -444,7 +445,7 @@ let insert_log_driver oc (file_num, tc, time) =
       Str.split (Str.regexp " ") stmt |> List.tl |> List.hd |> Regexp.rm_space
     else ""
   in
-  let log id = "System.err.println(\"UnitCon=\" + " ^ id ^ ");\n" in
+  let log id = "System.err.println(\"Log=\" + " ^ id ^ ");\n" in
   let rec add_log lst =
     match lst with
     | hd :: tl ->
@@ -942,8 +943,8 @@ let run_reproducer crash_file =
   let rec get_input lst =
     match lst with
     | hd :: tl ->
-        if check_substring "UnitCon=" hd then
-          Str.replace_first (Str.regexp "UnitCon=") "" hd :: get_input tl
+        if check_substring "Log=" hd then
+          Str.replace_first (Str.regexp "Log=") "" hd :: get_input tl
         else get_input tl
     | _ -> []
   in
