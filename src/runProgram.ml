@@ -576,8 +576,7 @@ let remove_last_file test_dir =
   remove_file (Filename.concat test_dir last_file)
 
 let rec remove_no_exec_files curr_num test_dir =
-  if !num_of_tc_files = !num_of_last_exec_tc || curr_num > !num_of_tc_files then
-    ()
+  if curr_num > !num_of_tc_files then ()
   else
     let curr_tc = "UnitconTest" ^ string_of_int curr_num ^ ".java" in
     let curr_class = "UnitconTest" ^ string_of_int curr_num ^ ".class" in
@@ -601,7 +600,7 @@ let checking_init_err data =
   | _ -> true
 
 let checking_error_presence data =
-  match Str.search_forward (Str.regexp "[0-9]+ error") data 0 with
+  match Str.search_forward (Str.regexp "[0-9]+:* error") data 0 with
   | exception Not_found -> ()
   | _ -> raise Compilation_Error
 
@@ -814,7 +813,7 @@ let normal_exit =
       Logger.info "First Success Test: %s" !first_success_tc;
       Logger.info "Last Success Test: %s" !last_success_tc;
       (* clean up useless files and directories *)
-      remove_no_exec_files !num_of_last_exec_tc !info.test_dir;
+      remove_no_exec_files (!num_of_last_exec_tc + 1) !info.test_dir;
       remove_file (Filename.concat !info.program_dir "multi_test_files");
       remove_file (Filename.concat !info.program_dir "driver_files");
       remove_all_files !info.multi_test_dir;
@@ -909,7 +908,7 @@ let run_testfile () =
 
 let run_multi_testfile () =
   let compile_start = Unix.gettimeofday () in
-  add_default_class !info.driver_dir;
+  add_default_class !info.multi_test_dir;
   Logger.info "Start multi-test! (# of multi-test: %d)" !num_of_multi_tc_files;
   build_multi_test !info;
   let mt_file =
