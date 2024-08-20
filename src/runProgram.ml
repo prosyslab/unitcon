@@ -150,6 +150,91 @@ let parse_primitive_info filename =
   else Json.from_file filename |> Constant.of_primitive_json default
 
 (* ************************************** *
+   init program
+ * ************************************** *)
+
+let remove_file fname =
+  if Sys.file_exists fname then
+    try Unix.unlink fname with _ -> Logger.info "Fail delete %s" fname
+
+let remove_files dir (pattern : Str.regexp) =
+  let remove_file file =
+    if Str.string_match pattern file 0 then
+      Unix.unlink (Filename.concat dir file)
+  in
+  let files = Array.to_list (Sys.readdir dir) in
+  List.iter (fun file -> remove_file file) files
+
+let remove_all_test_classes test_dir = remove_files test_dir Regexp.test_class
+
+let remove_all_test_files test_dir = remove_files test_dir Regexp.test_file
+
+let remove_all_files dir = remove_files dir (Str.regexp ".*")
+
+let make_folder path =
+  try Unix.mkdir path 0o775
+  with Unix.Unix_error (EEXIST, _, _) ->
+    remove_all_test_classes path;
+    remove_all_test_files path;
+    remove_file (Filename.concat path "UnitconInterface.java");
+    remove_file (Filename.concat path "UnitconEnum.java");
+    remove_file (Filename.concat path "UnitconInterface.class");
+    remove_file (Filename.concat path "UnitconEnum.class")
+
+let init_folder dir =
+  let folders = Str.split (Str.regexp Filename.dir_sep) dir in
+  let rec make_folders path = function
+    | [] -> ()
+    | f :: dep ->
+        let p = path ^ Filename.dir_sep ^ f in
+        make_folder p;
+        make_folders p dep
+  in
+  make_folders "" folders
+
+let init program_dir =
+  let cons = Filename.concat in
+  let program_dir =
+    if Filename.is_relative program_dir then cons (Unix.getcwd ()) program_dir
+    else program_dir
+  in
+  let t_dir =
+    if !Cmdline.extension = "" then "unitcon_tests"
+    else Utils.dot_to_dir_sep !Cmdline.extension
+  in
+  let d_dir =
+    if !Cmdline.extension = "" then "unitcon_drivers"
+    else Utils.dot_to_dir_sep !Cmdline.extension
+  in
+  let mt_dir =
+    if !Cmdline.extension = "" then "unitcon_multi_tests"
+    else Utils.dot_to_dir_sep !Cmdline.extension
+  in
+  info :=
+    {
+      program_dir;
+      summary_file = cons con_path "summary.json" |> cons program_dir;
+      error_summary_file =
+        cons con_path "error_summaries.json" |> cons program_dir;
+      call_prop_file = cons con_path "call_proposition.json" |> cons program_dir;
+      inheritance_file =
+        cons con_path "inheritance_info.json" |> cons program_dir;
+      enum_file = cons con_path "enum_info.json" |> cons program_dir;
+      constant_file = cons con_path "extra_constant.json" |> cons program_dir;
+      fuzz_constant_file = cons con_path "fuzz_constant" |> cons program_dir;
+      test_dir = cons program_dir t_dir;
+      multi_test_dir = cons program_dir mt_dir;
+      driver_dir = cons program_dir d_dir;
+      expected_bug = cons con_path "expected_bug" |> cons program_dir;
+    };
+  init_folder !info.test_dir;
+  init_folder !info.multi_test_dir;
+  init_folder !info.driver_dir;
+  cons !info.test_dir "log.txt" |> Logger.from_file;
+  get_bug_type (cons con_path "expected_bug_type" |> cons !info.program_dir);
+  Logger.info "Start UnitCon for %s" program_dir
+
+(* ************************************** *
    run program
  * ************************************** *)
 
@@ -338,13 +423,6 @@ let need_default_class tc_body =
   need_default_interface tc_body;
   need_default_enum tc_body
 
-let print_stack_trace =
-  "System.err.println(e.toString());\n"
-  ^ "StackTraceElement[] stackTrace = e.getStackTrace();\n"
-  ^ "for (int i = 0; i < stackTrace.length; i++) {\n"
-  ^ "if ((stackTrace[i].toString()).contains(\"UnitconMultiTest\")) break;\n"
-  ^ "System.err.println(\"at \" + stackTrace[i]);\n" ^ "}\n"
-
 let insert_test oc (file_num, tc, time) =
   let insert oc (i_set, m_bodies) =
     let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
@@ -390,6 +468,21 @@ let insert_multi_test_log loop_id_map =
     (fun id _ code -> log (AST.loop_id_lvar_code id |> snd) ^ code)
     loop_id_map end_signal
 
+let print_stack_trace bug_type log =
+  let bug =
+    try bug_type |> Str.split (Str.regexp "\\.") |> List.rev |> List.hd
+    with _ -> ""
+  in
+  let typ = if bug = "" then "Exception" else bug in
+  let common =
+    "catch(" ^ typ ^ " e) {\n" ^ "System.err.println(e.toString());\n"
+    ^ "StackTraceElement[] stackTrace = e.getStackTrace();\n"
+    ^ "for (int i = 0; i < stackTrace.length; i++) {\n"
+    ^ "if ((stackTrace[i].toString()).contains(\"UnitconMultiTest\")) break;\n"
+    ^ "System.err.println(\"at \" + stackTrace[i]);\n" ^ "}\n" ^ log ^ "}\n"
+  in
+  if bug = "" then common else common ^ "catch(Exception e) { }\n"
+
 let insert_multi_test oc (file_num, tc, loop_id_map, time) =
   let insert oc (i_set, m_bodies) =
     let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
@@ -401,15 +494,26 @@ let insert_multi_test oc (file_num, tc, loop_id_map, time) =
     in
     let loop_stmt, loop_cnt = insert_loops loop_id_map in
     let loop_input_log = insert_multi_test_log loop_id_map in
+    let bug_type =
+      (* ref: get_bug_type, nested exception can not catch ... *)
+      match Str.search_forward Regexp.dollar !bug_type 0 with
+      | exception Not_found -> !bug_type
+      | _ -> ""
+    in
+    let import =
+      let common = get_imports i_set ^ "import org.junit.Test;\n" in
+      if bug_type = "" then common ^ "\n"
+      else common ^ "import " ^ bug_type ^ ";\n\n"
+    in
     need_default_class m_bodies;
     get_package !Cmdline.extension |> output_string oc;
     (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
-    get_imports i_set ^ "import org.junit.Test;\n\n" |> output_string oc;
+    import |> output_string oc;
     output_string oc time;
     "public class UnitconMultiTest" ^ string_of_int file_num ^ " {\n"
     |> output_string oc;
-    start ^ array_for_loop ^ loop_stmt ^ "try {\n" ^ m_bodies
-    ^ "}\ncatch(Exception e) {\n" ^ print_stack_trace ^ loop_input_log ^ "}\n"
+    start ^ array_for_loop ^ loop_stmt ^ "try {\n" ^ m_bodies ^ "}\n"
+    ^ print_stack_trace bug_type loop_input_log
     ^ close_bracket loop_cnt ^ "}\n}\n"
     |> output_string oc;
     flush oc;
@@ -524,45 +628,6 @@ let add_log_driver driver_dir file_num (tc, time) =
          (driver_basename ^ string_of_int file_num ^ ".java"))
   in
   insert_log_driver oc (file_num, tc, time)
-
-let remove_file fname =
-  if Sys.file_exists fname then
-    try Unix.unlink fname with _ -> Logger.info "Fail delete %s" fname
-
-let remove_files dir (pattern : Str.regexp) =
-  let remove_file file =
-    if Str.string_match pattern file 0 then
-      Unix.unlink (Filename.concat dir file)
-  in
-  let files = Array.to_list (Sys.readdir dir) in
-  List.iter (fun file -> remove_file file) files
-
-let remove_all_test_classes test_dir = remove_files test_dir Regexp.test_class
-
-let remove_all_test_files test_dir = remove_files test_dir Regexp.test_file
-
-let remove_all_files dir = remove_files dir (Str.regexp ".*")
-
-let make_folder path =
-  try Unix.mkdir path 0o775
-  with Unix.Unix_error (EEXIST, _, _) ->
-    remove_all_test_classes path;
-    remove_all_test_files path;
-    remove_file (Filename.concat path "UnitconInterface.java");
-    remove_file (Filename.concat path "UnitconEnum.java");
-    remove_file (Filename.concat path "UnitconInterface.class");
-    remove_file (Filename.concat path "UnitconEnum.class")
-
-let init_folder dir =
-  let folders = Str.split (Str.regexp Filename.dir_sep) dir in
-  let rec make_folders path = function
-    | [] -> ()
-    | f :: dep ->
-        let p = path ^ Filename.dir_sep ^ f in
-        make_folder p;
-        make_folders p dep
-  in
-  make_folders "" folders
 
 let get_compilation_error_files data =
   let get_f_name line =
@@ -707,48 +772,6 @@ let loop_index_to_tc rep_input loop_id_map tc =
       let input_code = AST.exp_code real_input ast_id in
       Str.replace_first (Str.regexp to_be_modified) input_code old_tc)
     tc rep_input
-
-let init program_dir =
-  let cons = Filename.concat in
-  let program_dir =
-    if Filename.is_relative program_dir then cons (Unix.getcwd ()) program_dir
-    else program_dir
-  in
-  let t_dir =
-    if !Cmdline.extension = "" then "unitcon_tests"
-    else Utils.dot_to_dir_sep !Cmdline.extension
-  in
-  let d_dir =
-    if !Cmdline.extension = "" then "unitcon_drivers"
-    else Utils.dot_to_dir_sep !Cmdline.extension
-  in
-  let mt_dir =
-    if !Cmdline.extension = "" then "unitcon_multi_tests"
-    else Utils.dot_to_dir_sep !Cmdline.extension
-  in
-  info :=
-    {
-      program_dir;
-      summary_file = cons con_path "summary.json" |> cons program_dir;
-      error_summary_file =
-        cons con_path "error_summaries.json" |> cons program_dir;
-      call_prop_file = cons con_path "call_proposition.json" |> cons program_dir;
-      inheritance_file =
-        cons con_path "inheritance_info.json" |> cons program_dir;
-      enum_file = cons con_path "enum_info.json" |> cons program_dir;
-      constant_file = cons con_path "extra_constant.json" |> cons program_dir;
-      fuzz_constant_file = cons con_path "fuzz_constant" |> cons program_dir;
-      test_dir = cons program_dir t_dir;
-      multi_test_dir = cons program_dir mt_dir;
-      driver_dir = cons program_dir d_dir;
-      expected_bug = cons con_path "expected_bug" |> cons program_dir;
-    };
-  init_folder !info.test_dir;
-  init_folder !info.multi_test_dir;
-  init_folder !info.driver_dir;
-  cons !info.test_dir "log.txt" |> Logger.from_file;
-  get_bug_type (cons con_path "expected_bug_type" |> cons !info.program_dir);
-  Logger.info "Start UnitCon for %s" program_dir
 
 (* return: (testcase * list(partial testcase)) *)
 let make_testcase ~is_start queue e_method_info program_info =
