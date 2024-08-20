@@ -134,7 +134,8 @@ let parse_class_info filename =
   let json = Json.from_file filename in
   let elem = JsonUtil.to_list json |> List.hd in
   let info = Inheritance.of_json elem in
-  (fst info, snd info |> Modeling.add_java_package_inheritance)
+  ( fst info |> Modeling.add_java_package_classinfo,
+    snd info |> Modeling.add_java_package_inheritance )
 
 let parse_enum_info filename =
   if not (Sys.file_exists filename) then InstanceInfo.M.empty

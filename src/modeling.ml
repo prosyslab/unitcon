@@ -1,5 +1,6 @@
 open Language
 module IG = Inheritance.G
+module CI = ClassInfo
 
 (* ************************************** *
    Method Summary
@@ -863,3 +864,9 @@ let add_java_package_inheritance ig =
   |> add_inheritance "java.io.Writer" "java.io.StringWriter"
   |> add_inheritance "java.io.Serializable" "java.text.Format"
   |> add_inheritance "java.io.OutputStream" "java.io.ByteArrayOutputStream"
+
+let add_java_package_classinfo ci =
+  let add_classinfo name info ci = CI.M.add name info ci in
+  add_classinfo "java.io.Writer" CI.{ class_type = Public_Abstract } ci
+  |> add_classinfo "java.io.OutputStream" CI.{ class_type = Public_Abstract }
+  |> add_classinfo "java.io.Reader" CI.{ class_type = Public_Abstract }
