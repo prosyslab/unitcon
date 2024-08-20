@@ -254,6 +254,18 @@ let my_really_read_string in_chan =
   in
   loop ()
 
+let copy_file src dst =
+  let in_fd = Unix.openfile src [ Unix.O_RDONLY ] 0 in
+  let out_fd =
+    Unix.openfile dst [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ] 0o666
+  in
+  let in_chan = Unix.in_channel_of_descr in_fd in
+  let out_chan = Unix.out_channel_of_descr out_fd in
+  let data = my_really_read_string in_chan in
+  output_string out_chan data;
+  close_in in_chan;
+  close_out out_chan
+
 let modify_execute_command command t_file_name = command ^ " " ^ t_file_name
 
 let check_substring substr str =
@@ -328,11 +340,11 @@ let get_rep_input error_trace expected_bug =
     match lst with
     | hd :: tl ->
         if check_substring "Log=" hd then
-          let name_idx =
+          let name_value =
             Str.replace_first (Str.regexp "Log=") "" hd
             |> Str.split (Str.regexp "=")
           in
-          (name_idx |> List.hd, name_idx |> List.tl |> List.hd |> int_of_string)
+          (name_value |> List.hd, name_value |> List.tl |> List.hd)
           :: get_input tl
         else get_input tl
     | _ -> []
@@ -443,12 +455,18 @@ let insert_test oc (file_num, tc, time) =
   insert oc tc
 
 let insert_loop loop_id =
-  let id = AST.loop_id_lvar_code loop_id |> snd in
+  let lval = AST.loop_id_lval_code loop_id in
+  let id = snd lval in
   let index = id ^ "_index" in
   let init = index ^ " = 0; " in
   let cond = index ^ " < " ^ id ^ ".length; " in
   let incr = index ^ "++" in
-  "for(int " ^ init ^ cond ^ incr ^ ") {\n"
+  match fst lval with
+  | String ->
+      "for(int " ^ init
+      ^ (index ^ " < " ^ id ^ "_mut.length; ")
+      ^ incr ^ ") {\n"
+  | _ -> "for(int " ^ init ^ cond ^ incr ^ ") {\n"
 
 let insert_loops loop_id_map =
   AST.LoopIdMap.M.fold
@@ -460,12 +478,15 @@ let rec close_bracket count =
 
 let insert_multi_test_log loop_id_map =
   let end_signal = "System.err.println(\"-----LogEnd-----\");\n" in
-  let log id =
-    "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " ^ id ^ "_index"
-    ^ ");\n"
+  let log lval =
+    let id = snd lval in
+    let common = "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " in
+    match fst lval with
+    | String -> common ^ id ^ "_mut[" ^ id ^ "_index" ^ "]" ^ ");\n"
+    | _ -> common ^ id ^ "[" ^ id ^ "_index" ^ "]" ^ ");\n"
   in
   AST.LoopIdMap.M.fold
-    (fun id _ code -> log (AST.loop_id_lvar_code id |> snd) ^ code)
+    (fun id _ code -> log (AST.loop_id_lval_code id) ^ code)
     loop_id_map end_signal
 
 let print_stack_trace bug_type log =
@@ -749,26 +770,27 @@ let driver_to_tc typs inputs tc =
   in
   func_to_value typs inputs tc
 
-let loop_index_to_tc rep_input loop_id_map tc =
-  let rec find_input count exps =
-    match exps with
-    | hd :: _ when count = 0 -> hd
-    | _ :: tl -> find_input (count - 1) tl
-    | _ -> AST.Exp
-  in
+let str_to_primitive v value =
+  match AST.get_vinfo v |> fst with
+  | Int | Long | Short | Byte -> AST.Primitive (Z (int_of_string value))
+  | Float | Double -> AST.Primitive (R (float_of_string value))
+  | Bool -> AST.Primitive (B (bool_of_string value))
+  | Char -> AST.Primitive (C value.[0])
+  | String -> if value = "null" then AST.Null else AST.Primitive (S value)
+  | _ -> failwith "Fail: convert string to primitive"
+
+let loop_value_to_tc rep_input loop_id_map tc =
   let find_id str_id =
     AST.LoopIdMap.M.fold
       (fun id _ found ->
-        if str_id = (AST.loop_id_lvar_code id |> snd) then id else found)
+        if str_id = (AST.loop_id_lval_code id |> snd) then id else found)
       loop_id_map AST.Id
   in
   List.fold_left
-    (fun old_tc (id, idx) ->
+    (fun old_tc (id, value) ->
       let to_be_modified = id ^ "\\[" ^ id ^ "_index\\]" in
       let ast_id = find_id id in
-      let real_input =
-        find_input idx (AST.LoopIdMap.M.find ast_id loop_id_map)
-      in
+      let real_input = str_to_primitive ast_id value in
       let input_code = AST.exp_code real_input ast_id in
       Str.replace_first (Str.regexp to_be_modified) input_code old_tc)
     tc rep_input
@@ -939,6 +961,9 @@ let run_testfile () =
 let run_multi_testfile () =
   let compile_start = Unix.gettimeofday () in
   add_default_class !info.multi_test_dir;
+  copy_file
+    (Filename.concat unitcon_path "deps/UnitconMutator.java")
+    (Filename.concat !info.multi_test_dir "UnitconMutator.java");
   Logger.info "Start multi-test! (# of multi-test: %d)" !num_of_multi_tc_files;
   build_multi_test !info;
   let mt_file =
@@ -1028,7 +1053,7 @@ let rec run_test ~is_start info queue e_method_info p_info =
       run_test ~is_start:false info tc_list e_method_info p_info
     else
       (* found crash input with loop *)
-      let new_tc = loop_index_to_tc found_rep_input loop_id_map (tc |> snd) in
+      let new_tc = loop_value_to_tc found_rep_input loop_id_map (tc |> snd) in
       let _time = Unix.gettimeofday () -. !time in
       incr num_of_tc_files;
       add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);

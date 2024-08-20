@@ -738,6 +738,9 @@ let new_uf_summary new_uf old_summary =
 
 let get_type v = match v with This typ -> typ | Var (typ, _) -> typ
 
+let is_string x =
+  match AST.get_vinfo x |> fst with String -> true | _ -> false
+
 let is_primitive x =
   match AST.get_vinfo x |> fst with
   | Int | Long | Short | Byte | Float | Double | Bool | Char | String -> true
@@ -2016,13 +2019,15 @@ let get_cfuncs id list m_info =
       List.rev_append (get_cfunc id (cost, c, s) m_info) lst)
     [] list
 
-let get_c ret c_lst summary m_info =
+let get_c ret c_lst summary m_info c_info =
   let class_name = AST.get_vinfo ret |> fst |> get_class_name in
   if class_name = "" then []
   else
     let id = AST.get_vinfo ret |> snd in
     let s_list =
       satisfied_c_list id (AST.get_v ret).summary summary c_lst
+      |> List.filter (fun (_, c, _) ->
+             is_abstract_class (c |> Utils.get_class_name) c_info |> not)
       |> summary_filtering class_name m_info
       |> prune_dup_summary
     in
@@ -2202,6 +2207,10 @@ let loop_id_merge old_ids new_ids =
       | None, Some _ -> v2)
     old_ids new_ids
 
+(* low priority --> ... --> high priority *)
+let sort_const consts =
+  List.stable_sort (fun (c1, _) (c2, _) -> compare c1 c2) consts
+
 let const_unroll p summary m_info i_info p_info =
   let get_r3 x =
     List.fold_left
@@ -2228,7 +2237,8 @@ let const_unroll p summary m_info i_info p_info =
               (fun (prec, lst) x1 ->
                 let prec = if prec < fst x1 then fst x1 else prec in
                 (prec, snd x1 :: lst))
-              (min_int, []) (get_value x p_info)
+              (min_int, [])
+              (get_value x p_info |> sort_const)
           in
           [
             ( prec,
@@ -2254,7 +2264,7 @@ let fcall_in_assign_unroll p summary m_info type_info c_info s_map =
       if c_lst = [] && ret_c_lst = [] then raise Not_found_get_object
       else
         List.rev_append
-          (get_c x0 c_lst summary m_info)
+          (get_c x0 c_lst summary m_info c_info)
           (get_ret_c x0 ret_c_lst summary m_info type_info c_info s_map)
         |> List.fold_left
              (fun lst (prec, (f, arg)) ->

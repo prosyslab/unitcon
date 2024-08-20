@@ -1112,9 +1112,14 @@ module AST = struct
         string_of_float r ^ type_cast
     | B b -> string_of_bool b
     | C c -> "\'" ^ String.make 1 c ^ "\'"
-    | S s -> "\"" ^ s ^ "\""
+    | S s ->
+        let replace s =
+          Str.global_replace (Str.regexp "\"") "\\\"" s
+          |> Str.global_replace (Str.regexp "\'") "\\\'"
+        in
+        "\"" ^ replace s ^ "\""
 
-  let loop_id_lvar_code v =
+  let loop_id_lval_code v =
     match (get_v v).variable with
     | Var (typ, id), Some idx -> (typ, "unitcon_" ^ id ^ string_of_int idx)
     | _, None -> (NonType, "")
@@ -1143,10 +1148,11 @@ module AST = struct
         else "Exp"
     | WithLoop ->
         if !Cmdline.with_loop then
-          let v_type, v_id = loop_id_lvar_code x in
+          let v_type, v_id = loop_id_lval_code x in
           match v_type with
-          | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
+          | Int | Long | Short | Byte | Char | Float | Double | Bool ->
               v_id ^ "[" ^ v_id ^ "_index]"
+          | String -> v_id ^ "_mut[" ^ v_id ^ "_index]"
           | _ -> "Exp"
         else "Exp"
     | Exp -> "Exp"
@@ -1176,7 +1182,7 @@ module AST = struct
     | Stmt -> "Stmt"
 
   let loop_id_code loop_id exp_list =
-    let v = loop_id_lvar_code loop_id in
+    let v = loop_id_lval_code loop_id in
     let lval =
       match fst v with
       | Int -> "int[] " ^ snd v
@@ -1196,5 +1202,12 @@ module AST = struct
     let rec rval id exps =
       match exps with hd :: tl -> ", " ^ exp_code hd id ^ rval id tl | _ -> ""
     in
-    lval ^ " = " ^ "{" ^ Regexp.rm_first_rest (rval loop_id exp_list) ^ "};\n"
+    let common =
+      lval ^ " = " ^ "{" ^ Regexp.rm_first_rest (rval loop_id exp_list) ^ "};\n"
+    in
+    match fst v with
+    | String ->
+        common ^ lval ^ "_mut = UnitconMutator.mutateString(" ^ snd v
+        ^ ", 5);\n"
+    | _ -> common
 end
