@@ -345,7 +345,8 @@ let get_rep_input error_trace expected_bug =
             Str.replace_first (Str.regexp "Log=") "" hd
             |> Str.split (Str.regexp "=")
           in
-          (name_value |> List.hd, name_value |> List.tl |> List.hd)
+          ( name_value |> List.hd,
+            try name_value |> List.tl |> List.hd with _ -> "" )
           :: get_input tl
         else get_input tl
     | _ -> []
