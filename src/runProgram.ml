@@ -781,6 +781,14 @@ let str_to_primitive v value =
   | String -> if value = "null" then AST.Null else AST.Primitive (S value)
   | _ -> failwith "Fail: convert string to primitive"
 
+let get_id_to_be_modified v id =
+  (* array_id, index_id *)
+  match AST.get_vinfo v |> fst with
+  | Int | Long | Short | Byte | Float | Double | Bool | Char ->
+      (id, id ^ "_index")
+  | String -> (id ^ "_mut", id ^ "_index")
+  | _ -> failwith "Fail: get id to be modified"
+
 let loop_value_to_tc rep_input loop_id_map tc =
   let find_id str_id =
     AST.LoopIdMap.M.fold
@@ -790,8 +798,9 @@ let loop_value_to_tc rep_input loop_id_map tc =
   in
   List.fold_left
     (fun old_tc (id, value) ->
-      let to_be_modified = id ^ "\\[" ^ id ^ "_index\\]" in
       let ast_id = find_id id in
+      let array_id, index_id = get_id_to_be_modified ast_id id in
+      let to_be_modified = array_id ^ "\\[" ^ index_id ^ "\\]" in
       let real_input = str_to_primitive ast_id value in
       let input_code = AST.exp_code real_input ast_id in
       Str.replace_first (Str.regexp to_be_modified) input_code old_tc)
@@ -824,6 +833,7 @@ let build_program info =
     let ic_out, ic_err = simple_compiler info.program_dir compile_cmd in
     let data_out = my_really_read_string ic_out in
     let data_err = my_really_read_string ic_err in
+    Logger.info "build_program err: %s" data_err;
     close_in ic_out;
     close_in ic_err;
     if checking_init_err data_out then (
@@ -937,6 +947,7 @@ let run_testfile () =
     let data = my_really_read_string ic_err in
     close_in ic_out;
     close_in ic_err;
+    Logger.info "file: %s\nlog: %s" t_file data;
     num_of_last_exec_tc := num_of_t_file;
     if checking_bug_presence data expected_bug then (
       if !first_success_tc = "" then first_success_tc := t_file;
