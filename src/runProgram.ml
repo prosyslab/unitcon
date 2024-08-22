@@ -833,7 +833,6 @@ let build_program info =
     let ic_out, ic_err = simple_compiler info.program_dir compile_cmd in
     let data_out = my_really_read_string ic_out in
     let data_err = my_really_read_string ic_err in
-    Logger.info "build_program err: %s" data_err;
     close_in ic_out;
     close_in ic_err;
     if checking_init_err data_out then (
@@ -947,7 +946,6 @@ let run_testfile () =
     let data = my_really_read_string ic_err in
     close_in ic_out;
     close_in ic_err;
-    Logger.info "file: %s\nlog: %s" t_file data;
     num_of_last_exec_tc := num_of_t_file;
     if checking_bug_presence data expected_bug then (
       if !first_success_tc = "" then first_success_tc := t_file;
