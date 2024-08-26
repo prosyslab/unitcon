@@ -42,8 +42,7 @@ def get_package_class(package_name, class_name):
 def get_text(node, src):
     text = ''
     if src[node[0].start_point[0]] == src[node[0].end_point[0]]:
-        text = (src[node[0].start_point[0]]
-                )[node[0].start_point[1]:node[0].end_point[1]]
+        text = (src[node[0].start_point[0]])[node[0].start_point[1]:node[0].end_point[1]]
     else:
         text = (src[node[0].start_point[0]])[node[0].start_point[1]:]
         for row in range(node[0].start_point[0] + 1, node[0].end_point[0] + 1):
@@ -67,10 +66,8 @@ def get_parent_class_name(node, src, name):
                    [i for i in extract_class_name_query.captures(parent)]))
         if not parent_name:
             parent_name = list(
-                filter(
-                    lambda x: x[1] == 'interface-name',
-                    [i
-                     for i in extract_interface_name_query.captures(parent)]))
+                filter(lambda x: x[1] == 'interface-name',
+                       [i for i in extract_interface_name_query.captures(parent)]))
         if not parent_name:
             return name
         else:
@@ -85,17 +82,14 @@ def get_enum(node, src):
     for i in match_list:
         text = get_text(i, src)
         if i[1] == 'package-name':
-            package_name = text.replace('package', '', 1).replace(';', '',
-                                                                  1).strip()
+            package_name = text.replace('package', '', 1).replace(';', '', 1).strip()
         elif i[1] == 'enum-name':
             parent_name = get_parent_class_name(i[0].parent, src, '')
             enum_name = get_package_class(package_name, parent_name + text)
         elif i[1] == 'enum-const':
             enum_list.append({
-                'enum':
-                enum_name,
-                'const':
-                re.sub("\([^)]*\)[\),;]*", "", text, re.MULTILINE).strip()
+                'enum': enum_name,
+                'const': re.sub("\([^)]*\)[\),;]*", "", text, re.MULTILINE).strip()
             })
 
 
@@ -125,22 +119,17 @@ def mk_json_file(project_dir):
     prop_dir = os.path.join(project_dir, "unitcon_properties")
     if not os.path.isdir(prop_dir):
         os.makedirs(prop_dir)
-    with open(os.path.join(prop_dir, "enum_info.json"), 'w',
-              encoding='utf-8') as json_file:
+    with open(os.path.join(prop_dir, "enum_info.json"), 'w', encoding='utf-8') as json_file:
         json.dump(enum_list, json_file, indent=2)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "project",
-        type=pathlib.Path,
-        default=None,
-        help='Project directory where need to obtain enum information')
-    parser.add_argument("--encoding",
-                        type=str,
-                        default="utf-8",
-                        help='Encoding type of project')
+    parser.add_argument("project",
+                        type=pathlib.Path,
+                        default=None,
+                        help='Project directory where need to obtain enum information')
+    parser.add_argument("--encoding", type=str, default="utf-8", help='Encoding type of project')
     args = parser.parse_args()
     all_files_enum_info(args.project, args.encoding)
     mk_json_file(args.project)

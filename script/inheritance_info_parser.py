@@ -98,8 +98,7 @@ def get_super_list(super_text, package_name, import_list):
 def get_text(node, src):
     text = ''
     if src[node[0].start_point[0]] == src[node[0].end_point[0]]:
-        text = (src[node[0].start_point[0]]
-                )[node[0].start_point[1]:node[0].end_point[1]]
+        text = (src[node[0].start_point[0]])[node[0].start_point[1]:node[0].end_point[1]]
     else:
         text = (src[node[0].start_point[0]])[node[0].start_point[1]:]
         for row in range(node[0].start_point[0] + 1, node[0].end_point[0] + 1):
@@ -148,25 +147,19 @@ def get_class_name(node, src, package_name):
     for i in match_list:
         text = get_text(i, src)
         if i[1] == 'class-modifier':
-            text = text.replace('\n', ' ') # consider multiple line
+            text = text.replace('\n', ' ')  # consider multiple line
             modifier_list = list(
                 filter(
-                    lambda x: x == 'static' or x == 'abstract' or x ==
-                    'private' or x == 'public',
+                    lambda x: x == 'static' or x == 'abstract' or x == 'private' or x == 'public',
                     [modifier.strip() for modifier in text.split(' ')]))
             if len(modifier_list) == 0:
                 class_modifier = []
             else:
                 class_modifier = modifier_list
         elif i[1] == 'class-name':
-            class_name = re.sub("\$$", "",
-                                get_parent_class_name(i[0], src, ''))
-            class_name = get_package_class(package_name,
-                                           remove_generic(class_name))
-            class_and_interface_list.append({
-                'name': class_name,
-                'type': class_modifier
-            })
+            class_name = re.sub("\$$", "", get_parent_class_name(i[0], src, ''))
+            class_name = get_package_class(package_name, remove_generic(class_name))
+            class_and_interface_list.append({'name': class_name, 'type': class_modifier})
             class_modifier = []
 
 
@@ -178,8 +171,7 @@ def get_nested_class_name(node, src):
         for j in match_list:
             text = get_text(j, src)
             if j[1] == 'package-name':
-                package_name = text.replace('package', '',
-                                            1).replace(';', '', 1).strip()
+                package_name = text.replace('package', '', 1).replace(';', '', 1).strip()
                 package_name = remove_generic(package_name)
             elif j[1] == 'class':
                 get_class_name(j[0], src, package_name)
@@ -195,14 +187,9 @@ def get_interface_name(node, src, package_name):
             if "public" in text:
                 interface_modifier.append("public")
         elif i[1] == 'interface-name':
-            interface_name = re.sub("\$$", "",
-                                    get_parent_interface_name(i[0], src, ''))
-            interface_name = get_package_class(package_name,
-                                               remove_generic(interface_name))
-            class_and_interface_list.append({
-                'name': interface_name,
-                'type': interface_modifier
-            })
+            interface_name = re.sub("\$$", "", get_parent_interface_name(i[0], src, ''))
+            interface_name = get_package_class(package_name, remove_generic(interface_name))
+            class_and_interface_list.append({'name': interface_name, 'type': interface_modifier})
             interface_modifier = ["interface"]
 
 
@@ -214,8 +201,7 @@ def get_nested_interface_name(node, src):
         for j in match_list:
             text = get_text(j, src)
             if j[1] == 'package-name':
-                package_name = text.replace('package', '',
-                                            1).replace(';', '', 1).strip()
+                package_name = text.replace('package', '', 1).replace(';', '', 1).strip()
                 package_name = remove_generic(package_name)
             elif j[1] == 'interface':
                 get_interface_name(j[0], src, package_name)
@@ -228,17 +214,12 @@ def get_extends_class_name(node, src, package_name, import_list):
     for i in match_list:
         text = get_text(i, src)
         if i[1] == 'class-name':
-            class_name = re.sub("\$$", "",
-                                get_parent_class_name(i[0], src, ''))
-            class_name = get_package_class(package_name,
-                                           remove_generic(class_name))
+            class_name = re.sub("\$$", "", get_parent_class_name(i[0], src, ''))
+            class_name = get_package_class(package_name, remove_generic(class_name))
         elif i[1] == 'class-list':
             text = remove_generic(text.replace('extends', '', 1))
             super_class_list = get_super_list(text, package_name, import_list)
-            extends_class_list.append({
-                'child': class_name,
-                'super': super_class_list
-            })
+            extends_class_list.append({'child': class_name, 'super': super_class_list})
 
 
 def get_nested_extends_class_name(node, src):
@@ -250,11 +231,9 @@ def get_nested_extends_class_name(node, src):
         for j in match_list:
             text = get_text(j, src)
             if j[1] == 'package-name':
-                package_name = text.replace('package', '',
-                                            1).replace(';', '', 1).strip()
+                package_name = text.replace('package', '', 1).replace(';', '', 1).strip()
             elif j[1] == 'import-name':
-                import_name = text.replace('import', '',
-                                           1).replace(';', '', 1).strip()
+                import_name = text.replace('import', '', 1).replace(';', '', 1).strip()
                 if '*' not in import_name:
                     import_list.append(import_name)
             elif j[1] == 'class':
@@ -268,18 +247,12 @@ def get_implements_interface_name(node, src, package_name, import_list):
     for i in match_list:
         text = get_text(i, src)
         if i[1] == 'class-name':
-            class_name = re.sub("\$$", "",
-                                get_parent_class_name(i[0], src, ''))
-            class_name = get_package_class(package_name,
-                                           remove_generic(class_name))
+            class_name = re.sub("\$$", "", get_parent_class_name(i[0], src, ''))
+            class_name = get_package_class(package_name, remove_generic(class_name))
         elif i[1] == 'interface-list':
             text = remove_generic(text.replace('implements', '', 1))
-            super_interface_list = get_super_list(text, package_name,
-                                                  import_list)
-            implements_interface_list.append({
-                'child': class_name,
-                'super': super_interface_list
-            })
+            super_interface_list = get_super_list(text, package_name, import_list)
+            implements_interface_list.append({'child': class_name, 'super': super_interface_list})
 
 
 def get_nested_implements_interface_name(node, src):
@@ -291,16 +264,13 @@ def get_nested_implements_interface_name(node, src):
         for j in match_list:
             text = get_text(j, src)
             if j[1] == 'package-name':
-                package_name = text.replace('package', '',
-                                            1).replace(';', '', 1).strip()
+                package_name = text.replace('package', '', 1).replace(';', '', 1).strip()
             elif j[1] == 'import-name':
-                import_name = text.replace('import', '',
-                                           1).replace(';', '', 1).strip()
+                import_name = text.replace('import', '', 1).replace(';', '', 1).strip()
                 if '*' not in import_name:
                     import_list.append(import_name)
             elif j[1] == 'class':
-                get_implements_interface_name(j[0], src, package_name,
-                                              import_list)
+                get_implements_interface_name(j[0], src, package_name, import_list)
 
 
 def get_extends_interface_name(node, src, package_name, import_list):
@@ -311,18 +281,12 @@ def get_extends_interface_name(node, src, package_name, import_list):
     for i in match_list:
         text = get_text(i, src)
         if i[1] == 'interface-name':
-            interface_name = re.sub("\$$", "",
-                                    get_parent_interface_name(i[0], src, ''))
-            interface_name = get_package_class(package_name,
-                                               remove_generic(interface_name))
+            interface_name = re.sub("\$$", "", get_parent_interface_name(i[0], src, ''))
+            interface_name = get_package_class(package_name, remove_generic(interface_name))
         elif i[1] == 'interface-list':
             text = remove_generic(text.replace('extends', '', 1))
-            super_interface_list = get_super_list(text, package_name,
-                                                  import_list)
-            extends_interface_list.append({
-                'child': interface_name,
-                'super': super_interface_list
-            })
+            super_interface_list = get_super_list(text, package_name, import_list)
+            extends_interface_list.append({'child': interface_name, 'super': super_interface_list})
 
 
 def get_nested_extends_interface_name(node, src):
@@ -334,16 +298,13 @@ def get_nested_extends_interface_name(node, src):
         for j in match_list:
             text = get_text(j, src)
             if j[1] == 'package-name':
-                package_name = text.replace('package', '',
-                                            1).replace(';', '', 1).strip()
+                package_name = text.replace('package', '', 1).replace(';', '', 1).strip()
             elif j[1] == 'import-name':
-                import_name = text.replace('import', '',
-                                           1).replace(';', '', 1).strip()
+                import_name = text.replace('import', '', 1).replace(';', '', 1).strip()
                 if '*' not in import_name:
                     import_list.append(import_name)
             elif j[1] == 'interface':
-                get_extends_interface_name(j[0], src, package_name,
-                                           import_list)
+                get_extends_interface_name(j[0], src, package_name, import_list)
 
 
 def one_file_inheritance_info(src, encoding):
@@ -369,8 +330,7 @@ def all_files_inheritance_info(project_dir, encoding):
     for dirpath, dirnames, filenames in os.walk(project_dir):
         for filename in filenames:
             if filename.endswith(".java"):
-                one_file_inheritance_info(os.path.join(dirpath, filename),
-                                          encoding)
+                one_file_inheritance_info(os.path.join(dirpath, filename), encoding)
 
 
 def mk_json_file(project_dir):
@@ -392,23 +352,17 @@ def mk_json_file(project_dir):
     prop_dir = os.path.join(project_dir, "unitcon_properties")
     if not os.path.isdir(prop_dir):
         os.makedirs(prop_dir)
-    with open(os.path.join(prop_dir, "inheritance_info.json"),
-              'w',
-              encoding='utf-8') as json_file:
+    with open(os.path.join(prop_dir, "inheritance_info.json"), 'w', encoding='utf-8') as json_file:
         json.dump(inheritance_info, json_file, indent=2)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "project",
-        type=pathlib.Path,
-        default=None,
-        help='Project directory where need to obtain inheritance information')
-    parser.add_argument("--encoding",
-                        type=str,
-                        default="utf-8",
-                        help='Encoding type of project')
+    parser.add_argument("project",
+                        type=pathlib.Path,
+                        default=None,
+                        help='Project directory where need to obtain inheritance information')
+    parser.add_argument("--encoding", type=str, default="utf-8", help='Encoding type of project')
     args = parser.parse_args()
     all_files_inheritance_info(args.project, args.encoding)
     mk_json_file(args.project)
