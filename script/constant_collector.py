@@ -55,16 +55,13 @@ extract_assign_primitive_query = J_LANGUAGE.query("""
 )
 """)
 
-# extract string.equals(string)
-extract_if_primitive_query = J_LANGUAGE.query("""
-(if_statement
-  (parenthesized_expression
-    (method_invocation
-      (string_literal)* @String
-      (argument_list
-        (string_literal)* @String
-      )
-    )
+# extract string.equals(string) || string.indexOf(character)
+extract_string_method_query = J_LANGUAGE.query("""
+(method_invocation
+  (string_literal)* @String
+  (argument_list
+    (character_literal)* @Character
+    (string_literal)* @String
   )
 )
 """)
@@ -90,8 +87,7 @@ def get_package_class(package_name, class_name):
 def get_text(node, src):
     text = ''
     if src[node[0].start_point[0]] == src[node[0].end_point[0]]:
-        text = (src[node[0].start_point[0]]
-                )[node[0].start_point[1]:node[0].end_point[1]]
+        text = (src[node[0].start_point[0]])[node[0].start_point[1]:node[0].end_point[1]]
     else:
         text = (src[node[0].start_point[0]])[node[0].start_point[1]:]
         for row in range(node[0].start_point[0] + 1, node[0].end_point[0] + 1):
@@ -104,15 +100,13 @@ def get_text(node, src):
 
 
 def get_object(node, src, class_name):
-    lst = extract_create_object_query.captures(
-        node) + extract_return_object_query.captures(node)
+    lst = extract_create_object_query.captures(node) + extract_return_object_query.captures(node)
     var_modifier = False
     var_type = ''
     for i in lst:
         text = get_text(i, src)
         if i[1] == 'variable-modifier':
-            var_modifier = True if all(
-                x in text for x in ["public", "static"]) else False
+            var_modifier = True if all(x in text for x in ["public", "static"]) else False
         elif i[1] == 'variable-type':
             var_type = text
         elif i[1] == 'variable-name':
@@ -132,23 +126,23 @@ def get_assign_primitive(node, src, class_name):
             const_type = text
         elif i[1] == 'constant-value':
             if const_type in constant:
-                constant[const_type].append({
-                    'name': class_name,
-                    'value': text
-                })
+                constant[const_type].append({'name': class_name, 'value': text})
 
 
-def get_if_primitive(node, src, type_name):
-    lst = extract_if_primitive_query.captures(node)
+def get_string_method(node, src, type_name):
+    lst = extract_string_method_query.captures(node)
     for i in lst:
         text = get_text(i, src)
-        if "\"" not in text:
+        if "\"" not in text and "\'" not in text:
             continue
+        elif i[1] == 'Character':
+            text = text.replace('\'', '\"')
+            constant['String'].append({'name': type_name, 'value': text})
         elif i[1] == 'String':
             constant['String'].append({'name': type_name, 'value': text})
 
 
-def get_if_primitive_from_method(node, src, class_name):
+def get_string_method_from_method(node, src, class_name):
     lst = extract_method_name_query.captures(node)
     method_name = ''
     for i in lst:
@@ -156,7 +150,7 @@ def get_if_primitive_from_method(node, src, class_name):
         if i[1] == 'method-name':
             method_name = re.sub("\(.*", "", text)
         elif i[1] == 'method-body':
-            get_if_primitive(i[0], src, class_name + "." + method_name)
+            get_string_method(i[0], src, class_name + "." + method_name)
 
 
 def get_parent_class_name(node, src, name):
@@ -180,18 +174,16 @@ def get_class_name(node, src):
     for i in match_list:
         text = get_text(i, src)
         if i[1] == 'package-name':
-            package_name = text.replace('package', '', 1).replace(';', '',
-                                                                  1).strip()
+            package_name = text.replace('package', '', 1).replace(';', '', 1).strip()
         elif i[1] == 'class-name':
-            class_name = re.sub("\$$", "",
-                                get_parent_class_name(i[0], src, ''))
+            class_name = re.sub("\$$", "", get_parent_class_name(i[0], src, ''))
             class_name = get_package_class(package_name, class_name)
         elif i[1] == 'class-body':
             if class_name == '':
                 continue
             get_object(i[0], src, class_name)
             get_assign_primitive(i[0], src, class_name)
-            get_if_primitive_from_method(i[0], src, class_name)
+            get_string_method_from_method(i[0], src, class_name)
 
 
 def one_file_collector(src, encoding):
@@ -220,23 +212,17 @@ def mk_json_file(project_dir):
     prop_dir = os.path.join(project_dir, "unitcon_properties")
     if not os.path.isdir(prop_dir):
         os.makedirs(prop_dir)
-    with open(os.path.join(prop_dir, "extra_constant.json"),
-              'w',
-              encoding='utf-8') as json_file:
+    with open(os.path.join(prop_dir, "extra_constant.json"), 'w', encoding='utf-8') as json_file:
         json.dump(constant, json_file, indent=2)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "project",
-        type=pathlib.Path,
-        default=None,
-        help='Project directory where need to obtain additional constant')
-    parser.add_argument("--encoding",
-                        type=str,
-                        default="utf-8",
-                        help='Encoding type of project')
+    parser.add_argument("project",
+                        type=pathlib.Path,
+                        default=None,
+                        help='Project directory where need to obtain additional constant')
+    parser.add_argument("--encoding", type=str, default="utf-8", help='Encoding type of project')
     args = parser.parse_args()
     all_files_collector(args.project, args.encoding)
     mk_json_file(args.project)
