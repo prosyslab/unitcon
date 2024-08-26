@@ -863,10 +863,17 @@ let add_java_package_inheritance ig =
   |> add_inheritance "java.lang.CharSequence" "java.lang.String"
   |> add_inheritance "java.io.Writer" "java.io.StringWriter"
   |> add_inheritance "java.io.Serializable" "java.text.Format"
+  |> add_inheritance "java.text.Format" "java.text.DateFormat"
+  |> add_inheritance "java.text.Format" "java.text.NumberFormat"
   |> add_inheritance "java.io.OutputStream" "java.io.ByteArrayOutputStream"
 
 let add_java_package_classinfo ci =
   let add_classinfo name info ci = CI.M.add name info ci in
   add_classinfo "java.io.Writer" CI.{ class_type = Public_Abstract } ci
-  |> add_classinfo "java.io.OutputStream" CI.{ class_type = Public_Abstract }
   |> add_classinfo "java.io.Reader" CI.{ class_type = Public_Abstract }
+  |> add_classinfo "java.io.OutputStream" CI.{ class_type = Public_Abstract }
+  |> add_classinfo "java.io.InputStream" CI.{ class_type = Public_Abstract }
+  |> add_classinfo "java.lang.Number" CI.{ class_type = Public_Abstract }
+  |> add_classinfo "java.text.Format" CI.{ class_type = Public_Abstract }
+  |> add_classinfo "java.text.DateFormat" CI.{ class_type = Public_Abstract }
+  |> add_classinfo "java.text.NumberFormat" CI.{ class_type = Public_Abstract }

@@ -20,7 +20,7 @@ let default_value typ =
       ]
   | Bool -> [ "false"; "true" ]
   | Char -> [ "x" ]
-  | String -> [ "NULL"; ""; "string" ]
+  | String -> [ "NULL"; ""; "string"; "1234"; "false"; "true" ]
   | _ -> [ "NULL" ]
 
 let default_primitive =
