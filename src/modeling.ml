@@ -877,3 +877,6 @@ let add_java_package_classinfo ci =
   |> add_classinfo "java.text.Format" CI.{ class_type = Public_Abstract }
   |> add_classinfo "java.text.DateFormat" CI.{ class_type = Public_Abstract }
   |> add_classinfo "java.text.NumberFormat" CI.{ class_type = Public_Abstract }
+  |> add_classinfo "java.util.Collection" CI.{ class_type = Public_Interface }
+  |> add_classinfo "java.util.List" CI.{ class_type = Public_Interface }
+  |> add_classinfo "java.util.Map" CI.{ class_type = Public_Interface }
