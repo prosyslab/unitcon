@@ -1405,7 +1405,10 @@ let get_value v p_info =
   let found_value =
     if not_found_value find_value1 then
       if not_found_value find_value2 then
-        List.fold_left (fun lst x -> (0, x) :: lst) [] default
+        let default_value =
+          List.fold_left (fun lst x -> (0, x) :: lst) [] default
+        in
+        if typ = Int then filter_size id default_value else default_value
       else calc_value id find_value2 default
     else calc_value id find_value1 default
   in
