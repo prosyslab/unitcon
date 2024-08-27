@@ -30,8 +30,6 @@ extract_enum_query = J_LANGUAGE.query("""
 (enum_constant) @enum-const)
 """)
 
-enum_list = []
-
 
 def get_package_class(package_name, class_name):
     if package_name:
@@ -76,6 +74,7 @@ def get_parent_class_name(node, src, name):
 
 
 def get_enum(node, src):
+    enum_list = []
     match_list = extract_enum_query.captures(node)
     package_name = ''
     enum_name = ''
@@ -93,6 +92,7 @@ def get_enum(node, src):
                 'const':
                 re.sub("[ \n].*", "", re.sub("\([^)]*\)[\),;]*", "", text, re.MULTILINE)).strip()
             })
+    return enum_list
 
 
 def one_file_enum_info(src, encoding):
@@ -107,17 +107,20 @@ def one_file_enum_info(src, encoding):
         return (src_lines[row])[column:].encode('utf8')
 
     tree = parser.parse(read_callable)
-    get_enum(tree.root_node, src_lines)
+    return get_enum(tree.root_node, src_lines)
 
 
 def all_files_enum_info(project_dir, encoding):
+    enum_list = []
     for dirpath, dirnames, filenames in os.walk(project_dir):
         for filename in filenames:
             if filename.endswith(".java"):
-                one_file_enum_info(os.path.join(dirpath, filename), encoding)
+                enum_list.extend(one_file_enum_info(os.path.join(dirpath, filename), encoding))
+
+    return enum_list
 
 
-def mk_json_file(project_dir):
+def mk_json_file(project_dir, enum_list):
     prop_dir = os.path.join(project_dir, "unitcon_properties")
     if not os.path.isdir(prop_dir):
         os.makedirs(prop_dir)
@@ -133,8 +136,8 @@ def main():
                         help='Project directory where need to obtain enum information')
     parser.add_argument("--encoding", type=str, default="utf-8", help='Encoding type of project')
     args = parser.parse_args()
-    all_files_enum_info(args.project, args.encoding)
-    mk_json_file(args.project)
+    enum_list = all_files_enum_info(args.project, args.encoding)
+    mk_json_file(args.project, enum_list)
 
 
 if __name__ == "__main__":

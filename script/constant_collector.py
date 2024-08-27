@@ -66,16 +66,13 @@ extract_string_method_query = J_LANGUAGE.query("""
 )
 """)
 
-# predefined type
-constant = {
-    'int': [],
-    'long': [],
-    'float': [],
-    'double': [],
-    'char': [],
-    'String': [],
-    'Object': []
-}
+
+# predefined type: int, long, float, double, char, String, Object
+# always dic1 == return
+def combine_dict(dic1, dic2):
+    for key, value in dic1.items():
+        dic1[key].extend(dic2[key])
+    return dic1
 
 
 def get_package_class(package_name, class_name):
@@ -100,6 +97,15 @@ def get_text(node, src):
 
 
 def get_object(node, src, class_name):
+    constant = {
+        'int': [],
+        'long': [],
+        'float': [],
+        'double': [],
+        'char': [],
+        'String': [],
+        'Object': []
+    }
     lst = extract_create_object_query.captures(node) + extract_return_object_query.captures(node)
     var_modifier = False
     var_type = ''
@@ -115,9 +121,19 @@ def get_object(node, src, class_name):
                 continue
             if class_name.endswith(var_type):
                 constant['Object'].append({'name': class_name, 'value': text})
+    return constant
 
 
 def get_assign_primitive(node, src, class_name):
+    constant = {
+        'int': [],
+        'long': [],
+        'float': [],
+        'double': [],
+        'char': [],
+        'String': [],
+        'Object': []
+    }
     lst = extract_assign_primitive_query.captures(node)
     const_type = ''
     for i in lst:
@@ -127,9 +143,19 @@ def get_assign_primitive(node, src, class_name):
         elif i[1] == 'constant-value':
             if const_type in constant:
                 constant[const_type].append({'name': class_name, 'value': text})
+    return constant
 
 
 def get_string_method(node, src, type_name):
+    constant = {
+        'int': [],
+        'long': [],
+        'float': [],
+        'double': [],
+        'char': [],
+        'String': [],
+        'Object': []
+    }
     lst = extract_string_method_query.captures(node)
     for i in lst:
         text = get_text(i, src)
@@ -137,12 +163,23 @@ def get_string_method(node, src, type_name):
             continue
         elif i[1] == 'Character':
             text = text.replace('\'', '\"')
+            constant['char'].append({'name': type_name, 'value': text})
             constant['String'].append({'name': type_name, 'value': text})
         elif i[1] == 'String':
             constant['String'].append({'name': type_name, 'value': text})
+    return constant
 
 
 def get_string_method_from_method(node, src, class_name):
+    constant = {
+        'int': [],
+        'long': [],
+        'float': [],
+        'double': [],
+        'char': [],
+        'String': [],
+        'Object': []
+    }
     lst = extract_method_name_query.captures(node)
     method_name = ''
     for i in lst:
@@ -150,7 +187,8 @@ def get_string_method_from_method(node, src, class_name):
         if i[1] == 'method-name':
             method_name = re.sub("\(.*", "", text)
         elif i[1] == 'method-body':
-            get_string_method(i[0], src, class_name + "." + method_name)
+            combine_dict(constant, get_string_method(i[0], src, class_name + "." + method_name))
+    return constant
 
 
 def get_parent_class_name(node, src, name):
@@ -168,6 +206,15 @@ def get_parent_class_name(node, src, name):
 
 
 def get_class_name(node, src):
+    constant = {
+        'int': [],
+        'long': [],
+        'float': [],
+        'double': [],
+        'char': [],
+        'String': [],
+        'Object': []
+    }
     match_list = extract_class_name_query.captures(node)
     package_name = ''
     class_name = ''
@@ -181,9 +228,13 @@ def get_class_name(node, src):
         elif i[1] == 'class-body':
             if class_name == '':
                 continue
-            get_object(i[0], src, class_name)
-            get_assign_primitive(i[0], src, class_name)
-            get_string_method_from_method(i[0], src, class_name)
+            obj_constant = get_object(i[0], src, class_name)
+            assign_primitive = get_assign_primitive(i[0], src, class_name)
+            string_primitive = get_string_method_from_method(i[0], src, class_name)
+            combine_dict(
+                constant,
+                combine_dict(combine_dict(assign_primitive, obj_constant), string_primitive))
+    return constant
 
 
 def one_file_collector(src, encoding):
@@ -198,17 +249,28 @@ def one_file_collector(src, encoding):
         return (src_lines[row])[column:].encode('utf8')
 
     tree = parser.parse(read_callable)
-    get_class_name(tree.root_node, src_lines)
+    return get_class_name(tree.root_node, src_lines)
 
 
 def all_files_collector(project_dir, encoding):
+    constant = {
+        'int': [],
+        'long': [],
+        'float': [],
+        'double': [],
+        'char': [],
+        'String': [],
+        'Object': []
+    }
     for dirpath, dirnames, filenames in os.walk(project_dir):
         for filename in filenames:
             if filename.endswith(".java"):
-                one_file_collector(os.path.join(dirpath, filename), encoding)
+                combine_dict(constant, one_file_collector(os.path.join(dirpath, filename),
+                                                          encoding))
+    return constant
 
 
-def mk_json_file(project_dir):
+def mk_json_file(project_dir, constant):
     prop_dir = os.path.join(project_dir, "unitcon_properties")
     if not os.path.isdir(prop_dir):
         os.makedirs(prop_dir)
@@ -224,8 +286,8 @@ def main():
                         help='Project directory where need to obtain additional constant')
     parser.add_argument("--encoding", type=str, default="utf-8", help='Encoding type of project')
     args = parser.parse_args()
-    all_files_collector(args.project, args.encoding)
-    mk_json_file(args.project)
+    constant = all_files_collector(args.project, args.encoding)
+    mk_json_file(args.project, constant)
 
 
 if __name__ == "__main__":

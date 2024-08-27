@@ -51,11 +51,6 @@ extract_interface_query = J_LANGUAGE.query("""
 (interface_declaration) @interface
 """)
 
-class_and_interface_list = []
-extends_class_list = []
-implements_interface_list = []
-extends_interface_list = []
-
 
 def remove_generic(name):
     rename = name
@@ -141,6 +136,7 @@ def get_parent_interface_name(node, src, name):
 
 
 def get_class_name(node, src, package_name):
+    class_and_interface_list = []
     match_list = extract_class_name_query.captures(node)
     class_name = ''
     class_modifier = []
@@ -161,9 +157,11 @@ def get_class_name(node, src, package_name):
             class_name = get_package_class(package_name, remove_generic(class_name))
             class_and_interface_list.append({'name': class_name, 'type': class_modifier})
             class_modifier = []
+    return class_and_interface_list
 
 
 def get_nested_class_name(node, src):
+    class_and_interface_list = []
     package_name = ''
     for i in node.children:
         match_list = extract_class_query.captures(i)
@@ -174,10 +172,12 @@ def get_nested_class_name(node, src):
                 package_name = text.replace('package', '', 1).replace(';', '', 1).strip()
                 package_name = remove_generic(package_name)
             elif j[1] == 'class':
-                get_class_name(j[0], src, package_name)
+                class_and_interface_list.extend(get_class_name(j[0], src, package_name))
+    return class_and_interface_list
 
 
 def get_interface_name(node, src, package_name):
+    class_and_interface_list = []
     match_list = extract_interface_name_query.captures(node)
     interface_name = ''
     interface_modifier = ["interface"]
@@ -191,9 +191,11 @@ def get_interface_name(node, src, package_name):
             interface_name = get_package_class(package_name, remove_generic(interface_name))
             class_and_interface_list.append({'name': interface_name, 'type': interface_modifier})
             interface_modifier = ["interface"]
+    return class_and_interface_list
 
 
 def get_nested_interface_name(node, src):
+    class_and_interface_list = []
     package_name = ''
     for i in node.children:
         match_list = extract_interface_query.captures(i)
@@ -204,10 +206,12 @@ def get_nested_interface_name(node, src):
                 package_name = text.replace('package', '', 1).replace(';', '', 1).strip()
                 package_name = remove_generic(package_name)
             elif j[1] == 'interface':
-                get_interface_name(j[0], src, package_name)
+                class_and_interface_list.extend(get_interface_name(j[0], src, package_name))
+    return class_and_interface_list
 
 
 def get_extends_class_name(node, src, package_name, import_list):
+    extends_class_list = []
     match_list = extends_class_name_query.captures(node)
     class_name = ''
     super_class_list = []
@@ -220,9 +224,11 @@ def get_extends_class_name(node, src, package_name, import_list):
             text = remove_generic(text.replace('extends', '', 1))
             super_class_list = get_super_list(text, package_name, import_list)
             extends_class_list.append({'child': class_name, 'super': super_class_list})
+    return extends_class_list
 
 
 def get_nested_extends_class_name(node, src):
+    extends_class_list = []
     package_name = ''
     import_list = []
     for i in node.children:
@@ -237,10 +243,13 @@ def get_nested_extends_class_name(node, src):
                 if '*' not in import_name:
                     import_list.append(import_name)
             elif j[1] == 'class':
-                get_extends_class_name(j[0], src, package_name, import_list)
+                extends_class_list.extend(
+                    get_extends_class_name(j[0], src, package_name, import_list))
+    return extends_class_list
 
 
 def get_implements_interface_name(node, src, package_name, import_list):
+    implements_interface_list = []
     match_list = implements_interface_name_query.captures(node)
     class_name = ''
     super_interface_list = []
@@ -253,9 +262,11 @@ def get_implements_interface_name(node, src, package_name, import_list):
             text = remove_generic(text.replace('implements', '', 1))
             super_interface_list = get_super_list(text, package_name, import_list)
             implements_interface_list.append({'child': class_name, 'super': super_interface_list})
+    return implements_interface_list
 
 
 def get_nested_implements_interface_name(node, src):
+    implements_interface_list = []
     package_name = ''
     import_list = []
     for i in node.children:
@@ -270,10 +281,13 @@ def get_nested_implements_interface_name(node, src):
                 if '*' not in import_name:
                     import_list.append(import_name)
             elif j[1] == 'class':
-                get_implements_interface_name(j[0], src, package_name, import_list)
+                implements_interface_list.extend(
+                    get_implements_interface_name(j[0], src, package_name, import_list))
+    return implements_interface_list
 
 
 def get_extends_interface_name(node, src, package_name, import_list):
+    extends_interface_list = []
     match_list = extends_interface_name_query.captures(node)
     match_list = []
     interface_name = ''
@@ -287,9 +301,11 @@ def get_extends_interface_name(node, src, package_name, import_list):
             text = remove_generic(text.replace('extends', '', 1))
             super_interface_list = get_super_list(text, package_name, import_list)
             extends_interface_list.append({'child': interface_name, 'super': super_interface_list})
+    return extends_interface_list
 
 
 def get_nested_extends_interface_name(node, src):
+    extends_interface_list = []
     package_name = ''
     import_list = []
     for i in node.children:
@@ -304,7 +320,9 @@ def get_nested_extends_interface_name(node, src):
                 if '*' not in import_name:
                     import_list.append(import_name)
             elif j[1] == 'interface':
-                get_extends_interface_name(j[0], src, package_name, import_list)
+                extends_interface_list.extend(
+                    get_extends_interface_name(j[0], src, package_name, import_list))
+    return extends_interface_list
 
 
 def one_file_inheritance_info(src, encoding):
@@ -319,34 +337,45 @@ def one_file_inheritance_info(src, encoding):
         return (src_lines[row])[column:].encode('utf8')
 
     tree = parser.parse(read_callable)
-    get_nested_class_name(tree.root_node, src_lines)
-    get_nested_interface_name(tree.root_node, src_lines)
-    get_nested_extends_class_name(tree.root_node, src_lines)
-    get_nested_implements_interface_name(tree.root_node, src_lines)
-    get_nested_extends_interface_name(tree.root_node, src_lines)
+    c_and_i = get_nested_class_name(tree.root_node, src_lines)
+    c_and_i.extend(get_nested_interface_name(tree.root_node, src_lines))
+    return (c_and_i, get_nested_extends_class_name(tree.root_node, src_lines),
+            get_nested_implements_interface_name(tree.root_node, src_lines),
+            get_nested_extends_interface_name(tree.root_node, src_lines))
 
 
 def all_files_inheritance_info(project_dir, encoding):
+    class_and_interface_list = []  # get_nested_class_name, get_nested_interface_name
+    extends_class_list = []  # get_nested_extends_class_name
+    implements_interface_list = []  # get_nested_implements_interface_name
+    extends_interface_list = []  # get_nested_extends_interface_name
     for dirpath, dirnames, filenames in os.walk(project_dir):
         for filename in filenames:
             if filename.endswith(".java"):
-                one_file_inheritance_info(os.path.join(dirpath, filename), encoding)
+                c_and_i, ex_c, imple_i, ex_i = one_file_inheritance_info(
+                    os.path.join(dirpath, filename), encoding)
+                class_and_interface_list.extend(c_and_i)
+                extends_class_list.extend(ex_c)
+                implements_interface_list.extend(imple_i)
+                extends_interface_list.extend(ex_i)
+    return (class_and_interface_list, extends_class_list, implements_interface_list,
+            extends_interface_list)
 
 
-def mk_json_file(project_dir):
+def mk_json_file(project_dir, c_and_i, ex_c, imple_i, ex_i):
     inheritance_info = [{
         'class_and_interface':
         list({name['name']: name
-              for name in class_and_interface_list}.values()),
+              for name in c_and_i}.values()),
         'extends_class':
         list({name['child']: name
-              for name in extends_class_list}.values()),
+              for name in ex_c}.values()),
         'implements_interface':
         list({name['child']: name
-              for name in implements_interface_list}.values()),
+              for name in imple_i}.values()),
         'extends_interface':
         list({name['child']: name
-              for name in extends_interface_list}.values())
+              for name in ex_i}.values())
     }]
 
     prop_dir = os.path.join(project_dir, "unitcon_properties")
@@ -364,8 +393,8 @@ def main():
                         help='Project directory where need to obtain inheritance information')
     parser.add_argument("--encoding", type=str, default="utf-8", help='Encoding type of project')
     args = parser.parse_args()
-    all_files_inheritance_info(args.project, args.encoding)
-    mk_json_file(args.project)
+    c_and_i, ex_c, imple_i, ex_i = all_files_inheritance_info(args.project, args.encoding)
+    mk_json_file(args.project, c_and_i, ex_c, imple_i, ex_i)
 
 
 if __name__ == "__main__":
