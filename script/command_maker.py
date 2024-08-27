@@ -15,9 +15,7 @@ def collect_classpaths(project_dir):
             continue
         for dirpath, dirnames, filenames in os.walk(rootdir):
             for filename in filenames:
-                if filename.endswith(".jar"):
-                    classpaths.append(os.path.join(dirpath, filename))
-                elif filename.endswith(".class"):
+                if any(filename.endswith(ext) for ext in [".jar", ".class", ".properties"]):
                     classpaths.append(os.path.join(dirpath, filename))
     return classpaths
 
