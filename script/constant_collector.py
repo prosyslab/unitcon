@@ -55,7 +55,7 @@ extract_assign_primitive_query = J_LANGUAGE.query("""
 )
 """)
 
-# extract string.equals(string) || string.indexOf(character)
+# extract string.equals(string) || string.indexOf(character) || switch ... case 'X':
 extract_string_method_query = J_LANGUAGE.query("""
 (method_invocation
   (string_literal)* @String
@@ -64,6 +64,16 @@ extract_string_method_query = J_LANGUAGE.query("""
     (string_literal)* @String
   )
 )
+""")
+
+extract_switch_query = J_LANGUAGE.query("""
+(switch_expression
+  body: (switch_block
+    (switch_block_statement_group
+      (switch_label) @switch-case
+    )
+  )
+) 
 """)
 
 
@@ -146,6 +156,32 @@ def get_assign_primitive(node, src, class_name):
     return constant
 
 
+def get_switch_case(node, src, type_name):
+    constant = {
+        'int': [],
+        'long': [],
+        'float': [],
+        'double': [],
+        'char': [],
+        'String': [],
+        'Object': []
+    }
+    lst = extract_switch_query.captures(node)
+    for i in lst:
+        text = get_text(i, src)
+        if "\"" not in text and "\'" not in text:
+            continue
+        elif i[1] == 'switch-case':
+            text = re.sub("case *", "", text)
+            if "\'" in text:
+                constant['char'].append({'name': type_name, 'value': text})
+                text = text.replace('\'', '\"')
+                constant['String'].append({'name': type_name, 'value': text})
+            elif "\"" in text:
+                constant['String'].append({'name': type_name, 'value': text})
+    return constant
+
+
 def get_string_method(node, src, type_name):
     constant = {
         'int': [],
@@ -162,8 +198,8 @@ def get_string_method(node, src, type_name):
         if "\"" not in text and "\'" not in text:
             continue
         elif i[1] == 'Character':
-            text = text.replace('\'', '\"')
             constant['char'].append({'name': type_name, 'value': text})
+            text = text.replace('\'', '\"')
             constant['String'].append({'name': type_name, 'value': text})
         elif i[1] == 'String':
             constant['String'].append({'name': type_name, 'value': text})
@@ -187,7 +223,9 @@ def get_string_method_from_method(node, src, class_name):
         if i[1] == 'method-name':
             method_name = re.sub("\(.*", "", text)
         elif i[1] == 'method-body':
-            combine_dict(constant, get_string_method(i[0], src, class_name + "." + method_name))
+            from_string_method = get_string_method(i[0], src, class_name + "." + method_name)
+            from_switch_case = get_switch_case(i[0], src, class_name + "." + method_name)
+            combine_dict(constant, combine_dict(from_string_method, from_switch_case))
     return constant
 
 
