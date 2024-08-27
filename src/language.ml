@@ -1114,7 +1114,8 @@ module AST = struct
     | C c -> "\'" ^ String.make 1 c ^ "\'"
     | S s ->
         let replace s =
-          Str.global_replace (Str.regexp "\"") "\\\"" s
+          Str.global_replace (Str.regexp "\\") "\\\\\\\\" s
+          |> Str.global_replace (Str.regexp "\"") "\\\""
           |> Str.global_replace (Str.regexp "\'") "\\\'"
         in
         "\"" ^ replace s ^ "\""
