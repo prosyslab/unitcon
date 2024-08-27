@@ -89,7 +89,7 @@ def get_enum(node, src):
         elif i[1] == 'enum-const':
             enum_list.append({
                 'enum': enum_name,
-                'const': re.sub("\([^)]*\)[\),;]*", "", text, re.MULTILINE).strip()
+                'const': re.sub("[ \n].*", "", re.sub("\([^)]*\)[\),;]*", "", text, re.MULTILINE)).strip()
             })
 
 
