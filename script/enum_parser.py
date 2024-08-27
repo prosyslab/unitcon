@@ -88,8 +88,10 @@ def get_enum(node, src):
             enum_name = get_package_class(package_name, parent_name + text)
         elif i[1] == 'enum-const':
             enum_list.append({
-                'enum': enum_name,
-                'const': re.sub("[ \n].*", "", re.sub("\([^)]*\)[\),;]*", "", text, re.MULTILINE)).strip()
+                'enum':
+                enum_name,
+                'const':
+                re.sub("[ \n].*", "", re.sub("\([^)]*\)[\),;]*", "", text, re.MULTILINE)).strip()
             })
 
 
