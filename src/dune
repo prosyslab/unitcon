@@ -1,23 +1,6 @@
 (executable
  (name main)
- (modules
-  main
-  language
-  utils
-  callgraph
-  cmdline
-  summary
-  errorSummary
-  callProposition
-  inheritance
-  setter
-  constant
-  modeling
-  parser
-  regexp
-  generator
-  runProgram)
- (libraries ocamlgraph unix yojson str core z3 logger hex)
+ (libraries ocamlgraph unix yojson str core z3 logger hex sawja)
  (instrumentation
   (backend bisect_ppx))
  (preprocess

@@ -11,6 +11,9 @@ let main () =
   ignore (Unix.alarm !Cmdline.time_out);
   match !Cmdline.target_program with
   | None -> failwith "Error: Target Program is not given"
+  | Some p when !Cmdline.class_info ->
+      initialize ();
+      ClassInfo.run p
   | Some p ->
       initialize ();
       RunProgram.run p

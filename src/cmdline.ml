@@ -20,6 +20,8 @@ let with_loop = ref false
 
 let with_fuzz = ref false
 
+let class_info = ref false
+
 let options =
   [
     ( "-outdir",
@@ -51,6 +53,9 @@ let options =
     ( "-with-fuzz",
       Arg.Set with_fuzz,
       "Use fuzzer for searching constant (default: false)" );
+    ( "-class-info",
+      Arg.Set class_info,
+      "Analyze syntactic properties of a given Java bytecode file" );
   ]
 
 let parse_arg (x : string) =
