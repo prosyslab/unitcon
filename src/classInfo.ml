@@ -95,7 +95,14 @@ let handle_methods methods =
                  (fun vt -> `String (string_of_value_type vt))
                  (JBasics.ms_args c.cm_signature))
           in
-          let item = [ ("access", access); ("rtype", rtype); ("args", args) ] in
+          let item =
+            [
+              ("access", access);
+              ("is_static", `Bool (Javalib.is_static_method m));
+              ("rtype", rtype);
+              ("args", args);
+            ]
+          in
           (name, `Assoc item) :: acc
       | Javalib.AbstractMethod a ->
           let name = JBasics.ms_name a.am_signature in
@@ -115,7 +122,14 @@ let handle_methods methods =
                  (fun vt -> `String (string_of_value_type vt))
                  (JBasics.ms_args a.am_signature))
           in
-          let item = [ ("access", access); ("rtype", rtype); ("args", args) ] in
+          let item =
+            [
+              ("access", access);
+              ("is_static", `Bool (Javalib.is_static_method m));
+              ("rtype", rtype);
+              ("args", args);
+            ]
+          in
           (name, `Assoc item) :: acc)
     methods []
 
@@ -131,13 +145,12 @@ let handle_interface i =
     `List (List.map (fun i -> `String (JBasics.cn_name i)) i.i_interfaces)
   in
   let inner_class =
-    `List
-      (List.map
-         (fun ic ->
-           match ic.Javalib.ic_class_name with
-           | Some s -> `String (JBasics.cn_name s)
-           | None -> `Null)
-         i.i_inner_classes)
+    List.map
+      (fun ic ->
+        match ic.Javalib.ic_class_name with
+        | Some s -> (JBasics.cn_name s, `Bool ic.Javalib.ic_static)
+        | None -> ("", `Bool false))
+      i.i_inner_classes
   in
   let is_abstract = `Bool false in
   let item =
@@ -147,7 +160,7 @@ let handle_interface i =
       ("is_abstract", is_abstract);
       ("is_interface", `Bool true);
       ("interfaces", interfaces);
-      ("inner_class", inner_class);
+      ("inner_class", `Assoc inner_class);
     ]
   in
   (cname, `Assoc item)
@@ -165,14 +178,16 @@ let handle_class c =
     | Some s -> `String (JBasics.cn_name s)
     | _ -> `Null
   in
+  let interfaces =
+    `List (List.map (fun i -> `String (JBasics.cn_name i)) c.c_interfaces)
+  in
   let inner_class =
-    `List
-      (List.map
-         (fun ic ->
-           match ic.Javalib.ic_class_name with
-           | Some s -> `String (JBasics.cn_name s)
-           | None -> `Null)
-         c.c_inner_classes)
+    List.map
+      (fun ic ->
+        match ic.Javalib.ic_class_name with
+        | Some s -> (JBasics.cn_name s, `Bool ic.Javalib.ic_static)
+        | None -> ("", `Bool false))
+      c.c_inner_classes
   in
   let is_abstract = `Bool c.c_abstract in
   let methods = handle_methods c.c_methods in
@@ -183,7 +198,8 @@ let handle_class c =
       ("is_abstract", is_abstract);
       ("is_interface", `Bool false);
       ("super_class", super_class);
-      ("inner_class", inner_class);
+      ("interfaces", interfaces);
+      ("inner_class", `Assoc inner_class);
       ("methods", `Assoc methods);
     ]
   in
@@ -199,6 +215,10 @@ let run p =
     fold (fun acc ioc -> fold_class acc ioc) [] p
   in
   let r = `Assoc x in
-  let oc = Filename.concat !Cmdline.out_dir "class_info.json" |> open_out in
+  let cons = Filename.concat in
+  let p_dir = if Filename.is_relative p then cons (Unix.getcwd ()) p else p in
+  let oc =
+    cons (cons p_dir "unitcon_properties") "class_info.json" |> open_out
+  in
   Yojson.Safe.pretty_to_channel oc r;
   close_out oc

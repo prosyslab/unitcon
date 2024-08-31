@@ -216,6 +216,16 @@ let obj_summary =
     args = [];
   }
 
+let throwable_summary =
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    use_field = UseFieldMap.M.empty;
+    precond = (zero_var, zero_mem);
+    postcond = (zero_var, zero_mem);
+    args = [];
+  }
+
 let random_summary =
   {
     relation = Relation.M.empty;
@@ -424,6 +434,17 @@ let ba_output_info =
 
 let obj_info =
   let this = This (Object "java.lang.Object") in
+  MethodInfo.
+    {
+      modifier = Public;
+      is_static = false;
+      formal_params = [ this ];
+      return = "";
+      filename = "";
+    }
+
+let throwable_info =
+  let this = This (Object "java.lang.Throwable") in
   MethodInfo.
     {
       modifier = Public;
@@ -774,6 +795,7 @@ let add_java_package_summary mmap =
   |> SummaryMap.M.add "java.io.ByteArrayOutputStream.<init>()"
        ([ ba_output_summary ], [])
   |> SummaryMap.M.add "java.lang.Object.<init>()" ([ obj_summary ], [])
+  |> SummaryMap.M.add "java.lang.Throwable.<init>()" ([ throwable_summary ], [])
   |> SummaryMap.M.add "java.util.Random.<init>()" ([ random_summary ], [])
   |> SummaryMap.M.add "java.io.StringWriter.<init>()"
        ([ stringwriter_summary ], [])
@@ -822,6 +844,7 @@ let add_java_package_method mmap =
        file_input_info
   |> MethodInfo.M.add "java.io.ByteArrayOutputStream.<init>()" ba_output_info
   |> MethodInfo.M.add "java.lang.Object.<init>()" obj_info
+  |> MethodInfo.M.add "java.lang.Throwable.<init>()" throwable_info
   |> MethodInfo.M.add "java.util.Random.<init>()" random_info
   |> MethodInfo.M.add "java.io.StringWriter.<init>()" stringwriter_info
   |> MethodInfo.M.add "java.text.ParsePosition.<init>(int)" parseposition_info

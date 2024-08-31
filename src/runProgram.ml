@@ -48,7 +48,7 @@ type t = {
   summary_file : string;
   error_summary_file : string;
   call_prop_file : string;
-  inheritance_file : string;
+  class_info_file : string;
   enum_file : string;
   constant_file : string;
   fuzz_constant_file : string;
@@ -67,7 +67,7 @@ let info =
       summary_file = "";
       error_summary_file = "";
       call_prop_file = "";
-      inheritance_file = "";
+      class_info_file = "";
       enum_file = "";
       constant_file = "";
       fuzz_constant_file = "";
@@ -129,13 +129,17 @@ let parse_callprop filename =
   in
   CallProposition.from_callprop_json json
 
-let parse_class_info filename =
+let parse_class_info summary_map method_map filename =
   if not (Sys.file_exists filename) then failwith (filename ^ " not found");
   let json = Json.from_file filename in
-  let elem = JsonUtil.to_list json |> List.hd in
-  let info = Inheritance.of_json elem in
-  ( fst info |> Modeling.add_java_package_classinfo,
-    snd info |> Modeling.add_java_package_inheritance )
+  Inheritance.of_json summary_map method_map json
+
+let parse_stdlib_info (ct_info, i_info) smap mmap =
+  let stdlib_file = Filename.concat unitcon_path "deps/class_info.json" in
+  if not (Sys.file_exists stdlib_file) then ((ct_info, i_info), smap, mmap)
+  else
+    let json = Json.from_file stdlib_file in
+    Inheritance.of_stdlib_json ct_info i_info smap mmap json
 
 let parse_enum_info filename =
   if not (Sys.file_exists filename) then InstanceInfo.M.empty
@@ -218,8 +222,7 @@ let init program_dir =
       error_summary_file =
         cons con_path "error_summaries.json" |> cons program_dir;
       call_prop_file = cons con_path "call_proposition.json" |> cons program_dir;
-      inheritance_file =
-        cons con_path "inheritance_info.json" |> cons program_dir;
+      class_info_file = cons con_path "class_info.json" |> cons program_dir;
       enum_file = cons con_path "enum_info.json" |> cons program_dir;
       constant_file = cons con_path "extra_constant.json" |> cons program_dir;
       fuzz_constant_file = cons con_path "fuzz_constant" |> cons program_dir;
@@ -973,8 +976,8 @@ let run_multi_testfile () =
   let compile_start = Unix.gettimeofday () in
   add_default_class !info.multi_test_dir;
   copy_file
-    (Filename.concat unitcon_path "deps/UnitconMutator.java")
-    (Filename.concat !info.multi_test_dir "UnitconMutator.java");
+    (Filename.concat unitcon_path "deps/UnitconCombinator.java")
+    (Filename.concat !info.multi_test_dir "UnitconCombinator.java");
   Logger.info "Start multi-test! (# of multi-test: %d)" !num_of_multi_tc_files;
   build_multi_test !info;
   let mt_file =
@@ -1134,7 +1137,12 @@ let run program_dir =
   let summary = parse_summary !info.summary_file method_info in
   let callgraph = parse_callgraph !info.summary_file in
   let setter_map = get_setter summary method_info in
-  let class_info = parse_class_info !info.inheritance_file in
+  let class_info, summary, method_info =
+    parse_class_info summary method_info !info.class_info_file
+  in
+  let class_info, summary, method_info =
+    parse_stdlib_info class_info summary method_info
+  in
   let instance_info =
     parse_enum_info !info.enum_file |> parse_instance_info !info.constant_file
   in

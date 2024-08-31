@@ -26,11 +26,162 @@ module G = struct
   let edge_attributes _ = []
 end
 
-let get_super_classes_name assoc =
-  JsonUtil.member "super" assoc
-  |> JsonUtil.to_list
-  |> List.fold_left (fun lst super -> JsonUtil.to_string super :: lst) []
-  |> List.rev
+module Graphviz = Graph.Graphviz.Dot (G)
+include G
+
+let make_arg_id arg_list =
+  List.fold_left
+    (fun (num, lst) p ->
+      let name =
+        JsonUtil.to_string p |> Str.split Regexp.dot |> List.rev |> List.hd
+      in
+      (num + 1, (name ^ string_of_int num) :: lst))
+    (1, []) arg_list
+  |> snd |> List.rev
+
+let make_var arg_list =
+  let init =
+    Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+      Condition.M.empty
+  in
+  List.fold_left
+    (fun (num, cond) p ->
+      ( num + 1,
+        Condition.M.add
+          (Condition.RH_Symbol ("v" ^ string_of_int num))
+          (Condition.RH_Var p) cond ))
+    (2, init) arg_list
+  |> snd
+
+let make_premem arg_list =
+  let incr = List.length arg_list + 1 in
+  let value_map = Condition.M.empty in
+  let init =
+    Condition.M.add (Condition.RH_Symbol "v1")
+      (Condition.M.add Condition.RH_Any
+         (Condition.RH_Symbol ("v" ^ (1 + incr |> string_of_int)))
+         value_map)
+      Condition.M.empty
+  in
+  let init_mem =
+    List.fold_left
+      (fun (num, cond) _ ->
+        ( num + 1,
+          Condition.M.add
+            (Condition.RH_Symbol ("v" ^ string_of_int num))
+            (Condition.M.add Condition.RH_Any
+               (Condition.RH_Symbol ("v" ^ string_of_int (num + incr)))
+               value_map)
+            cond ))
+      (2, init) arg_list
+    |> snd
+  in
+  let arg_mem =
+    List.fold_left
+      (fun (num, cond) p ->
+        ( num + 1,
+          Condition.M.add (Condition.RH_Var p)
+            (Condition.RH_Symbol ("v" ^ string_of_int num))
+            cond ))
+      (1 + (2 * incr), value_map)
+      arg_list
+    |> snd
+  in
+  Condition.M.add
+    (Condition.RH_Symbol ("v" ^ (1 + incr |> string_of_int)))
+    arg_mem init_mem
+
+let make_postmem arg_list premem =
+  let value_map = Condition.M.empty in
+  let decr = List.length arg_list in
+  List.fold_left
+    (fun (num, cond) _ ->
+      ( num + 1,
+        Condition.M.add
+          (Condition.RH_Symbol ("v" ^ string_of_int num))
+          (Condition.M.add Condition.RH_Any
+             (Condition.RH_Symbol ("v" ^ string_of_int (num - decr)))
+             value_map)
+          cond ))
+    (1 + (2 * (decr + 1)), premem)
+    arg_list
+  |> snd
+
+let make_summary arg_list =
+  let arg_ids = make_arg_id arg_list in
+  let var = make_var arg_ids in
+  let premem = make_premem arg_ids in
+  let postmem = make_postmem arg_ids premem in
+  {
+    relation = Relation.M.empty;
+    value = Value.M.empty;
+    use_field = UseFieldMap.M.empty;
+    precond = (var, premem);
+    postcond = (var, postmem);
+    args = [];
+  }
+
+let get_modifier access : modifier =
+  let access = JsonUtil.to_string access in
+  if access = "public" then Public
+  else if access = "private" then Private
+  else if access = "protected" then Protected
+  else if access = "default" then Default
+  else (* unknown --> useless *) Private
+
+let get_method_info class_name m_info =
+  let this = This (Parser.get_type class_name) in
+  let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in
+  let arg_ids = make_arg_id args in
+  let formal_params =
+    List.map2
+      (fun typ id -> Var (Parser.get_type (JsonUtil.to_string typ), id))
+      args arg_ids
+  in
+  MethodInfo.
+    {
+      modifier = get_modifier (JsonUtil.member "access" m_info);
+      is_static = JsonUtil.to_bool (JsonUtil.member "is_static" m_info);
+      formal_params = this :: formal_params;
+      return = JsonUtil.member "rtype" m_info |> JsonUtil.to_string;
+      filename = "";
+    }
+
+let make_method_name class_name m_name m_info =
+  let rec make_arg_code args =
+    match args with
+    | hd :: tl -> ", " ^ JsonUtil.to_string hd ^ make_arg_code tl
+    | _ -> ""
+  in
+  let arg_code =
+    "("
+    ^ Regexp.rm_first_rest
+        (make_arg_code (JsonUtil.to_list (JsonUtil.member "args" m_info)))
+    ^ ")"
+  in
+  class_name ^ "." ^ m_name ^ arg_code
+
+let add_missing_methods class_name info summary_map method_map =
+  match JsonUtil.member "methods" info with
+  | `Null -> (summary_map, method_map)
+  | methods ->
+      List.fold_left
+        (fun (s_map, m_map) m_name ->
+          let m_info = JsonUtil.member m_name methods in
+          let total_m_name = make_method_name class_name m_name m_info in
+          if MethodInfo.M.mem total_m_name method_map then (s_map, m_map)
+          else
+            ( SummaryMap.M.add total_m_name
+                ( [
+                    JsonUtil.member "args" m_info
+                    |> JsonUtil.to_list |> make_summary;
+                  ],
+                  [] )
+                s_map,
+              MethodInfo.M.add total_m_name
+                (get_method_info class_name m_info)
+                m_map ))
+        (summary_map, method_map) (JsonUtil.keys methods)
 
 let transitive_closure vertex graph =
   let get_children v = try G.succ graph v with Invalid_argument _ -> [] in
@@ -47,51 +198,31 @@ let transitive_closure vertex graph =
     |> List.rev |> List.flatten)
     graph
 
-let missing_inheritance vertex graph =
-  let missing_class_name =
-    Str.global_replace (Str.regexp "\\..*\\$") "." vertex
-  in
-  try
-    let missing = G.succ graph missing_class_name in
-    List.fold_left
-      (fun new_graph name -> G.add_edge new_graph vertex name)
-      graph missing
-  with Invalid_argument _ -> graph
+let mapping_inheritance_info class_name info graph =
+  let super_class = JsonUtil.member "super_class" info in
+  let interfaces = JsonUtil.member "interfaces" info in
+  match (super_class, interfaces) with
+  (* `Null | `String, `Null | `List *)
+  | `Null, `Null -> graph
+  | `Null, _ ->
+      JsonUtil.to_list interfaces
+      |> List.fold_left
+           (fun g i -> G.add_edge g (JsonUtil.to_string i) class_name)
+           graph
+  | _, `Null -> G.add_edge graph (JsonUtil.to_string super_class) class_name
+  | _, _ ->
+      let g = G.add_edge graph (JsonUtil.to_string super_class) class_name in
+      JsonUtil.to_list interfaces
+      |> List.fold_left
+           (fun g i -> G.add_edge g (JsonUtil.to_string i) class_name)
+           g
 
-let from_inheritance_json json =
-  let member =
-    [ "extends_class"; "implements_interface"; "extends_interface" ]
-  in
-  let from_hierarchy assoc_name assoc graph =
-    JsonUtil.member assoc_name assoc
-    |> JsonUtil.to_list
-    |> List.fold_left
-         (fun g element ->
-           let child = JsonUtil.member "child" element |> JsonUtil.to_string in
-           get_super_classes_name element
-           |> List.fold_left (fun g super -> G.add_edge g super child) g)
-         graph
-  in
-  let graph =
-    List.fold_left
-      (fun g assoc_name -> from_hierarchy assoc_name json g)
-      G.empty member
-  in
-  let graph = G.fold_vertex (fun v g -> transitive_closure v g) graph graph in
-  G.fold_vertex (fun v g -> missing_inheritance v g) graph graph
-
-module Graphviz = Graph.Graphviz.Dot (G)
-include G
-
-let parse_type type_list =
-  let contains_type typ lst =
-    List.fold_left (fun result t -> if t = typ then true else result) false lst
-  in
-  let is_public = contains_type "public" type_list in
-  let is_private = contains_type "private" type_list in
-  let is_static = contains_type "static" type_list in
-  let is_abstract = contains_type "abstract" type_list in
-  let is_interface = contains_type "interface" type_list in
+let make_type ?(is_static = false) assoc =
+  let access = JsonUtil.member "access" assoc |> JsonUtil.to_string in
+  let is_public = if access = "public" then true else false in
+  let is_private = if access = "private" then true else false in
+  let is_abstract = JsonUtil.member "is_abstract" assoc |> JsonUtil.to_bool in
+  let is_interface = JsonUtil.member "is_interface" assoc |> JsonUtil.to_bool in
   if is_interface then if is_public then Public_Interface else Default_Interface
   else if is_public then
     if is_static && is_abstract then Public_Static_Abstract
@@ -108,24 +239,57 @@ let parse_type type_list =
   else if is_abstract then Default_Abstract
   else Default
 
-let mapping_class_info assoc mmap =
-  let class_name = JsonUtil.member "name" assoc |> JsonUtil.to_string in
-  let typ =
-    JsonUtil.member "type" assoc
-    |> JsonUtil.to_list
-    |> List.fold_left (fun lst x -> JsonUtil.to_string x :: lst) []
-    |> List.rev |> parse_type
-  in
-  ClassInfo.M.add class_name ClassInfo.{ class_type = typ } mmap
+let mapping_class_type_info class_name json mmap =
+  if ClassInfo.M.mem class_name mmap then mmap
+  else
+    let info = JsonUtil.member class_name json in
+    let mmap =
+      match JsonUtil.member "inner_class" info with
+      | `Null -> mmap
+      | ic ->
+          List.fold_left
+            (fun mmap ic_name ->
+              let is_static = JsonUtil.member ic_name ic |> JsonUtil.to_bool in
+              match JsonUtil.member ic_name json with
+              | `Null when is_static ->
+                  ClassInfo.M.add ic_name
+                    ClassInfo.{ class_type = Private_Static }
+                    mmap
+              | `Null ->
+                  ClassInfo.M.add ic_name
+                    ClassInfo.{ class_type = Private }
+                    mmap
+              | _ ->
+                  let info = JsonUtil.member ic_name json in
+                  ClassInfo.M.add ic_name
+                    ClassInfo.{ class_type = make_type ~is_static info }
+                    mmap)
+            mmap (JsonUtil.keys ic)
+    in
+    ClassInfo.M.add class_name ClassInfo.{ class_type = make_type info } mmap
 
-let of_json json =
-  let class_and_interface_info =
-    JsonUtil.member "class_and_interface" json |> JsonUtil.to_list
-  in
-  let class_type_info =
+let of_json summary_map method_map json =
+  let class_type_info, inheritance_info, (summary_map, method_map) =
     List.fold_left
-      (fun mmap assoc -> mapping_class_info assoc mmap)
-      ClassInfo.M.empty class_and_interface_info
+      (fun (ct_info, i_info, (s_map, m_map)) class_name ->
+        let info = JsonUtil.member class_name json in
+        ( mapping_class_type_info class_name json ct_info,
+          mapping_inheritance_info class_name info i_info,
+          add_missing_methods class_name info s_map m_map ))
+      (ClassInfo.M.empty, G.empty, (summary_map, method_map))
+      (JsonUtil.keys json)
   in
-  let inheritance_info = from_inheritance_json json in
-  (class_type_info, inheritance_info)
+  ((class_type_info, inheritance_info), summary_map, method_map)
+
+let of_stdlib_json ctinfo iinfo smap mmap json =
+  let ctinfo, iinfo, (smap, mmap) =
+    List.fold_left
+      (fun (ct_info, i_info, (s_map, m_map)) class_name ->
+        let info = JsonUtil.member class_name json in
+        ( mapping_class_type_info class_name json ct_info,
+          mapping_inheritance_info class_name info i_info,
+          add_missing_methods class_name info s_map m_map ))
+      (ctinfo, iinfo, (smap, mmap))
+      (JsonUtil.keys json)
+  in
+  ((ctinfo, iinfo), smap, mmap)

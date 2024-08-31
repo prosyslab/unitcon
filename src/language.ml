@@ -1208,7 +1208,7 @@ module AST = struct
     in
     match fst v with
     | String ->
-        common ^ lval ^ "_mut = UnitconMutator.mutateString(" ^ snd v
-        ^ ", 5);\n"
+        common ^ lval ^ "_mut = UnitconCombinator.combinateString(" ^ snd v
+        ^ ");\n"
     | _ -> common
 end

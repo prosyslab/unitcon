@@ -24,27 +24,27 @@ let mk_rh_type v =
   else if check_any_value v then Condition.RH_Any
   else Condition.RH_Var v
 
+let rec get_type t =
+  match t with
+  | "int" -> Int
+  | "long" -> Long
+  | "signed short" | "short" -> Short
+  | "byte" | "signed char" -> Byte
+  | "float" -> Float
+  | "double" -> Double
+  | "_Bool" | "boolean" -> Bool
+  | "unsigned short" | "unsigned char" -> Char
+  | "java.lang.String*" | "java.lang.String" -> String
+  | "" -> NonType
+  | _ when Str.string_match Regexp.array t 0 ->
+      let typ = Regexp.first_rm Regexp.rm_array t |> get_type in
+      Array typ
+  | _ ->
+      let typ = Regexp.global_rm (Str.regexp "\\*.*$") t in
+      Object typ
+
 let parse_param param =
   let v_and_t = String.split_on_char ':' param in
-  let rec get_type t =
-    match t with
-    | "int" -> Int
-    | "long" -> Long
-    | "signed short" | "short" -> Short
-    | "byte" | "signed char" -> Byte
-    | "float" -> Float
-    | "double" -> Double
-    | "_Bool" | "boolean" -> Bool
-    | "unsigned short" | "unsigned char" -> Char
-    | "java.lang.String*" | "java.lang.String" -> String
-    | "" -> NonType
-    | _ when Str.string_match Regexp.array t 0 ->
-        let typ = Regexp.first_rm Regexp.rm_array t |> get_type in
-        Array typ
-    | _ ->
-        let typ = Regexp.global_rm (Str.regexp "\\*.*$") t in
-        Object typ
-  in
   if List.length v_and_t = 1 then Var (NonType, "")
   else
     let mk_variable var typ =
