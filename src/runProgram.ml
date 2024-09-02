@@ -464,14 +464,9 @@ let insert_loop loop_id =
   let id = snd lval in
   let index = id ^ "_index" in
   let init = index ^ " = 0; " in
-  let cond = index ^ " < " ^ id ^ ".length; " in
+  let cond = index ^ " < " ^ id ^ "_comb.length; " in
   let incr = index ^ "++" in
-  match fst lval with
-  | String ->
-      "for(int " ^ init
-      ^ (index ^ " < " ^ id ^ "_mut.length; ")
-      ^ incr ^ ") {\n"
-  | _ -> "for(int " ^ init ^ cond ^ incr ^ ") {\n"
+  "for(int " ^ init ^ cond ^ incr ^ ") {\n"
 
 let insert_loops loop_id_map =
   AST.LoopIdMap.M.fold
@@ -485,10 +480,8 @@ let insert_multi_test_log loop_id_map =
   let end_signal = "System.err.println(\"-----LogEnd-----\");\n" in
   let log lval =
     let id = snd lval in
-    let common = "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " in
-    match fst lval with
-    | String -> common ^ id ^ "_mut[" ^ id ^ "_index" ^ "]" ^ ");\n"
-    | _ -> common ^ id ^ "[" ^ id ^ "_index" ^ "]" ^ ");\n"
+    "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " ^ id ^ "_comb["
+    ^ id ^ "_index" ^ "]" ^ ");\n"
   in
   AST.LoopIdMap.M.fold
     (fun id _ code -> log (AST.loop_id_lval_code id) ^ code)
@@ -787,9 +780,8 @@ let str_to_primitive v value =
 let get_id_to_be_modified v id =
   (* array_id, index_id *)
   match AST.get_vinfo v |> fst with
-  | Int | Long | Short | Byte | Float | Double | Bool | Char ->
-      (id, id ^ "_index")
-  | String -> (id ^ "_mut", id ^ "_index")
+  | Int | Long | Short | Byte | Float | Double | Bool | Char | String ->
+      (id ^ "_comb", id ^ "_index")
   | _ -> failwith "Fail: get id to be modified"
 
 let loop_value_to_tc rep_input loop_id_map tc =

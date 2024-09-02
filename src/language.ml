@@ -1151,9 +1151,8 @@ module AST = struct
         if !Cmdline.with_loop then
           let v_type, v_id = loop_id_lval_code x in
           match v_type with
-          | Int | Long | Short | Byte | Char | Float | Double | Bool ->
-              v_id ^ "[" ^ v_id ^ "_index]"
-          | String -> v_id ^ "_mut[" ^ v_id ^ "_index]"
+          | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
+              v_id ^ "_comb[" ^ v_id ^ "_index]"
           | _ -> "Exp"
         else "Exp"
     | Exp -> "Exp"
@@ -1203,12 +1202,21 @@ module AST = struct
     let rec rval id exps =
       match exps with hd :: tl -> ", " ^ exp_code hd id ^ rval id tl | _ -> ""
     in
-    let common =
-      lval ^ " = " ^ "{" ^ Regexp.rm_first_rest (rval loop_id exp_list) ^ "};\n"
+    let comb_func_name = function
+      | Int -> "Int"
+      | Long -> "Long"
+      | Short -> "Short"
+      | Byte -> "Byte"
+      | Float -> "Float"
+      | Double -> "Double"
+      | Char -> "Char"
+      | Bool -> "Bool"
+      | String -> "String"
+      | _ -> ""
     in
-    match fst v with
-    | String ->
-        common ^ lval ^ "_mut = UnitconCombinator.combinateString(" ^ snd v
-        ^ ");\n"
-    | _ -> common
+    lval ^ " = " ^ "{"
+    ^ Regexp.rm_first_rest (rval loop_id exp_list)
+    ^ "};\n" ^ lval ^ "_comb = UnitconCombinator.combine"
+    ^ comb_func_name (fst v)
+    ^ "(" ^ snd v ^ ");\n"
 end
