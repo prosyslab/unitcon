@@ -76,6 +76,18 @@ extract_switch_query = J_LANGUAGE.query("""
 ) 
 """)
 
+extract_left_binary_query = J_LANGUAGE.query("""
+(binary_expression
+  left: (_literal) @constant
+)
+""")
+
+extract_right_binary_query = J_LANGUAGE.query("""
+(binary_expression
+  right: (_literal) @constant
+)
+""")
+
 
 # predefined type: int, long, float, double, char, String, Object
 # always dic1 == return
@@ -83,6 +95,66 @@ def combine_dict(dic1, dic2):
     for key, value in dic1.items():
         dic1[key].extend(dic2[key])
     return dic1
+
+
+def is_int(value):
+    return value.isdigit()
+
+
+def is_long(value):
+    if "l" in value:
+        value = value.replace("l", "", 1)
+    elif "L" in value:
+        value = value.replace("L", "", 1)
+    return is_int(value)
+
+
+def is_double(value):
+    is_real = True
+    try:
+        num = float(value)
+    except:
+        is_real = False
+    return is_real
+
+
+def is_float(value):
+    if "f" in value:
+        value = value.replace("f", "", 1)
+    elif "F" in value:
+        value = value.replace("F", "", 1)
+    return is_double(value)
+
+
+def is_char(value):
+    if value.startswith('\'') and value.endswith('\''):
+        return True
+    else:
+        return False
+
+
+def is_string(value):
+    if value.startswith('\"') and value.endswith('\"'):
+        return True
+    else:
+        return False
+
+
+def get_type(value):
+    if is_int(value):
+        return "int"
+    elif is_long(value):
+        return "long"
+    elif is_double(value):
+        return "double"
+    elif is_float(value):
+        return "float"
+    elif is_char(value):
+        return "char"
+    elif is_string(value):
+        return "String"
+    else:
+        return "Non"
 
 
 def get_package_class(package_name, class_name):
@@ -130,7 +202,9 @@ def get_object(node, src, class_name):
                 var_type = ''
                 continue
             if class_name.endswith(var_type):
-                constant['Object'].append({'name': class_name, 'value': text})
+                elem = {'name': class_name, 'value': text}
+                if elem not in constant['Object']:
+                    constant['Object'].append({'name': class_name, 'value': text})
     return constant
 
 
@@ -152,7 +226,32 @@ def get_assign_primitive(node, src, class_name):
             const_type = text
         elif i[1] == 'constant-value':
             if const_type in constant:
-                constant[const_type].append({'name': class_name, 'value': text})
+                elem = {'name': class_name, 'value': text}
+                if elem not in constant[const_type]:
+                    constant[const_type].append({'name': class_name, 'value': text})
+    return constant
+
+
+def get_binary_expression(node, src, type_name):
+    constant = {
+        'int': [],
+        'long': [],
+        'float': [],
+        'double': [],
+        'char': [],
+        'String': [],
+        'Object': []
+    }
+    lst = extract_left_binary_query.captures(node)
+    lst.extend(extract_right_binary_query.captures(node))
+    for i in lst:
+        text = get_text(i, src)
+        if i[1] == 'constant':
+            t = get_type(text)
+            if t != "Non":
+                elem = {'name': type_name, 'value': text}
+                if elem not in constant[t]:
+                    constant[t].append({'name': type_name, 'value': text})
     return constant
 
 
@@ -173,12 +272,18 @@ def get_switch_case(node, src, type_name):
             continue
         elif i[1] == 'switch-case':
             text = re.sub("case *", "", text)
-            if "\'" in text:
-                constant['char'].append({'name': type_name, 'value': text})
+            if is_char(text):
+                elem = {'name': type_name, 'value': text}
+                if elem not in constant['char']:
+                    constant['char'].append({'name': type_name, 'value': text})
                 text = text.replace('\'', '\"')
-                constant['String'].append({'name': type_name, 'value': text})
-            elif "\"" in text:
-                constant['String'].append({'name': type_name, 'value': text})
+                elem = {'name': type_name, 'value': text}
+                if elem not in constant['String']:
+                    constant['String'].append({'name': type_name, 'value': text})
+            elif is_string(text):
+                elem = {'name': type_name, 'value': text}
+                if elem not in constant['String']:
+                    constant['String'].append({'name': type_name, 'value': text})
     return constant
 
 
@@ -198,15 +303,21 @@ def get_string_method(node, src, type_name):
         if "\"" not in text and "\'" not in text:
             continue
         elif i[1] == 'Character':
-            constant['char'].append({'name': type_name, 'value': text})
+            elem = {'name': type_name, 'value': text}
+            if elem not in constant['char']:
+                constant['char'].append({'name': type_name, 'value': text})
             text = text.replace('\'', '\"')
-            constant['String'].append({'name': type_name, 'value': text})
+            elem = {'name': type_name, 'value': text}
+            if elem not in constant['String']:
+                constant['String'].append({'name': type_name, 'value': text})
         elif i[1] == 'String':
-            constant['String'].append({'name': type_name, 'value': text})
+            elem = {'name': type_name, 'value': text}
+            if elem not in constant['String']:
+                constant['String'].append({'name': type_name, 'value': text})
     return constant
 
 
-def get_string_method_from_method(node, src, class_name):
+def get_method_primitive_from_method(node, src, class_name):
     constant = {
         'int': [],
         'long': [],
@@ -225,7 +336,9 @@ def get_string_method_from_method(node, src, class_name):
         elif i[1] == 'method-body':
             from_string_method = get_string_method(i[0], src, class_name + "." + method_name)
             from_switch_case = get_switch_case(i[0], src, class_name + "." + method_name)
-            combine_dict(constant, combine_dict(from_string_method, from_switch_case))
+            from_binary = get_binary_expression(i[0], src, class_name + "." + method_name)
+            constant = combine_dict(combine_dict(constant, from_binary),
+                                    combine_dict(from_string_method, from_switch_case))
     return constant
 
 
@@ -268,10 +381,9 @@ def get_class_name(node, src):
                 continue
             obj_constant = get_object(i[0], src, class_name)
             assign_primitive = get_assign_primitive(i[0], src, class_name)
-            string_primitive = get_string_method_from_method(i[0], src, class_name)
-            combine_dict(
-                constant,
-                combine_dict(combine_dict(assign_primitive, obj_constant), string_primitive))
+            method_primitive = get_method_primitive_from_method(i[0], src, class_name)
+            constant = combine_dict(combine_dict(constant, obj_constant),
+                                    combine_dict(assign_primitive, method_primitive))
     return constant
 
 
