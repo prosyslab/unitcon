@@ -108,8 +108,7 @@ let make_postmem arg_list premem =
     arg_list
   |> snd
 
-let make_summary arg_list =
-  let arg_ids = make_arg_id arg_list in
+let make_summary arg_ids =
   let var = make_var arg_ids in
   let premem = make_premem arg_ids in
   let postmem = make_postmem arg_ids premem in
@@ -149,10 +148,8 @@ let rec get_type t =
       let typ = Regexp.global_rm (Str.regexp "\\*.*$") t in
       Object typ
 
-let get_method_info class_name m_info =
+let get_method_info class_name args arg_ids m_info =
   let this = This (get_type class_name) in
-  let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in
-  let arg_ids = make_arg_id args in
   let formal_params =
     List.map2
       (fun typ id -> Var (get_type (JsonUtil.to_string typ), id))
@@ -193,15 +190,11 @@ let add_missing_methods class_name info summary_map method_map =
           let total_m_name = make_method_name class_name m_name m_info in
           if MethodInfo.M.mem total_m_name method_map then (s_map, m_map)
           else
-            ( SummaryMap.M.add total_m_name
-                ( [
-                    JsonUtil.member "args" m_info
-                    |> JsonUtil.to_list |> make_summary;
-                  ],
-                  [] )
-                s_map,
+            let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in
+            let arg_ids = make_arg_id args in
+            ( SummaryMap.M.add total_m_name ([ make_summary arg_ids ], []) s_map,
               MethodInfo.M.add total_m_name
-                (get_method_info class_name m_info)
+                (get_method_info class_name args arg_ids m_info)
                 m_map ))
         (summary_map, method_map) (JsonUtil.keys methods)
 
