@@ -73,6 +73,12 @@ let string_of_value_type_opt = function
   | Some vt -> string_of_value_type vt
   | None -> "void"
 
+let string_of_args_list args =
+  let rec make_arg_code args =
+    match args with hd :: tl -> "," ^ hd ^ make_arg_code tl | _ -> ""
+  in
+  "(" ^ Regexp.first_rm (Str.regexp "^,") (make_arg_code args) ^ ")"
+
 let handle_methods methods =
   JBasics.MethodMap.fold
     (fun _ m acc ->
@@ -89,12 +95,12 @@ let handle_methods methods =
           let rtype =
             `String (JBasics.ms_rtype c.cm_signature |> string_of_value_type_opt)
           in
-          let args =
-            `List
-              (List.map
-                 (fun vt -> `String (string_of_value_type vt))
-                 (JBasics.ms_args c.cm_signature))
+          let raw_args =
+            List.map
+              (fun vt -> string_of_value_type vt)
+              (JBasics.ms_args c.cm_signature)
           in
+          let args = `List (List.map (fun v -> `String v) raw_args) in
           let item =
             [
               ("access", access);
@@ -103,7 +109,7 @@ let handle_methods methods =
               ("args", args);
             ]
           in
-          (name, `Assoc item) :: acc
+          (name ^ string_of_args_list raw_args, `Assoc item) :: acc
       | Javalib.AbstractMethod a ->
           let name = JBasics.ms_name a.am_signature in
           let access =
@@ -116,12 +122,12 @@ let handle_methods methods =
           let rtype =
             `String (JBasics.ms_rtype a.am_signature |> string_of_value_type_opt)
           in
-          let args =
-            `List
-              (List.map
-                 (fun vt -> `String (string_of_value_type vt))
-                 (JBasics.ms_args a.am_signature))
+          let raw_args =
+            List.map
+              (fun vt -> string_of_value_type vt)
+              (JBasics.ms_args a.am_signature)
           in
+          let args = `List (List.map (fun v -> `String v) raw_args) in
           let item =
             [
               ("access", access);
@@ -130,7 +136,7 @@ let handle_methods methods =
               ("args", args);
             ]
           in
-          (name, `Assoc item) :: acc)
+          (name ^ string_of_args_list raw_args, `Assoc item) :: acc)
     methods []
 
 let handle_interface i =

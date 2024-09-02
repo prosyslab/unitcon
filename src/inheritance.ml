@@ -164,20 +164,6 @@ let get_method_info class_name args arg_ids m_info =
       filename = "";
     }
 
-let make_method_name class_name m_name m_info =
-  let rec make_arg_code args =
-    match args with
-    | hd :: tl -> "," ^ JsonUtil.to_string hd ^ make_arg_code tl
-    | _ -> ""
-  in
-  let arg_code =
-    "("
-    ^ Regexp.first_rm (Str.regexp "^,")
-        (make_arg_code (JsonUtil.to_list (JsonUtil.member "args" m_info)))
-    ^ ")"
-  in
-  class_name ^ "." ^ m_name ^ arg_code
-
 let add_missing_methods class_name info summary_map method_map =
   match JsonUtil.member "methods" info with
   | `Null -> (summary_map, method_map)
@@ -185,7 +171,7 @@ let add_missing_methods class_name info summary_map method_map =
       List.fold_left
         (fun (s_map, m_map) m_name ->
           let m_info = JsonUtil.member m_name methods in
-          let total_m_name = make_method_name class_name m_name m_info in
+          let total_m_name = class_name ^ "." ^ m_name in
           if MethodInfo.M.mem total_m_name method_map then (s_map, m_map)
           else
             let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in
