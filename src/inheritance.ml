@@ -141,12 +141,10 @@ let rec get_type t =
   | "char" -> Char
   | "java.lang.String" -> String
   | "" -> NonType
-  | _ when Str.string_match Regexp.array t 0 ->
+  | _ when Str.string_match (Str.regexp ".*\\[\\]") t 0 ->
       let typ = Regexp.first_rm (Str.regexp "\\[\\]") t |> get_type in
       Array typ
-  | _ ->
-      let typ = Regexp.global_rm (Str.regexp "\\*.*$") t in
-      Object typ
+  | _ -> Object t
 
 let get_method_info class_name args arg_ids m_info =
   let this = This (get_type class_name) in
