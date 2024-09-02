@@ -2532,8 +2532,13 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
     let new_value, new_mem, check_match =
       try satisfy e_method e_summary call_prop m_info
       with _ ->
-        Logger.info "Fail to find a satisfiable error entry method";
-        (Value.M.empty, Condition.M.empty, false)
+        Logger.info
+          "Given wrong summary of error method! So, the \"find_ee\" step \
+           progresses using a temporary summary";
+        let tmp_summary =
+          SummaryMap.M.find e_method summary |> fst |> List.hd
+        in
+        (tmp_summary.value, snd tmp_summary.precond, true)
     in
     let new_uf = mk_new_uf e_method e_summary call_prop m_info in
     if !Cmdline.basic_mode then
