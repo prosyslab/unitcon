@@ -34,6 +34,7 @@ let make_arg_id arg_list =
     (fun (num, lst) p ->
       let name =
         JsonUtil.to_string p |> Str.split Regexp.dot |> List.rev |> List.hd
+        |> Regexp.global_rm (Str.regexp "\\[\\]")
       in
       (num + 1, (name ^ string_of_int num) :: lst))
     (1, []) arg_list
@@ -70,7 +71,7 @@ let make_premem arg_list =
           Condition.M.add
             (Condition.RH_Symbol ("v" ^ string_of_int num))
             (Condition.M.add Condition.RH_Any
-               (Condition.RH_Symbol ("v" ^ string_of_int (num + incr)))
+               (Condition.RH_Symbol ("v" ^ (num + incr |> string_of_int)))
                value_map)
             cond ))
       (2, init) arg_list
@@ -100,7 +101,7 @@ let make_postmem arg_list premem =
         Condition.M.add
           (Condition.RH_Symbol ("v" ^ string_of_int num))
           (Condition.M.add Condition.RH_Any
-             (Condition.RH_Symbol ("v" ^ string_of_int (num - decr)))
+             (Condition.RH_Symbol ("v" ^ (num - decr |> string_of_int)))
              value_map)
           cond ))
     (1 + (2 * (decr + 1)), premem)
@@ -129,20 +130,41 @@ let get_modifier access : modifier =
   else if access = "default" then Default
   else (* unknown --> useless *) Private
 
+let rec get_type t =
+  match t with
+  | "int" -> Int
+  | "long" -> Long
+  | "short" -> Short
+  | "byte" -> Byte
+  | "float" -> Float
+  | "double" -> Double
+  | "bool" -> Bool
+  | "char" -> Char
+  | "java.lang.String" -> String
+  | "" -> NonType
+  | _ when Str.string_match Regexp.array t 0 ->
+      let typ = Regexp.first_rm (Str.regexp "\\[\\]") t |> get_type in
+      Array typ
+  | _ ->
+      let typ = Regexp.global_rm (Str.regexp "\\*.*$") t in
+      Object typ
+
 let get_method_info class_name m_info =
-  let this = This (Parser.get_type class_name) in
+  let this = This (get_type class_name) in
   let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in
   let arg_ids = make_arg_id args in
   let formal_params =
     List.map2
-      (fun typ id -> Var (Parser.get_type (JsonUtil.to_string typ), id))
+      (fun typ id -> Var (get_type (JsonUtil.to_string typ), id))
       args arg_ids
   in
+  let is_static = JsonUtil.to_bool (JsonUtil.member "is_static" m_info) in
   MethodInfo.
     {
       modifier = get_modifier (JsonUtil.member "access" m_info);
-      is_static = JsonUtil.to_bool (JsonUtil.member "is_static" m_info);
-      formal_params = this :: formal_params;
+      is_static;
+      formal_params =
+        (if is_static then formal_params else this :: formal_params);
       return = JsonUtil.member "rtype" m_info |> JsonUtil.to_string;
       filename = "";
     }
@@ -150,12 +172,12 @@ let get_method_info class_name m_info =
 let make_method_name class_name m_name m_info =
   let rec make_arg_code args =
     match args with
-    | hd :: tl -> ", " ^ JsonUtil.to_string hd ^ make_arg_code tl
+    | hd :: tl -> "," ^ JsonUtil.to_string hd ^ make_arg_code tl
     | _ -> ""
   in
   let arg_code =
     "("
-    ^ Regexp.rm_first_rest
+    ^ Regexp.first_rm (Str.regexp "^,")
         (make_arg_code (JsonUtil.to_list (JsonUtil.member "args" m_info)))
     ^ ")"
   in
