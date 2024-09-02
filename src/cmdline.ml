@@ -8,7 +8,7 @@ let pruning_mode = ref false
 
 let priority_mode = ref false
 
-let time_out = ref (20 * 60) (* total running time *)
+let time_out = ref (10 * 60) (* total running time *)
 
 let unknown_bug = ref false
 
