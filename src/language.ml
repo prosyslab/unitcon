@@ -509,7 +509,8 @@ module AST = struct
 
   let is_file f =
     let fname = (get_func f).method_name in
-    if Str.string_match (Str.regexp "java.io.File\\.<init>") fname 0 then true
+    if Str.string_match (Str.regexp "java\\.io\\.File\\.<init>") fname 0 then
+      true
     else false
 
   (* ************************************** *

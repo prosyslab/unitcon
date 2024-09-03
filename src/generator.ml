@@ -791,8 +791,7 @@ let is_abstract_method method_name class_name_list m_info c_info =
   let target_class = Utils.get_class_name method_name in
   let m_name =
     Regexp.first_rm
-      ("^" ^ Str.global_replace (Str.regexp ".") "\\." target_class
-      |> Str.regexp)
+      ("^" ^ Str.global_replace Regexp.dot "\\." target_class |> Str.regexp)
       method_name
   in
   if is_abstract_class target_class c_info |> not then false
@@ -2139,10 +2138,14 @@ let get_inner_func f arg =
   (* outer class variable *)
   let recv = try AST.get_arg arg |> List.hd with _ -> AST.empty_var in
   let n_recv =
+    let escaped_fname =
+      Str.global_replace Regexp.open_bk "\\[" fname
+      |> Str.global_replace Regexp.end_bk "\\]"
+    in
     let var =
       Object
         ((AST.get_func f).method_name
-        |> Regexp.first_rm (Str.regexp ("\\$" ^ fname)))
+        |> Regexp.first_rm (Str.regexp ("\\$" ^ escaped_fname)))
     in
     AST.Variable
       {
@@ -2531,14 +2534,15 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
   let propagation caller_method caller_preconds call_prop =
     let new_value, new_mem, check_match =
       try satisfy e_method e_summary call_prop m_info
-      with _ ->
+      with _ -> (
         Logger.info
           "Given wrong summary of error method! So, the \"find_ee\" step \
            progresses using a temporary summary";
-        let tmp_summary =
-          SummaryMap.M.find e_method summary |> fst |> List.hd
-        in
-        (tmp_summary.value, snd tmp_summary.precond, true)
+        match SummaryMap.M.find_opt e_method summary with
+        | Some (s, _) ->
+            let tmp_summary = List.hd s in
+            (tmp_summary.value, snd tmp_summary.precond, true)
+        | None -> (Value.M.empty, Condition.M.empty, false))
     in
     let new_uf = mk_new_uf e_method e_summary call_prop m_info in
     if !Cmdline.basic_mode then
