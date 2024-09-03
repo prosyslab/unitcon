@@ -293,6 +293,11 @@ let of_json summary_map method_map json =
       (ClassInfo.M.empty, G.empty, (summary_map, method_map))
       (JsonUtil.keys json)
   in
+  let inheritance_info =
+    List.fold_left
+      (fun i_info class_name -> transitive_closure class_name i_info)
+      inheritance_info (JsonUtil.keys json)
+  in
   ((class_type_info, inheritance_info), summary_map, method_map)
 
 let of_stdlib_json ctinfo iinfo smap mmap json =
@@ -305,5 +310,10 @@ let of_stdlib_json ctinfo iinfo smap mmap json =
           add_missing_methods ~is_stdlib:true class_name info s_map m_map ))
       (ctinfo, iinfo, (smap, mmap))
       (JsonUtil.keys json)
+  in
+  let iinfo =
+    List.fold_left
+      (fun i_info class_name -> transitive_closure class_name i_info)
+      iinfo (JsonUtil.keys json)
   in
   ((ctinfo, iinfo), smap, mmap)
