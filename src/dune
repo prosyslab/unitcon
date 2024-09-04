@@ -1,6 +1,6 @@
 (executable
  (name main)
- (libraries ocamlgraph unix yojson str core z3 logger hex sawja)
+ (libraries ocamlgraph unix yojson str core z3 logger sawja)
  (instrumentation
   (backend bisect_ppx))
  (preprocess
