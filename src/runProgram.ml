@@ -946,7 +946,8 @@ let run_testfile () =
       if !first_success_tc = "" then first_success_tc := t_file;
       last_success_tc := t_file;
       incr num_of_success;
-      Logger.info "Success Test: %s" t_file)
+      Logger.info "Success Test: %s" t_file;
+      Unix.kill (Unix.getpid ()) Sys.sigusr1)
     else if not (Sys.file_exists (Filename.concat test_dir (t_file ^ ".java")))
     then ()
     else (
