@@ -115,3 +115,22 @@ let get_array_dim_from_class_name f =
 let is_modeling_set fname =
   is_array_set fname
   || Str.string_match (Str.regexp "java.util.Map.put") fname 0
+
+let filter_list =
+  [
+    "java.io.FileInputStream.<init>(java.lang.String)";
+    "java.io.FileInputStream.<init>(java.io.FileDescriptor)";
+    "java.io.SequenceInputStream.<init>(java.io.InputStream)";
+    "java.io.SequenceInputStream.<init>(java.io.InputStream,java.io.InputStream)";
+    "java.io.PipedInputStream.<init>()";
+    "java.io.PipedInputStream.<init>(int)";
+    "java.io.BufferedReader.<init>(java.io.Reader)";
+    "java.io.BufferedReader.<init>(java.io.Reader,int)";
+    "java.io.LineNumberReader.<init>(java.io.Reader)";
+    "java.io.LineNumberReader.<init>(java.io.Reader,int)";
+    "java.io.FileReader.<init>(java.lang.String)";
+    "java.io.PushbackReader.<init>(java.io.Reader)";
+    "java.io.PushbackReader.<init>(java.io.Reader,int)";
+    "java.io.PipedReader.<init>()";
+    "java.io.PipedReader.<init>(int)"
+  ]

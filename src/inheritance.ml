@@ -175,6 +175,15 @@ let get_method_info class_name method_name args arg_ids m_info =
       filename = "";
     }
 
+let filter_class_name ?(is_stdlib = false) class_name =
+  if not is_stdlib then false
+  else if
+    Str.string_match (Str.regexp "javax") class_name 0
+    || Str.string_match (Str.regexp "sun") class_name 0
+    || Str.string_match (Str.regexp "com") class_name 0
+  then true
+  else false
+
 let add_missing_methods ?(is_stdlib = false) class_name info summary_map
     method_map =
   match JsonUtil.member "methods" info with
@@ -187,7 +196,11 @@ let add_missing_methods ?(is_stdlib = false) class_name info summary_map
         (fun (s_map, m_map) m_name ->
           let m_info = JsonUtil.member m_name methods in
           let total_m_name = class_name ^ "." ^ m_name in
-          if MethodInfo.M.mem total_m_name method_map then (s_map, m_map)
+          if
+            MethodInfo.M.mem total_m_name method_map
+            || List.mem total_m_name Utils.filter_list
+            || filter_class_name ~is_stdlib class_name
+          then (s_map, m_map)
           else
             let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in
             let arg_ids = make_arg_id args in

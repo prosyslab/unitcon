@@ -44,6 +44,14 @@ module StmtMap = struct
   type t = AST.t list M.t
 end
 
+module ObjTypeMap = struct
+  module M = Map.Make (struct
+    type t = string [@@deriving compare]
+  end)
+
+  type t = string M.t
+end
+
 type partial_tc = {
   unroll : int;
   nt_cost : int;
@@ -51,6 +59,7 @@ type partial_tc = {
   prec : int; (* number of precise statement *)
   tc : AST.t;
   loop_ids : AST.LoopIdMap.t;
+  obj_types : ObjTypeMap.t;
 }
 
 let outer = ref 0
@@ -76,7 +85,7 @@ let solver = Z3.Solver.mk_solver z3ctx None
 let get_cost p =
   if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec) else (0, 0, 0)
 
-let mk_cost prev_p curr_tc curr_loop_id prec =
+let mk_cost prev_p curr_tc curr_loop_id curr_obj_type prec =
   {
     unroll = prev_p.unroll + 1;
     nt_cost = AST.count_nt curr_tc;
@@ -84,9 +93,12 @@ let mk_cost prev_p curr_tc curr_loop_id prec =
     prec;
     tc = curr_tc;
     loop_ids = curr_loop_id;
+    obj_types = curr_obj_type;
   }
 
 let empty_id_map = AST.LoopIdMap.M.empty
+
+let empty_obj_type_map = ObjTypeMap.M.empty
 
 let empty_p =
   {
@@ -96,6 +108,7 @@ let empty_p =
     prec = 0;
     tc = AST.Skip;
     loop_ids = empty_id_map;
+    obj_types = empty_obj_type_map;
   }
 
 let mk_some x = Some x
@@ -1430,14 +1443,21 @@ let get_array_size array summary =
   | Some x -> (true, Condition.M.fold (fun _ _ size -> size + 1) x 0)
   | None -> (false, 1)
 
-let get_same_type_param params =
+(* if t1 is child of t2 -> replace t2 to t1. So true *)
+(* let is_super t1 t2 ig =
+   let t1_name = get_class_name t1 in
+   let t2_name = get_class_name t2 in
+   let super_list = try IG.succ ig t2_name with _ -> [] in
+   List.mem t1_name super_list *)
+
+let get_same_type_param params (_, _) =
   let get_type p = match p with Var (t, _) -> t | _ -> NonType in
   let mk_new_set p =
+    let t1 = get_type p in
     List.fold_left
       (fun set op_p ->
-        if get_type p = get_type op_p && get_type p <> NonType then
-          VarSet.add op_p set
-        else set)
+        let t2 = get_type op_p in
+        if t1 = t2 && get_type p <> NonType then VarSet.add op_p set else set)
       (VarSet.add p VarSet.empty)
       params
   in
@@ -1472,9 +1492,9 @@ let get_same_precond_param summary param_sets =
     param_sets VarSets.empty
   |> VarSets.filter (fun x -> VarSet.is_empty x |> not)
 
-let get_same_params_set summary params =
+let get_same_params_set summary params c_info =
   let new_p = List.fold_left (fun p v -> v :: p) [] params |> List.rev in
-  get_same_type_param new_p |> get_same_precond_param summary
+  get_same_type_param new_p c_info |> get_same_precond_param summary
 
 let satisfied_c m_summary id candidate_constructor summary =
   let c_summaries, _ = SummaryMap.M.find candidate_constructor summary in
@@ -1851,9 +1871,9 @@ let mk_params_list summary params_set org_param =
   in
   mk_params org_params_list []
 
-let mk_arg ~is_s param s =
+let mk_arg ~is_s param s c_info =
   let param = if is_s then param else List.tl param in
-  let same_params_set = get_same_params_set s param in
+  let same_params_set = get_same_params_set s param c_info in
   mk_params_list s same_params_set param
   |> List.fold_left
        (fun arg_set lst -> VarListSet.add (List.rev lst) arg_set)
@@ -1881,9 +1901,9 @@ let get_field_set ret s_map =
       else new_fields)
     fields fields
 
-let error_entry_func ee es m_info _ =
+let error_entry_func ee es m_info c_info =
   let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
-  let f_arg_list = mk_arg ~is_s:(is_static_method ee m_info) param es in
+  let f_arg_list = mk_arg ~is_s:(is_static_method ee m_info) param es c_info in
   let c_name = Utils.get_class_name ee in
   let f =
     AST.F { typ = c_name; method_name = ee; import = c_name; summary = es }
@@ -1902,11 +1922,11 @@ let get_setter_list summary s_lst =
     [] s_lst
   |> List.rev |> prune_dup_summary
 
-let mk_void_func (var : AST.var) id class_name m_info s_lst =
+let mk_void_func (var : AST.var) id class_name m_info c_info s_lst =
   let get_arg_list s =
     mk_arg
       ~is_s:(is_static_method s m_info)
-      (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary
+      (MethodInfo.M.find s m_info).MethodInfo.formal_params var.summary c_info
   in
   let get_f s =
     let typ =
@@ -1944,7 +1964,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary) summary m_info c_info
       (try SetterMap.M.find class_name s_map with _ -> [])
       |> List.filter (fun (s, _) -> is_available_method s m_info)
       |> get_setter_list summary
-      |> mk_void_func var id class_name m_info
+      |> mk_void_func var id class_name m_info c_info
 
 let check_satisfied_c id const_name t_summary init sat_lst =
   (List.fold_left (fun pick (check, smy) ->
@@ -1985,7 +2005,7 @@ let satisfied_c_list id t_summary summary method_list =
       [] method_list
     |> List.rev
 
-let get_cfunc id constructor m_info =
+let get_cfunc id constructor m_info c_info =
   let cost, c, s = constructor in
   let t = Utils.get_class_name c in
   let t =
@@ -1996,7 +2016,7 @@ let get_cfunc id constructor m_info =
   let arg_list =
     mk_arg
       ~is_s:(is_static_method c m_info)
-      (MethodInfo.M.find c m_info).MethodInfo.formal_params s
+      (MethodInfo.M.find c m_info).MethodInfo.formal_params s c_info
   in
   if VarListSet.is_empty arg_list then [ (cost, (func, AST.Arg [])) ]
   else
@@ -2004,10 +2024,10 @@ let get_cfunc id constructor m_info =
       (fun arg cfuncs -> (cost, (func, AST.Arg arg)) :: cfuncs)
       arg_list []
 
-let get_cfuncs id list m_info =
+let get_cfuncs id list m_info c_info =
   List.fold_left
     (fun lst (cost, c, s) ->
-      List.rev_append (get_cfunc id (cost, c, s) m_info) lst)
+      List.rev_append (get_cfunc id (cost, c, s) m_info c_info) lst)
     [] list
 
 let get_c ret c_lst summary m_info c_info =
@@ -2022,7 +2042,7 @@ let get_c ret c_lst summary m_info c_info =
       |> summary_filtering class_name m_info
       |> prune_dup_summary
     in
-    get_cfuncs ret s_list m_info
+    get_cfuncs ret s_list m_info c_info
 
 let is_ret_recv_mem_effect fld_name subtypes summary m_info ret_recv_methods =
   let check_ret_recv fld_name subtypes m_name effect_fld_lst =
@@ -2120,7 +2140,7 @@ let get_ret_c ret ret_obj_lst summary m_info type_info c_info s_map =
       |> prune_dup_summary
       |> memory_effect_filtering summary m_info type_info c_info s_map
     in
-    get_cfuncs ret s_list m_info
+    get_cfuncs ret s_list m_info c_info
 
 let get_inner_func f arg =
   let fname =
@@ -2202,9 +2222,60 @@ let loop_id_merge old_ids new_ids =
       | None, Some _ -> v2)
     old_ids new_ids
 
+let obj_type_merge old_types new_types =
+  ObjTypeMap.M.merge
+    (fun _ v1 v2 ->
+      match (v1, v2) with
+      | None, None -> None
+      | Some _, _ -> v1
+      | None, Some _ -> v2)
+    old_types new_types
+
 (* low priority --> ... --> high priority *)
 let sort_const consts =
   List.stable_sort (fun (c1, _) (c2, _) -> compare c1 c2) consts
+
+let is_file_obj x =
+  match AST.get_vinfo x |> fst with
+  | Object t when t = "java.io.File" -> true
+  | _ -> false
+
+let is_instream_obj x =
+  match AST.get_vinfo x |> fst with
+  | Object t when t = "java.io.InputStream" -> true
+  | _ -> false
+
+let is_outstream_obj x =
+  match AST.get_vinfo x |> fst with
+  | Object t when t = "java.io.OutputStream" -> true
+  | _ -> false
+
+let not_null_obj x =
+  if is_file_obj x || is_instream_obj x || is_outstream_obj x then true
+  else false
+
+let is_comparable x =
+  match AST.get_vinfo x |> fst with
+  | Object t when t = "java.lang.Comparable" -> true
+  | _ -> false
+
+let is_object x =
+  match AST.get_vinfo x |> fst with
+  | Object t when t = "java.lang.Object" -> true
+  | _ -> false
+
+let is_number x =
+  match AST.get_vinfo x |> fst with
+  | Object t when t = "java.lang.Number" -> true
+  | _ -> false
+
+let special_class_list =
+  [
+    "java.lang.Comparable";
+    "java.lang.Object";
+    "java.lang.Number";
+    "java.lang.Class";
+  ]
 
 let const_unroll p summary m_info i_info p_info =
   let get_r3 x =
@@ -2212,16 +2283,54 @@ let const_unroll p summary m_info i_info p_info =
       (fun lst x1 ->
         match snd x1 with
         | AST.Primitive _ -> lst
-        | _ -> (fst x1, AST.const_rule3 p, empty_id_map) :: lst)
+        | _ ->
+            (fst x1, AST.const_rule3 p, empty_id_map, empty_obj_type_map) :: lst)
       [] (get_value x p_info)
   in
   let get_r2 x =
-    List.fold_left
-      (fun lst x1 -> (fst x1, AST.const_rule2 p (snd x1), empty_id_map) :: lst)
-      []
-      (global_var_list
-         (get_class_name (AST.get_vinfo x |> fst))
-         (AST.get_v x).summary summary m_info i_info)
+    if is_comparable x then
+      [
+        ( 0,
+          AST.const_rule2 p (AST.GlobalConstant "java.math.BigDecimal.ONE"),
+          empty_id_map,
+          ObjTypeMap.M.add "java.lang.Comparable" "java.math.BigDecimal"
+            empty_obj_type_map );
+      ]
+    else if is_object x then
+      let f =
+        AST.F
+          {
+            typ = "java.lang.Object";
+            method_name = "java.lang.Object.<init>()";
+            import = "java.lang.Object";
+            summary = Modeling.obj_summary;
+          }
+      in
+      let param = AST.Param [] in
+      [
+        ( 0,
+          AST.const_rule2_2 p f param,
+          empty_id_map,
+          ObjTypeMap.M.add "java.lang.Object" "java.lang.Object"
+            empty_obj_type_map );
+      ]
+    else if is_number x then
+      [
+        ( 0,
+          AST.const_rule2 p (AST.GlobalConstant "java.math.BigDecimal.ONE"),
+          empty_id_map,
+          ObjTypeMap.M.add "java.lang.Number" "java.math.BigDecimal"
+            empty_obj_type_map );
+      ]
+    else
+      List.fold_left
+        (fun lst x1 ->
+          (fst x1, AST.const_rule2 p (snd x1), empty_id_map, empty_obj_type_map)
+          :: lst)
+        []
+        (global_var_list
+           (get_class_name (AST.get_vinfo x |> fst))
+           (AST.get_v x).summary summary m_info i_info)
   in
   match p with
   | AST.Const (x, _) ->
@@ -2238,24 +2347,34 @@ let const_unroll p summary m_info i_info p_info =
           [
             ( prec,
               AST.const_rule_loop p,
-              AST.LoopIdMap.M.add x exps empty_id_map );
+              AST.LoopIdMap.M.add x exps empty_id_map,
+              empty_obj_type_map );
           ]
         else
           List.fold_left
             (fun lst x1 ->
-              (fst x1, AST.const_rule1 p (snd x1), empty_id_map) :: lst)
+              ( fst x1,
+                AST.const_rule1 p (snd x1),
+                empty_id_map,
+                empty_obj_type_map )
+              :: lst)
             [] (get_value x p_info)
       else
         let r2 = get_r2 x in
-        if is_receiver (AST.get_vinfo x |> snd) then r2
+        if is_receiver (AST.get_vinfo x |> snd) || not_null_obj x then r2
         else List.rev_append (get_r3 x) r2
   | _ -> failwith "Fail: const_unroll"
 
-let fcall_in_assign_unroll p summary m_info type_info c_info s_map =
+let fcall_in_assign_unroll p obj_types summary m_info type_info c_info s_map =
   match p with
   | AST.Assign (x0, _, _, _) ->
       let field_set = get_field_set x0 s_map in
-      let c_lst, ret_c_lst = get_m_lst x0 m_info c_info in
+      let class_name = AST.get_vinfo x0 |> fst |> get_class_name in
+      let c_lst, ret_c_lst =
+        (* if class is special class, we don't use the methods returning that class type *)
+        if List.mem class_name special_class_list then ([], [])
+        else get_m_lst x0 m_info c_info
+      in
       if c_lst = [] && ret_c_lst = [] then raise Not_found_get_object
       else
         List.rev_append
@@ -2263,12 +2382,27 @@ let fcall_in_assign_unroll p summary m_info type_info c_info s_map =
           (get_ret_c x0 ret_c_lst summary m_info type_info c_info s_map)
         |> List.fold_left
              (fun lst (prec, (f, arg)) ->
-               (prec, AST.fcall_in_assign_rule p field_set f arg, empty_id_map)
-               :: lst)
+               let child_name =
+                 Utils.get_class_name (AST.get_func f).method_name
+               in
+               match ObjTypeMap.M.find_opt class_name obj_types with
+               | Some child when child = child_name ->
+                   ( prec,
+                     AST.fcall_in_assign_rule p field_set f arg,
+                     empty_id_map,
+                     empty_obj_type_map )
+                   :: lst
+               | Some _ -> lst
+               | None ->
+                   ( prec,
+                     AST.fcall_in_assign_rule p field_set f arg,
+                     empty_id_map,
+                     ObjTypeMap.M.add class_name child_name obj_types )
+                   :: lst)
              []
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
-let recv_in_assign_unroll (prec, p, loop_ids) m_info c_info =
+let recv_in_assign_unroll (prec, p, loop_ids, obj_types) m_info c_info =
   match p with
   | AST.Assign (_, _, f, arg) when AST.recv_in_assign p ->
       if
@@ -2285,17 +2419,19 @@ let recv_in_assign_unroll (prec, p, loop_ids) m_info c_info =
           let r2 = AST.recv_in_assign_rule2_1 p recv f arg in
           let r3 = AST.recv_in_assign_rule3_1 p recv f arg in
           incr outer;
-          (prec, r2, loop_ids) :: [ (prec, r3, loop_ids) ])
+          (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ])
       else if cname_condition (AST.get_func f).method_name m_info c_info then
-        [ (prec, get_cname f |> AST.recv_in_assign_rule1 p, loop_ids) ]
+        [
+          (prec, get_cname f |> AST.recv_in_assign_rule1 p, loop_ids, obj_types);
+        ]
       else
         let r2 = AST.recv_in_assign_rule2 p "con_recv" !recv in
         let r3 = AST.recv_in_assign_rule3 p "con_recv" !recv in
         incr recv;
-        (prec, r2, loop_ids) :: [ (prec, r3, loop_ids) ]
+        (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ]
   | _ -> failwith "Fail: recv_in_assign_unroll"
 
-let rec arg_in_assign_unroll (prec, p, loop_ids) =
+let rec arg_in_assign_unroll (prec, p, loop_ids, obj_types) =
   match p with
   | AST.Assign (_, _, f, arg) when AST.arg_in_assign p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
@@ -2304,21 +2440,26 @@ let rec arg_in_assign_unroll (prec, p, loop_ids) =
            (fun lst x ->
              ( prec,
                AST.arg_in_assign_rule p x (AST.Param (AST.get_arg arg)),
-               loop_ids )
+               loop_ids,
+               obj_types )
              :: lst)
            []
   | Seq (s1, s2) when AST.arg_in_assign s2 ->
-      arg_in_assign_unroll (prec, s2, loop_ids)
+      arg_in_assign_unroll (prec, s2, loop_ids, obj_types)
       |> List.fold_left
-           (fun lst (p', s', loop') ->
-             (p', AST.Seq (s1, s'), loop_id_merge loop_ids loop') :: lst)
+           (fun lst (p', s', loop', type') ->
+             ( p',
+               AST.Seq (s1, s'),
+               loop_id_merge loop_ids loop',
+               obj_type_merge obj_types type' )
+             :: lst)
            []
   | _ -> failwith "Fail: arg_in_assign_unroll"
 
 let void_unroll p =
-  (0, AST.void_rule1 p, empty_id_map)
+  (0, AST.void_rule1 p, empty_id_map, empty_obj_type_map)
   :: List.fold_left
-       (fun lst x -> (0, x, empty_id_map) :: lst)
+       (fun lst x -> (0, x, empty_id_map, empty_obj_type_map) :: lst)
        [] (AST.void_rule2 p)
 
 let fcall_in_void_unroll p summary m_info c_info s_map =
@@ -2329,24 +2470,27 @@ let fcall_in_void_unroll p summary m_info c_info s_map =
       else
         List.fold_left
           (fun lst (prec, f, arg) ->
-            (prec, AST.fcall_in_void_rule p f (AST.Arg arg), empty_id_map)
+            ( prec,
+              AST.fcall_in_void_rule p f (AST.Arg arg),
+              empty_id_map,
+              empty_obj_type_map )
             :: lst)
           [] lst
   | _ -> failwith "Fail: fcall_in_void_unroll"
 
-let recv_in_void_unroll (prec, p, loop_ids) m_info c_info =
+let recv_in_void_unroll (prec, p, loop_ids, obj_types) m_info c_info =
   match p with
   | AST.Void (_, f, _) when AST.recv_in_void p ->
       if cname_condition (AST.get_func f).method_name m_info c_info then
-        [ (prec, get_cname f |> AST.recv_in_void_rule1 p, loop_ids) ]
+        [ (prec, get_cname f |> AST.recv_in_void_rule1 p, loop_ids, obj_types) ]
       else
         let r2 = AST.recv_in_void_rule2 p "con_recv" !recv in
         let r3 = AST.recv_in_void_rule3 p "con_recv" !recv in
         incr recv;
-        (prec, r2, loop_ids) :: [ (prec, r3, loop_ids) ]
+        (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ]
   | _ -> failwith "Fail: recv_in_void_unroll"
 
-let rec arg_in_void_unroll (prec, p, loop_ids) =
+let rec arg_in_void_unroll (prec, p, loop_ids, obj_types) =
   match p with
   | AST.Void (_, f, arg) when AST.arg_in_void p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
@@ -2355,13 +2499,15 @@ let rec arg_in_void_unroll (prec, p, loop_ids) =
            (fun lst x ->
              ( prec,
                AST.arg_in_void_rule p x (AST.Param (AST.get_arg arg)),
-               loop_ids )
+               loop_ids,
+               obj_types )
              :: lst)
            []
   | Seq (s1, s2) when AST.arg_in_void s2 ->
-      arg_in_void_unroll (prec, s2, loop_ids)
+      arg_in_void_unroll (prec, s2, loop_ids, obj_types)
       |> List.fold_left
-           (fun lst (p', s', loop') -> (p', AST.Seq (s1, s'), loop') :: lst)
+           (fun lst (p', s', loop', type') ->
+             (p', AST.Seq (s1, s'), loop', type') :: lst)
            []
   | _ -> failwith "Fail: arg_in_void_unroll"
 
@@ -2374,15 +2520,18 @@ let append l1 l2 =
   in
   iter [] l1 l2
 
-let one_unroll p summary m_info type_info c_info s_map i_info p_info =
+let one_unroll p obj_types summary m_info type_info c_info s_map i_info p_info =
   match p with
   | AST.Seq _ when AST.void p -> void_unroll p
   | Const _ when AST.const p -> const_unroll p summary m_info i_info p_info
   | Assign _ when AST.fcall_in_assign p -> (
       (* fcall_in_assign --> recv_in_assign --> arg_in_assign *)
-      match fcall_in_assign_unroll p summary m_info type_info c_info s_map with
+      match
+        fcall_in_assign_unroll p obj_types summary m_info type_info c_info s_map
+      with
       | exception Not_found_get_object ->
-          if !Cmdline.mock then [ (0, AST.mk_mock_statement p, empty_id_map) ]
+          if !Cmdline.mock then
+            [ (0, AST.mk_mock_statement p, empty_id_map, empty_obj_type_map) ]
           else raise Not_found_get_object
       | p_lst ->
           let lst =
@@ -2398,11 +2547,13 @@ let one_unroll p summary m_info type_info c_info s_map i_info p_info =
           if
             !Cmdline.mock
             && List.filter
-                 (fun (_, x, _) ->
+                 (fun (_, x, _, _) ->
                    AST.count_params x < 2 (* at least receiver *))
                  p_lst
                = []
-          then (0, AST.mk_mock_statement p, empty_id_map) :: lst
+          then
+            (0, AST.mk_mock_statement p, empty_id_map, empty_obj_type_map)
+            :: lst
           else lst)
   | Void _ when AST.fcall1_in_void p ->
       (* fcall1_in_void --> recv_in_void --> arg_in_void *)
@@ -2422,48 +2573,50 @@ let one_unroll p summary m_info type_info c_info s_map i_info p_info =
            []
   | Void _ when AST.recv_in_void p ->
       (* unroll error entry *)
-      recv_in_void_unroll (0, p, empty_id_map) m_info c_info
+      recv_in_void_unroll (0, p, empty_id_map, empty_obj_type_map) m_info c_info
       |> List.fold_left
            (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
            []
   | _ -> failwith "Fail: one_unroll"
 
-let rec all_unroll ?(assign_ground = false) p summary m_info type_info c_info
-    s_map i_info p_info stmt_map =
+let rec all_unroll ?(assign_ground = false) p obj_types summary m_info type_info
+    c_info s_map i_info p_info stmt_map =
   match p with
   | _ when AST.ground p -> stmt_map
   | _ when assign_ground ->
-      all_unroll_void p summary m_info type_info c_info s_map i_info p_info
-        stmt_map
+      all_unroll_void p obj_types summary m_info type_info c_info s_map i_info
+        p_info stmt_map
   | AST.Seq (s1, s2) when s2 = AST.Stmt ->
-      all_unroll ~assign_ground s1 summary m_info type_info c_info s_map i_info
-        p_info stmt_map
+      all_unroll ~assign_ground s1 obj_types summary m_info type_info c_info
+        s_map i_info p_info stmt_map
   | AST.Seq (s1, s2) ->
-      all_unroll ~assign_ground s1 summary m_info type_info c_info s_map i_info
-        p_info stmt_map
-      |> all_unroll ~assign_ground s2 summary m_info type_info c_info s_map
-           i_info p_info
+      all_unroll ~assign_ground s1 obj_types summary m_info type_info c_info
+        s_map i_info p_info stmt_map
+      |> all_unroll ~assign_ground s2 obj_types summary m_info type_info c_info
+           s_map i_info p_info
   | _ ->
       StmtMap.M.add p
-        (one_unroll p summary m_info type_info c_info s_map i_info p_info)
+        (one_unroll p obj_types summary m_info type_info c_info s_map i_info
+           p_info)
         stmt_map
 
-and all_unroll_void p summary m_info type_info c_info s_map i_info p_info
-    stmt_map =
+and all_unroll_void p obj_types summary m_info type_info c_info s_map i_info
+    p_info stmt_map =
   match p with
   | _ when AST.ground p -> stmt_map
   | AST.Seq _ when AST.void p ->
       StmtMap.M.add p
-        (one_unroll p summary m_info type_info c_info s_map i_info p_info)
+        (one_unroll p obj_types summary m_info type_info c_info s_map i_info
+           p_info)
         stmt_map
   | Seq (s1, s2) -> (
-      let new_void s1 (p', s', loop') =
-        (p', AST.Seq (AST.modify_last_assign s1, s'), loop')
+      let new_void s1 (p', s', loop', type') =
+        (p', AST.Seq (AST.modify_last_assign s1, s'), loop', type')
       in
       let new_void_list s1 s2 =
         one_unroll
           (AST.Seq (AST.last_code s1, s2))
-          summary m_info type_info c_info s_map i_info p_info
+          obj_types summary m_info type_info c_info s_map i_info p_info
         |> List.fold_left (fun lst void -> new_void s1 void :: lst) []
         |> List.rev
       in
@@ -2471,10 +2624,10 @@ and all_unroll_void p summary m_info type_info c_info s_map i_info p_info
       | AST.Assign _ when AST.is_stmt s2 ->
           StmtMap.M.add p (new_void_list s1 s2) stmt_map
       | _ ->
-          all_unroll_void s1 summary m_info type_info c_info s_map i_info p_info
-            stmt_map
-          |> all_unroll_void s2 summary m_info type_info c_info s_map i_info
-               p_info)
+          all_unroll_void s1 obj_types summary m_info type_info c_info s_map
+            i_info p_info stmt_map
+          |> all_unroll_void s2 obj_types summary m_info type_info c_info s_map
+               i_info p_info)
   | _ -> failwith "Fail: all_unroll_void"
 
 let rec change_stmt p s new_s =
@@ -2501,11 +2654,14 @@ let sort_stmts map stmts =
       | None, None -> 0)
     stmts
 
-let combinate (prec, p, loop_ids) stmt_map =
-  let combinate_stmt (p', s', loop_ids') s new_s_list =
+let combinate (prec, p, loop_ids, obj_types) stmt_map =
+  let combinate_stmt (p', s', loop_ids', obj_types') s new_s_list =
     List.fold_left
-      (fun lst (new_p, new_s, new_loop) ->
-        (p' + new_p, change_stmt s' s new_s, loop_id_merge loop_ids' new_loop)
+      (fun lst (new_p, new_s, new_loop, new_type) ->
+        ( p' + new_p,
+          change_stmt s' s new_s,
+          loop_id_merge loop_ids' new_loop,
+          obj_type_merge obj_types' new_type )
         :: lst)
       [] new_s_list
   in
@@ -2524,7 +2680,7 @@ let combinate (prec, p, loop_ids) stmt_map =
             []
         | Some new_s_list -> combinate_stmts s new_s_list lst
         | _ -> lst)
-      [ (prec, p, loop_ids) ]
+      [ (prec, p, loop_ids, obj_types) ]
       stmts
   in
   return_stmts p |> sort_stmts stmt_map |> all_combinate |> List.rev
@@ -2644,16 +2800,16 @@ let rec mk_testcase summary m_info type_info c_info s_map i_info p_info queue =
         [ (Complete, pretty_format p.tc, p.loop_ids, tl) ]
       else
         (match
-           all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc summary
-             m_info type_info c_info s_map i_info p_info StmtMap.M.empty
+           all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc p.obj_types
+             summary m_info type_info c_info s_map i_info p_info StmtMap.M.empty
          with
         | exception Not_found_setter -> tl
         | exception Not_found_get_object -> tl
         | x ->
-            combinate (p.prec, p.tc, p.loop_ids) x
+            combinate (p.prec, p.tc, p.loop_ids, p.obj_types) x
             |> List.fold_left
-                 (fun lst (new_p, new_s, new_loop) ->
-                   mk_cost p new_s new_loop new_p :: lst)
+                 (fun lst (new_p, new_s, new_loop, new_type) ->
+                   mk_cost p new_s new_loop new_type new_p :: lst)
                  []
             |> List.rev_append (List.rev tl))
         |> mk_testcase summary m_info type_info c_info s_map i_info p_info
@@ -2685,7 +2841,8 @@ let mk_testcases ~is_start queue (e_method, error_summary)
               (get_void_func AST.Id ~ee ~es:ee_s summary m_info c_info s_map)
             |> List.fold_left
                  (fun lst new_tc ->
-                   mk_cost empty_p new_tc empty_id_map 0 :: lst)
+                   mk_cost empty_p new_tc empty_id_map empty_obj_type_map 0
+                   :: lst)
                  []
             |> List.rev_append init_list ))
         (find_ee e_method error_summary cg summary call_prop_map m_info c_info)

@@ -162,6 +162,7 @@ let mapping_method_info method_info mmap =
          (Str.regexp ".*\\[specialized with aliases\\]")
          method_name 0
     || is_unnes_method formal_params
+    || List.mem method_name Utils.filter_list
   then mmap
   else MethodInfo.M.add method_name info mmap
 

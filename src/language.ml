@@ -582,6 +582,16 @@ module AST = struct
 
   let const_rule2 s g = match s with Const (x, _) -> Const (x, g) | _ -> s
 
+  let const_rule2_2 s f arg =
+    match s with
+    | Const (x, _) ->
+        Assign
+          ( x,
+            ClassName ((get_func f).method_name |> Utils.get_class_name),
+            f,
+            arg )
+    | _ -> s
+
   let const_rule3 s = match s with Const (x, _) -> Const (x, Null) | _ -> s
 
   let const_rule_loop s =
