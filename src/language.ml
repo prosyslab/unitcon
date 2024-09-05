@@ -503,6 +503,12 @@ module AST = struct
 
   and count_param = function Arg a -> List.length a | Param p -> List.length p
 
+  let rec count_const = function
+    | Assign (_, x1, _, _) -> count_cname x1
+    | _ -> 0
+
+  and count_cname = function ClassName _ -> 1 | _ -> 0
+
   let is_array_init f = Utils.is_array_init (get_func f).method_name
 
   let is_array_set f = Utils.is_array_set (get_func f).method_name
