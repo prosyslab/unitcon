@@ -1905,11 +1905,22 @@ let error_entry_func ee es m_info c_info =
   let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
   let f_arg_list = mk_arg ~is_s:(is_static_method ee m_info) param es c_info in
   let c_name = Utils.get_class_name ee in
-  let f =
-    AST.F { typ = c_name; method_name = ee; import = c_name; summary = es }
+   let typ_list =
+    if
+      (is_public_class c_name (fst c_info) |> not
+      || is_usable_default_class c_name (fst c_info) |> not)
+    then
+      try IG.succ (snd c_info) c_name |> List.cons c_name
+      with Invalid_argument _ -> [ c_name ]
+    else [ c_name ]
   in
-  if VarListSet.is_empty f_arg_list then [ (0, f, []) ]
-  else VarListSet.fold (fun f_arg acc -> (0, f, f_arg) :: acc) f_arg_list []
+  List.fold_left
+    (fun lst typ ->
+      let f = AST.F { typ; method_name = ee; import = typ; summary = es } in
+      if VarListSet.is_empty f_arg_list then (0, f, []) :: lst
+      else
+        VarListSet.fold (fun f_arg acc -> (0, f, f_arg) :: acc) f_arg_list lst)
+    [] typ_list
 
 let get_setter_list summary s_lst =
   List.fold_left
