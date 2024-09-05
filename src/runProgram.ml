@@ -338,7 +338,7 @@ let get_rep_input error_trace expected_bug =
   let trace_and_input =
     match (s_idx, e_idx) with
     | None, _ | _, None -> ""
-    | Some s, Some e -> String.sub error_trace s (e - s)
+    | Some s, Some e -> String.sub error_trace (s - 1) (e - s + 3)
   in
   let rec get_input lst =
     match lst with
@@ -828,6 +828,7 @@ let build_program info =
     let ic_out, ic_err = simple_compiler info.program_dir compile_cmd in
     let data_out = my_really_read_string ic_out in
     let data_err = my_really_read_string ic_err in
+    Logger.info "build_program err: %s" data_err;
     close_in ic_out;
     close_in ic_err;
     if checking_init_err data_out then (
@@ -846,6 +847,8 @@ let build_multi_test info =
   let ic_out, ic_err =
     simple_compiler info.program_dir multi_test_compile_cmd
   in
+  let data = my_really_read_string ic_err in
+  Logger.info "build_multi_test err: %s" data;
   close_in ic_out;
   close_in ic_err
 
@@ -939,6 +942,7 @@ let run_testfile () =
       simple_compiler program_dir (modify_execute_command execute_cmd t_file)
     in
     let data = my_really_read_string ic_err in
+    Logger.info "run_testfile err: %s" data;
     close_in ic_out;
     close_in ic_err;
     num_of_last_exec_tc := num_of_t_file;
@@ -982,6 +986,7 @@ let run_multi_testfile () =
       (modify_execute_command multi_test_execute_cmd mt_file)
   in
   let data = my_really_read_string ic_err in
+  Logger.info "run_multi_testfile err: %s" data;
   close_in ic_out;
   close_in ic_err;
   let found_rep_inputs =
