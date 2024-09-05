@@ -504,8 +504,12 @@ module AST = struct
   and count_param = function Arg a -> List.length a | Param p -> List.length p
 
   let rec count_const = function
+    | Const _ -> 0
     | Assign (_, x1, _, _) -> count_cname x1
-    | _ -> 0
+    | Void _ -> 0
+    | Seq (s1, s2) -> count_const s1 + count_const s2
+    | Skip -> 0
+    | Stmt -> 0
 
   and count_cname = function ClassName _ -> 1 | _ -> 0
 
