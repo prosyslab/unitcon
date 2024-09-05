@@ -124,6 +124,10 @@ let filter_list =
     "java.io.SequenceInputStream.<init>(java.io.InputStream,java.io.InputStream)";
     "java.io.PipedInputStream.<init>()";
     "java.io.PipedInputStream.<init>(int)";
+    "java.io.FileOutputStream.<init>(java.lang.String)";
+    "java.io.FileOutputStream.<init>(java.lang.String,boolean)";
+    "java.io.FileOutputStream.<init>(java.io.FileDescriptor)";
+    "java.io.PipedOutputStream.<init>()";
     "java.io.BufferedReader.<init>(java.io.Reader)";
     "java.io.BufferedReader.<init>(java.io.Reader,int)";
     "java.io.LineNumberReader.<init>(java.io.Reader)";
@@ -132,5 +136,5 @@ let filter_list =
     "java.io.PushbackReader.<init>(java.io.Reader)";
     "java.io.PushbackReader.<init>(java.io.Reader,int)";
     "java.io.PipedReader.<init>()";
-    "java.io.PipedReader.<init>(int)"
+    "java.io.PipedReader.<init>(int)";
   ]
