@@ -338,7 +338,7 @@ let get_rep_input error_trace expected_bug =
   let trace_and_input =
     match (s_idx, e_idx) with
     | None, _ | _, None -> ""
-    | Some s, Some e -> String.sub error_trace (s - 1) (e - s + 3)
+    | Some s, Some e -> String.sub error_trace s (e - s + 3)
   in
   let rec get_input lst =
     match lst with
