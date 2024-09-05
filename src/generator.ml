@@ -955,7 +955,7 @@ let get_m_lst x0 m_info (c_info, ig) =
   MethodInfo.M.fold
     (fun m_name _ method_list ->
       List.fold_left
-        (fun (c_lst, ret_c_lst) class_name_to_find ->
+        (fun (org_c_lst, c_lst, ret_c_lst) class_name_to_find ->
           if
             (is_public_class (Utils.get_class_name m_name) c_info
             || is_usable_default_class (Utils.get_class_name m_name) c_info)
@@ -964,17 +964,20 @@ let get_m_lst x0 m_info (c_info, ig) =
             if
               is_abstract_class class_name_to_find (c_info, ig) |> not
               && match_constructor_name class_name_to_find m_name
-            then (m_name :: c_lst, ret_c_lst)
+            then
+              if class_name = class_name_to_find then
+                (m_name :: org_c_lst, m_name :: c_lst, ret_c_lst)
+              else (org_c_lst, m_name :: c_lst, ret_c_lst)
             else if
               match_return_object class_name_to_find m_name m_info
               && is_abstract_method m_name class_to_find m_info (c_info, ig)
                  |> not
               && Utils.is_init_method m_name |> not
-            then (c_lst, m_name :: ret_c_lst)
-            else (c_lst, ret_c_lst)
-          else (c_lst, ret_c_lst))
+            then (org_c_lst, c_lst, m_name :: ret_c_lst)
+            else (org_c_lst, c_lst, ret_c_lst)
+          else (org_c_lst, c_lst, ret_c_lst))
         method_list class_to_find)
-    m_info ([], [])
+    m_info ([], [], [])
 
 let contains_symbol symbol memory =
   let inner_contains_symbol mem =
@@ -1905,10 +1908,10 @@ let error_entry_func ee es m_info c_info =
   let param = (MethodInfo.M.find ee m_info).MethodInfo.formal_params in
   let f_arg_list = mk_arg ~is_s:(is_static_method ee m_info) param es c_info in
   let c_name = Utils.get_class_name ee in
-   let typ_list =
+  let typ_list =
     if
-      (is_public_class c_name (fst c_info) |> not
-      || is_usable_default_class c_name (fst c_info) |> not)
+      is_public_class c_name (fst c_info) |> not
+      || is_usable_default_class c_name (fst c_info) |> not
     then
       try IG.succ (snd c_info) c_name |> List.cons c_name
       with Invalid_argument _ -> [ c_name ]
@@ -2324,6 +2327,10 @@ let const_unroll p summary m_info i_info p_info =
           empty_id_map,
           ObjTypeMap.M.add "java.lang.Object" "java.lang.Object"
             empty_obj_type_map );
+        ( 0,
+          AST.const_rule1 p (AST.Primitive (S "string")),
+          empty_id_map,
+          empty_obj_type_map );
       ]
     else if is_number x then
       [
@@ -2381,11 +2388,12 @@ let fcall_in_assign_unroll p obj_types summary m_info type_info c_info s_map =
   | AST.Assign (x0, _, _, _) ->
       let field_set = get_field_set x0 s_map in
       let class_name = AST.get_vinfo x0 |> fst |> get_class_name in
-      let c_lst, ret_c_lst =
+      let org_c_lst, c_lst, ret_c_lst =
         (* if class is special class, we don't use the methods returning that class type *)
-        if List.mem class_name special_class_list then ([], [])
+        if List.mem class_name special_class_list then ([], [], [])
         else get_m_lst x0 m_info c_info
       in
+      let c_lst = if org_c_lst = [] then c_lst else org_c_lst in
       if c_lst = [] && ret_c_lst = [] then raise Not_found_get_object
       else
         List.rev_append
