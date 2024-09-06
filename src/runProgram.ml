@@ -100,6 +100,11 @@ let parse_callgraph filename =
   let data = input filename in
   Callgraph.of_json data
 
+let parse_extra_callgraph filename cg =
+  if not (Sys.file_exists filename) then failwith (filename ^ " not found");
+  let json = Json.from_file filename in
+  Callgraph.of_extra_json cg json
+
 let get_setter summary m_info = Setter.from_summary_map summary m_info
 
 let get_bug_type filename =
@@ -129,7 +134,7 @@ let parse_callprop filename =
   in
   CallProposition.from_callprop_json json
 
-let parse_class_info summary_map method_map filename =
+let parse_class_info filename summary_map method_map =
   if not (Sys.file_exists filename) then failwith (filename ^ " not found");
   let json = Json.from_file filename in
   Inheritance.of_json summary_map method_map json
@@ -1128,10 +1133,13 @@ let run program_dir =
   let method_info = parse_method_info !info.summary_file in
   let type_info = Summary.from_method_type method_info in
   let summary = parse_summary !info.summary_file method_info in
-  let callgraph = parse_callgraph !info.summary_file in
+  let callgraph =
+    parse_callgraph !info.summary_file
+    |> parse_extra_callgraph !info.class_info_file
+  in
   let setter_map = get_setter summary method_info in
   let class_info, summary, method_info =
-    parse_class_info summary method_info !info.class_info_file
+    parse_class_info !info.class_info_file summary method_info
   in
   let class_info, summary, method_info =
     parse_stdlib_info class_info summary method_info

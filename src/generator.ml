@@ -1962,12 +1962,6 @@ let error_entry_func ee es m_info c_info =
         VarListSet.fold (fun f_arg acc -> (0, f, f_arg) :: acc) f_arg_list lst)
     [] typ_list
 
-let sort_methods methods =
-  let count_comma m = Str.split (Str.regexp ",") m |> List.length in
-  List.stable_sort
-    (fun (_, c1, _) (_, c2, _) -> compare (count_comma c1) (count_comma c2))
-    methods
-
 let get_setter_list summary s_lst =
   List.fold_left
     (fun lst (s, fields) ->

@@ -73,13 +73,104 @@ let string_of_value_type_opt = function
   | Some vt -> string_of_value_type vt
   | None -> "void"
 
-let string_of_args_list args =
+let string_of_args args =
   let rec make_arg_code args =
     match args with hd :: tl -> "," ^ hd ^ make_arg_code tl | _ -> ""
   in
   "(" ^ Regexp.first_rm (Str.regexp "^,") (make_arg_code args) ^ ")"
 
-let handle_methods methods =
+let string_of_jmethod_or_interface joi =
+  match joi with
+  | `InterfaceMethod (cn, ms) -> JBasics.cn_name cn ^ "." ^ JBasics.ms_name ms
+  | `Method (cn, ms) -> JBasics.cn_name cn ^ "." ^ JBasics.ms_name ms
+
+let string_of_lambda m =
+  match m with
+  | `InvokeInterface (cn, ms) -> JBasics.cn_name cn ^ "." ^ JBasics.ms_name ms
+  | `InvokeSpecial joi -> string_of_jmethod_or_interface joi
+  | `InvokeStatic joi -> string_of_jmethod_or_interface joi
+  | `InvokeVirtual (obj, ms) ->
+      string_of_object_type obj ^ "." ^ JBasics.ms_name ms
+  | _ -> ""
+
+let get_lambda_method t =
+  match t with
+  | `Dynamic b_method ->
+      List.fold_left
+        (fun acc arg ->
+          match arg with
+          | `MethodHandle m -> string_of_lambda m :: acc
+          | _ -> acc)
+        [] b_method.JBasics.bm_args
+  | _ -> []
+
+let get_complete_lambda_method lambda_list all_methods =
+  List.fold_left
+    (fun acc x ->
+      List.fold_left
+        (fun acc2 lambda ->
+          if Str.string_match (Str.regexp (lambda ^ "(")) x 0 then x :: acc2
+          else acc2)
+        acc lambda_list)
+    [] all_methods
+
+let string_of_class t =
+  match t with
+  | `Dynamic _ -> ""
+  | `Interface _ -> ""
+  | `Special (_, cn) -> JBasics.cn_name cn
+  | `Static (_, cn) -> JBasics.cn_name cn
+  | `Virtual obj -> string_of_object_type obj
+
+let get_callee_methods caller_ms all_methods =
+  let impl = caller_ms.Javalib.cm_implementation in
+  match impl with
+  | Javalib.Java code ->
+      Array.fold_left
+        (fun acc op ->
+          match op with
+          | JCode.OpInvoke (typ, ms) ->
+              let class_name = string_of_class typ in
+              let lambda_method = get_lambda_method typ in
+              if class_name = "" && lambda_method <> [] then
+                get_complete_lambda_method lambda_method all_methods
+                |> List.rev_append acc
+              else if class_name = "" then acc
+              else
+                let name = JBasics.ms_name ms in
+                let raw_args =
+                  List.map
+                    (fun vt -> string_of_value_type vt)
+                    (JBasics.ms_args ms)
+                in
+                (class_name ^ "." ^ name ^ string_of_args raw_args) :: acc
+          | _ -> acc)
+        [] (Lazy.force code).JCode.c_code
+  | Native -> []
+
+let get_methods_names cname methods =
+  JBasics.MethodMap.fold
+    (fun _ m acc ->
+      match m with
+      | Javalib.ConcreteMethod c ->
+          let name = JBasics.ms_name c.cm_signature in
+          let raw_args =
+            List.map
+              (fun vt -> string_of_value_type vt)
+              (JBasics.ms_args c.cm_signature)
+          in
+          (cname ^ "." ^ name ^ string_of_args raw_args) :: acc
+      | Javalib.AbstractMethod a ->
+          let name = JBasics.ms_name a.am_signature in
+          let raw_args =
+            List.map
+              (fun vt -> string_of_value_type vt)
+              (JBasics.ms_args a.am_signature)
+          in
+          (cname ^ "." ^ name ^ string_of_args raw_args) :: acc)
+    methods []
+
+let handle_methods cname methods =
   JBasics.MethodMap.fold
     (fun _ m acc ->
       match m with
@@ -101,15 +192,22 @@ let handle_methods methods =
               (JBasics.ms_args c.cm_signature)
           in
           let args = `List (List.map (fun v -> `String v) raw_args) in
+          let callee =
+            `List
+              (List.map
+                 (fun m -> `String m)
+                 (get_callee_methods c (get_methods_names cname methods)))
+          in
           let item =
             [
               ("access", access);
               ("is_static", `Bool (Javalib.is_static_method m));
               ("rtype", rtype);
               ("args", args);
+              ("callee", callee);
             ]
           in
-          (name ^ string_of_args_list raw_args, `Assoc item) :: acc
+          (cname ^ "." ^ name ^ string_of_args raw_args, `Assoc item) :: acc
       | Javalib.AbstractMethod a ->
           let name = JBasics.ms_name a.am_signature in
           let access =
@@ -134,9 +232,10 @@ let handle_methods methods =
               ("is_static", `Bool (Javalib.is_static_method m));
               ("rtype", rtype);
               ("args", args);
+              ("callee", `List []);
             ]
           in
-          (name ^ string_of_args_list raw_args, `Assoc item) :: acc)
+          (cname ^ "." ^ name ^ string_of_args raw_args, `Assoc item) :: acc)
     methods []
 
 let handle_interface i =
@@ -146,7 +245,6 @@ let handle_interface i =
     | `Default -> `String "default"
     | _ -> `String "public"
   in
-  let pkg_name = `String (JBasics.cn_package i.i_name |> String.concat ".") in
   let interfaces =
     `List (List.map (fun i -> `String (JBasics.cn_name i)) i.i_interfaces)
   in
@@ -161,7 +259,6 @@ let handle_interface i =
   let is_abstract = `Bool false in
   let item =
     [
-      ("pkg_name", pkg_name);
       ("access", access);
       ("is_abstract", is_abstract);
       ("is_interface", `Bool true);
@@ -178,7 +275,6 @@ let handle_class c =
     | `Default -> `String "default"
     | _ -> `String "public"
   in
-  let pkg_name = `String (JBasics.cn_package c.c_name |> String.concat ".") in
   let super_class =
     match c.c_super_class with
     | Some s -> `String (JBasics.cn_name s)
@@ -196,10 +292,9 @@ let handle_class c =
       c.c_inner_classes
   in
   let is_abstract = `Bool c.c_abstract in
-  let methods = handle_methods c.c_methods in
+  let methods = handle_methods cname c.c_methods in
   let item =
     [
-      ("pkg_name", pkg_name);
       ("access", access);
       ("is_abstract", is_abstract);
       ("is_interface", `Bool false);

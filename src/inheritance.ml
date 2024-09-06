@@ -197,17 +197,16 @@ let add_missing_methods ?(is_stdlib = false) class_name info summary_map
       List.fold_left
         (fun (s_map, m_map) m_name ->
           let m_info = JsonUtil.member m_name methods in
-          let total_m_name = class_name ^ "." ^ m_name in
           if
-            MethodInfo.M.mem total_m_name method_map
-            || List.mem total_m_name Utils.filter_list
+            MethodInfo.M.mem m_name method_map
+            || List.mem m_name Utils.filter_list
             || filter_class_name ~is_stdlib class_name
           then (s_map, m_map)
           else
             let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in
             let arg_ids = make_arg_id args in
-            ( SummaryMap.M.add total_m_name ([ make_summary arg_ids ], []) s_map,
-              MethodInfo.M.add total_m_name
+            ( SummaryMap.M.add m_name ([ make_summary arg_ids ], []) s_map,
+              MethodInfo.M.add m_name
                 (get_method_info class_name m_name args arg_ids m_info)
                 m_map ))
         (summary_map, method_map) filtered_m_name
