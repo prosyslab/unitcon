@@ -505,13 +505,17 @@ module AST = struct
 
   let rec count_const = function
     | Const _ -> 0
-    | Assign (_, x1, _, _) -> count_cname x1
+    | Assign (_, _, f, _) -> count_init f
     | Void _ -> 0
     | Seq (s1, s2) -> count_const s1 + count_const s2
     | Skip -> 0
     | Stmt -> 0
 
-  and count_cname = function ClassName _ -> 1 | _ -> 0
+  and count_init func =
+    match func with
+    | F f when Utils.is_init_method f.method_name -> 1
+    | F _ -> -1
+    | _ -> 0
 
   let is_array_init f = Utils.is_array_init (get_func f).method_name
 

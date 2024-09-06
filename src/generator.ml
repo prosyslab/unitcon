@@ -903,13 +903,46 @@ let is_same_summary s1 s2 =
   if Condition.M.equal equal (snd s1.postcond) (snd s2.postcond) then true
   else false
 
-let prune_dup_summary lst =
+let is_same_param_type c1 c2 m_info =
+  let c1_info = MethodInfo.M.find c1 m_info in
+  let c2_info = MethodInfo.M.find c2 m_info in
+  let rec check_param p1 p2 =
+    match (p1, p2) with
+    | v1 :: tl1, v2 :: tl2 -> (
+        match (v1, v2) with
+        | Var (typ1, _), Var (typ2, _) when typ1 = typ2 -> check_param tl1 tl2
+        | This _, This _ -> check_param tl1 tl2
+        | _, _ -> false)
+    | _ :: _, [] -> false
+    | [], _ :: _ -> false
+    | [], [] -> true
+  in
+  check_param c1_info.MethodInfo.formal_params c2_info.MethodInfo.formal_params
+
+let prune_dup_summary_setter lst =
   if !Cmdline.basic_mode || !Cmdline.priority_mode then List.rev lst
   else
     let rec collect_dup lst =
       match lst with
       | (_, _, h) :: t ->
           List.filter (fun (_, _, x) -> is_same_summary h x) t
+          |> List.rev_append (collect_dup t)
+      | _ -> []
+    in
+    List.fold_left
+      (fun l s -> if collect_dup lst |> List.mem s then l else s :: l)
+      [] lst
+
+let prune_dup_summary m_info lst =
+  if !Cmdline.basic_mode || !Cmdline.priority_mode then List.rev lst
+  else
+    let rec collect_dup lst =
+      match lst with
+      | (_, ch, h) :: t ->
+          List.filter
+            (fun (_, cx, x) ->
+              is_same_summary h x && is_same_param_type ch cx m_info)
+            t
           |> List.rev_append (collect_dup t)
       | _ -> []
     in
@@ -1915,7 +1948,7 @@ let error_entry_func ee es m_info c_info =
   let typ_list =
     if
       is_public_class c_name (fst c_info) |> not
-      || is_usable_default_class c_name (fst c_info) |> not
+      && is_usable_default_class c_name (fst c_info) |> not
     then
       try IG.succ (snd c_info) c_name |> List.cons c_name
       with Invalid_argument _ -> [ c_name ]
@@ -1929,6 +1962,12 @@ let error_entry_func ee es m_info c_info =
         VarListSet.fold (fun f_arg acc -> (0, f, f_arg) :: acc) f_arg_list lst)
     [] typ_list
 
+let sort_methods methods =
+  let count_comma m = Str.split (Str.regexp ",") m |> List.length in
+  List.stable_sort
+    (fun (_, c1, _) (_, c2, _) -> compare (count_comma c1) (count_comma c2))
+    methods
+
 let get_setter_list summary s_lst =
   List.fold_left
     (fun lst (s, fields) ->
@@ -1938,7 +1977,7 @@ let get_setter_list summary s_lst =
       in
       (s, fields, smy) :: lst)
     [] s_lst
-  |> List.rev |> prune_dup_summary
+  |> List.rev |> prune_dup_summary_setter
 
 let mk_void_func (var : AST.var) id class_name m_info c_info s_lst =
   let get_arg_list s =
@@ -2058,7 +2097,7 @@ let get_c ret c_lst summary m_info c_info =
       |> List.filter (fun (_, c, _) ->
              is_abstract_class (c |> Utils.get_class_name) c_info |> not)
       |> summary_filtering class_name m_info
-      |> prune_dup_summary
+      |> prune_dup_summary m_info
     in
     get_cfuncs ret s_list m_info c_info
 
@@ -2155,7 +2194,7 @@ let get_ret_c ret ret_obj_lst summary m_info type_info c_info s_map =
     let s_list =
       satisfied_c_list id (AST.get_v ret).summary summary ret_obj_lst
       |> summary_filtering class_name m_info
-      |> prune_dup_summary
+      |> prune_dup_summary m_info
       |> memory_effect_filtering summary m_info type_info c_info s_map
     in
     get_cfuncs ret s_list m_info c_info
@@ -2806,7 +2845,7 @@ let priority_q queue =
         compare (nt1 + t1 - prec1) (nt2 + t2 - prec2)
       else if compare prec1 prec2 <> 0 then compare prec2 prec1
       else if compare nt1 nt2 <> 0 then compare nt1 nt2
-      else compare const1 const2)
+      else compare const2 const1)
     queue
 
 let rec mk_testcase summary m_info type_info c_info s_map i_info p_info queue =
