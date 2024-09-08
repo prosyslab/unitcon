@@ -142,4 +142,21 @@ let filter_list =
     "java.io.PushbackReader.<init>(java.io.Reader,int)";
     "java.io.PipedReader.<init>()";
     "java.io.PipedReader.<init>(int)";
+    "java.io.PipedWriter.<init>()";
+    "java.io.PipedWriter.<init>(java.io.PipedReader)";
+    "java.io.BufferedWriter.<init>(java.io.Writer)";
+    "java.io.BufferedWriter.<init>(java.io.Writer,int)";
+    "java.io.OutputStreamWriter.<init>(java.io.OutputStream)";
+    "java.io.OutputStreamWriter.<init>(java.io.OutputStream,java.nio.charset.Charset)";
+    "java.io.OutputStreamWriter.<init>(java.io.OutputStream,java.nio.charset.CharsetEncoder)";
+    "java.io.OutputStreamWriter.<init>(java.io.OutputStream,java.lang.String)";
+    "java.io.PrintWriter.<init>(java.io.OutputStream)";
+    "java.io.PrintWriter.<init>(java.io.OutputStream,boolean)";
+    "java.io.PrintWriter.<init>(java.lang.String)";
+    "java.io.PrintWriter.<init>(java.lang.String,java.lang.String)";
+    "java.io.PrintWriter.<init>(java.io.Writer)";
+    "java.io.PrintWriter.<init>(java.io.Writer,boolean)";
+    "java.io.FileWriter.<init>(java.io.FileDescriptor)";
+    "java.io.FileWriter.<init>(java.lang.String)";
+    "java.io.FileWriter.<init>(java.lang.String,boolean)";
   ]

@@ -183,7 +183,6 @@ let filter_class_name ?(is_stdlib = false) class_name =
     || Str.string_match (Str.regexp "com") class_name 0
     || Str.string_match (Str.regexp "org") class_name 0
     || Str.string_match (Str.regexp "jdk") class_name 0
-    || Str.string_match (Str.regexp "java\\.util\\.jar") class_name 0
   then true
   else false
 
