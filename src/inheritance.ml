@@ -183,8 +183,13 @@ let filter_class_name ?(is_stdlib = false) class_name =
     || Str.string_match (Str.regexp "com") class_name 0
     || Str.string_match (Str.regexp "org") class_name 0
     || Str.string_match (Str.regexp "jdk") class_name 0
+    || Str.string_match (Str.regexp "java\\.util\\.jar") class_name 0
+    || Str.string_match (Str.regexp "java\\.util\\.concurrent") class_name 0
   then true
   else false
+
+let is_lambda_method m_name =
+  Str.string_match (Str.regexp ".*\\.lambda\\$") m_name 0
 
 let add_missing_methods ?(is_stdlib = false) class_name info summary_map
     method_map =
@@ -201,6 +206,7 @@ let add_missing_methods ?(is_stdlib = false) class_name info summary_map
             MethodInfo.M.mem m_name method_map
             || List.mem m_name Utils.filter_list
             || filter_class_name ~is_stdlib class_name
+            || is_lambda_method m_name
           then (s_map, m_map)
           else
             let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in

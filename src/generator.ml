@@ -56,7 +56,6 @@ type partial_tc = {
   unroll : int;
   nt_cost : int;
   t_cost : int;
-  num_of_const : int;
   prec : int; (* number of precise statement *)
   tc : AST.t;
   loop_ids : AST.LoopIdMap.t;
@@ -84,15 +83,13 @@ let solver = Z3.Solver.mk_solver z3ctx None
 
 (* non-terminal cost for p, terminal cost for p, precision for p *)
 let get_cost p =
-  if p.unroll > 1 then (p.nt_cost, p.t_cost, p.num_of_const, p.prec)
-  else (0, 0, 0, 0)
+  if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec) else (0, 0, 0)
 
 let mk_cost prev_p curr_tc curr_loop_id curr_obj_type prec =
   {
     unroll = prev_p.unroll + 1;
     nt_cost = AST.count_nt curr_tc;
     t_cost = AST.count_t curr_tc;
-    num_of_const = AST.count_const curr_tc;
     prec;
     tc = curr_tc;
     loop_ids = curr_loop_id;
@@ -108,7 +105,6 @@ let empty_p =
     unroll = 0;
     nt_cost = 0;
     t_cost = 0;
-    num_of_const = 0;
     prec = 0;
     tc = AST.Skip;
     loop_ids = empty_id_map;
@@ -2833,13 +2829,12 @@ let pretty_format p =
 let priority_q queue =
   List.stable_sort
     (fun p1 p2 ->
-      let nt1, t1, const1, prec1 = get_cost p1 in
-      let nt2, t2, const2, prec2 = get_cost p2 in
+      let nt1, t1, prec1 = get_cost p1 in
+      let nt2, t2, prec2 = get_cost p2 in
       if compare (nt1 + t1 - prec1) (nt2 + t2 - prec2) <> 0 then
         compare (nt1 + t1 - prec1) (nt2 + t2 - prec2)
       else if compare prec1 prec2 <> 0 then compare prec2 prec1
-      else if compare nt1 nt2 <> 0 then compare nt1 nt2
-      else compare const2 const1)
+      else compare nt1 nt2)
     queue
 
 let rec mk_testcase summary m_info type_info c_info s_map i_info p_info queue =
