@@ -282,10 +282,18 @@ let check_substring substr str =
   | exception Not_found -> false
   | _ -> true
 
+let missing_trace = [ "at java.lang.System.arraycopy(Native Method)[ \t\r\n]+" ]
+
 let compare_stack_trace target_trace error_trace =
-  check_substring
-    (!bug_type ^ ".*" ^ "[ \t\r\n]+[^a]*" ^ target_trace)
-    error_trace
+  List.fold_left
+    (fun check missing_trace ->
+      let curr_check =
+        check_substring
+          (!bug_type ^ ".*" ^ "[ \t\r\n]+[^a]*" ^ missing_trace ^ target_trace)
+          error_trace
+      in
+      if curr_check then true else check)
+    false ("" :: missing_trace)
 
 let check_package_name_presence package_name error_trace =
   check_substring package_name error_trace

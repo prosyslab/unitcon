@@ -2360,10 +2360,6 @@ let const_unroll p summary m_info (_, ig) i_info p_info =
           empty_id_map,
           ObjTypeMap.M.add "java.lang.Object" "java.lang.Object"
             empty_obj_type_map );
-        ( 0,
-          AST.const_rule1 p (AST.Primitive (S "string")),
-          empty_id_map,
-          empty_obj_type_map );
       ]
     else if is_number x then
       [
@@ -2877,7 +2873,6 @@ let rec mk_testcase summary m_info type_info c_info s_map i_info p_info queue =
   in
   match queue with
   | p :: tl ->
-      Logger.info "tc: %s" (p.tc |> AST.code);
       if !Cmdline.with_fuzz && AST.ground p.tc && AST.with_withfuzz p.tc then
         [ (Need_Fuzzer, pretty_format p.tc, p.loop_ids, tl) ]
       else if !Cmdline.with_loop && AST.ground p.tc && AST.with_withloop p.tc
