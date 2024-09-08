@@ -2324,7 +2324,7 @@ let special_class_list =
     "java.lang.Class";
   ]
 
-let const_unroll p summary m_info i_info p_info =
+let const_unroll p summary m_info (_, ig) i_info p_info =
   let get_r3 x =
     List.fold_left
       (fun lst x1 ->
@@ -2374,14 +2374,24 @@ let const_unroll p summary m_info i_info p_info =
             empty_obj_type_map );
       ]
     else
+      let class_name = AST.get_vinfo x |> fst |> get_class_name in
+      let class_to_find =
+        try IG.succ ig class_name |> List.cons class_name
+        with Invalid_argument _ -> [ class_name ]
+      in
+      let gv_list =
+        List.fold_left
+          (fun acc class_name ->
+            global_var_list class_name (AST.get_v x).summary summary m_info
+              i_info
+            |> List.rev_append acc)
+          [] class_to_find
+      in
       List.fold_left
         (fun lst x1 ->
           (fst x1, AST.const_rule2 p (snd x1), empty_id_map, empty_obj_type_map)
           :: lst)
-        []
-        (global_var_list
-           (get_class_name (AST.get_vinfo x |> fst))
-           (AST.get_v x).summary summary m_info i_info)
+        [] gv_list
   in
   match p with
   | AST.Const (x, _) ->
@@ -2575,7 +2585,8 @@ let append l1 l2 =
 let one_unroll p obj_types summary m_info type_info c_info s_map i_info p_info =
   match p with
   | AST.Seq _ when AST.void p -> void_unroll p
-  | Const _ when AST.const p -> const_unroll p summary m_info i_info p_info
+  | Const _ when AST.const p ->
+      const_unroll p summary m_info c_info i_info p_info
   | Assign _ when AST.fcall_in_assign p -> (
       (* fcall_in_assign --> recv_in_assign --> arg_in_assign *)
       match
@@ -2773,9 +2784,31 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
   if is_public e_method m_info || is_usable_default e_method m_info then
     ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty
   else
-    let caller_list =
+    let org_caller_list =
       try CG.succ cg e_method |> List.filter (fun x -> x <> e_method)
       with Invalid_argument _ -> []
+    in
+    let get_caller_list m_name =
+      try
+        CG.succ cg m_name |> List.filter (fun x -> x <> m_name && x <> e_method)
+      with Invalid_argument _ -> []
+    in
+    let class_name = Utils.get_class_name e_method in
+    let escaped_m_name =
+      Str.global_replace Regexp.dot "\\." class_name
+      |> Str.global_replace Regexp.dollar "\\$"
+    in
+    let pclass_list =
+      try IG.pred (snd c_info) class_name with Invalid_argument _ -> []
+    in
+    let caller_list =
+      List.fold_left
+        (fun acc c_name ->
+          let new_m_name =
+            Str.replace_first (Str.regexp escaped_m_name) c_name e_method
+          in
+          get_caller_list new_m_name |> List.rev_append acc)
+        org_caller_list pclass_list
     in
     List.fold_left
       (fun set caller_method ->
@@ -2844,6 +2877,7 @@ let rec mk_testcase summary m_info type_info c_info s_map i_info p_info queue =
   in
   match queue with
   | p :: tl ->
+      Logger.info "tc: %s" (p.tc |> AST.code);
       if !Cmdline.with_fuzz && AST.ground p.tc && AST.with_withfuzz p.tc then
         [ (Need_Fuzzer, pretty_format p.tc, p.loop_ids, tl) ]
       else if !Cmdline.with_loop && AST.ground p.tc && AST.with_withloop p.tc
