@@ -46,23 +46,20 @@ let get_callee_method_name assoc =
   |> List.fold_left (fun l m -> (JsonUtil.to_string m |> split_name) :: l) []
   |> List.rev
 
-let is_unnes_method m_name =
-  if Str.string_match (Str.regexp ".*.lambda\\$") m_name 0 then true else false
-
 let add_missing_callee info cg =
   match JsonUtil.member "methods" info with
   | `Null -> cg
   | methods ->
       List.fold_left
         (fun cg caller_name ->
-          if is_unnes_method caller_name then cg
+          if Utils.is_lambda_method caller_name then cg
           else
             let m_info = JsonUtil.member caller_name methods in
             let callees = JsonUtil.member "callee" m_info |> JsonUtil.to_list in
             List.fold_left
               (fun g callee ->
                 let callee_name = JsonUtil.to_string callee in
-                if is_unnes_method callee_name then g
+                if Utils.is_lambda_method callee_name then g
                 else G.add_edge g callee_name caller_name)
               cg callees)
         cg (JsonUtil.keys methods)

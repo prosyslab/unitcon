@@ -186,9 +186,6 @@ let filter_class_name ?(is_stdlib = false) class_name =
   then true
   else false
 
-let is_lambda_method m_name =
-  Str.string_match (Str.regexp ".*\\.lambda\\$") m_name 0
-
 let add_missing_methods ?(is_stdlib = false) class_name info summary_map
     method_map =
   match JsonUtil.member "methods" info with
@@ -204,7 +201,7 @@ let add_missing_methods ?(is_stdlib = false) class_name info summary_map
             MethodInfo.M.mem m_name method_map
             || List.mem m_name Utils.filter_list
             || filter_class_name ~is_stdlib class_name
-            || is_lambda_method m_name
+            || Utils.is_lambda_method m_name
           then (s_map, m_map)
           else
             let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in
@@ -243,11 +240,10 @@ let mapping_inheritance_info class_name info graph =
            graph
   | _, `Null -> G.add_edge graph (JsonUtil.to_string super_class) class_name
   | _, _ ->
-      let g = G.add_edge graph (JsonUtil.to_string super_class) class_name in
       JsonUtil.to_list interfaces
       |> List.fold_left
            (fun g i -> G.add_edge g (JsonUtil.to_string i) class_name)
-           g
+           (G.add_edge graph (JsonUtil.to_string super_class) class_name)
 
 let make_type ?(is_static = false) assoc =
   let access = JsonUtil.member "access" assoc |> JsonUtil.to_string in

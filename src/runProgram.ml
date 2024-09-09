@@ -35,6 +35,8 @@ let first_success_tc = ref ""
 
 let last_success_tc = ref ""
 
+let abnormal_keep_going = ref false
+
 let require_enum_class = ref false
 
 let require_interface_class = ref false
@@ -1077,7 +1079,9 @@ let rec run_test ~is_start info queue e_method_info p_info =
       let _time = Unix.gettimeofday () -. !time in
       incr num_of_tc_files;
       add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
-      if !num_of_tc_files mod 15 = 0 then run_testfile () else ();
+      if !num_of_tc_files mod 15 = 0 || !abnormal_keep_going then
+        run_testfile ()
+      else ();
       run_test ~is_start:false info tc_list e_method_info p_info)
   else if completion = Need_Fuzzer then (
     (* clean before running fuzzer *)
@@ -1098,7 +1102,9 @@ let rec run_test ~is_start info queue e_method_info p_info =
       let new_tc = driver_to_tc fuzz_seq input (tc |> snd) in
       let _time = Unix.gettimeofday () -. !time in
       add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
-      if !num_of_tc_files mod 15 = 0 then run_testfile () else ();
+      if !num_of_tc_files mod 15 = 0 || !abnormal_keep_going then
+        run_testfile ()
+      else ();
       run_test ~is_start:false info tc_list e_method_info p_info)
   else if completion = Incomplete then (
     (* early stopping *)
@@ -1125,7 +1131,9 @@ let abnormal_run_test =
         Logger.info "Abnormal Run Test";
         run_testfile ();
         Unix.kill (Unix.getpid ()) Sys.sigusr1)
-      else Logger.info "Keep Going")
+      else (
+        Logger.info "Keep Going";
+        abnormal_keep_going := true))
 
 let interrupt pid =
   Unix.sleep (!Cmdline.time_out - 10);

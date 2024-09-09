@@ -2783,18 +2783,16 @@ let rec find_ee e_method e_summary cg summary call_prop_map m_info c_info =
       Str.global_replace Regexp.dot "\\." class_name
       |> Str.global_replace Regexp.dollar "\\$"
     in
-    let pclass_list =
-      try IG.pred (snd c_info) class_name with Invalid_argument _ -> []
-    in
     let caller_list =
       if org_caller_list = [] then
-        List.fold_left
-          (fun acc c_name ->
-            let new_m_name =
-              Str.replace_first (Str.regexp escaped_m_name) c_name e_method
-            in
-            get_caller_list new_m_name |> List.rev_append acc)
-          org_caller_list pclass_list
+        (try IG.pred (snd c_info) class_name with Invalid_argument _ -> [])
+        |> List.fold_left
+             (fun acc c_name ->
+               let new_m_name =
+                 Str.replace_first (Str.regexp escaped_m_name) c_name e_method
+               in
+               List.rev_append (get_caller_list new_m_name) acc)
+             org_caller_list
       else org_caller_list
     in
     List.fold_left
