@@ -116,23 +116,37 @@ let is_modeling_set fname =
   is_array_set fname
   || Str.string_match (Str.regexp "java.util.Map.put") fname 0
 
+let is_lambda_method m_name =
+  Str.string_match (Str.regexp ".*\\.lambda\\$") m_name 0
+
 let filter_list =
   [
     "java.io.FileInputStream.<init>(java.lang.String)";
     "java.io.FileInputStream.<init>(java.io.FileDescriptor)";
     "java.io.SequenceInputStream.<init>(java.io.InputStream)";
     "java.io.SequenceInputStream.<init>(java.io.InputStream,java.io.InputStream)";
+    "java.io.ByteArrayInputStream.<init>(byte[])";
+    "java.io.ByteArrayInputStream.<init>(byte[],int,int)";
     "java.io.PipedInputStream.<init>()";
     "java.io.PipedInputStream.<init>(int)";
     "java.io.PipedInputStream.<init>(java.io.PipedOutputStream)";
     "java.io.PipedInputStream.<init>(java.io.PipedOutputStream,int)";
     "java.io.SequenceInputStream.<init>(java.io.InputStream,java.io.InputStream)";
     "java.io.SequenceInputStream.<init>(java.util.Enumeration)";
+    "java.io.BufferedInputStream.<init>(java.io.InputStream)";
+    "java.io.BufferedInputStream.<init>(java.io.InputStream,int)";
+    "java.io.DataInputStream.<init>(java.io.InputStream)";
+    "java.io.PushbackInputStream.<init>(java.io.InputStream)";
+    "java.io.PushbackInputStream.<init>(java.io.InputStream,int)";
     "java.io.FileOutputStream.<init>(java.lang.String)";
     "java.io.FileOutputStream.<init>(java.lang.String,boolean)";
     "java.io.FileOutputStream.<init>(java.io.FileDescriptor)";
     "java.io.PipedOutputStream.<init>()";
     "java.io.PipedOutputStream.<init>(java.io.PipedInputStream)";
+    "java.io.FilterOutputStream.<init>(java.io.OutputStream)";
+    "java.io.BufferedOutputStream.<init>(java.io.OutputStream)";
+    "java.io.BufferedOutputStream.<init>(java.io.OutputStream,int)";
+    "java.io.DataOutputStream.<init>(java.io.OutputStream)";
     "java.io.BufferedReader.<init>(java.io.Reader)";
     "java.io.BufferedReader.<init>(java.io.Reader,int)";
     "java.io.LineNumberReader.<init>(java.io.Reader)";
@@ -159,4 +173,6 @@ let filter_list =
     "java.io.FileWriter.<init>(java.io.FileDescriptor)";
     "java.io.FileWriter.<init>(java.lang.String)";
     "java.io.FileWriter.<init>(java.lang.String,boolean)";
+    "java.io.File.<init>(java.net.URI)";
+    "java.io.File.<init>(java.io.File,java.lang.String)";
   ]
