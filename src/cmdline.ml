@@ -16,7 +16,7 @@ let mock = ref false
 
 let extension = ref ""
 
-let with_loop = ref false
+let with_loop = ref true
 
 let with_fuzz = ref false
 
@@ -49,7 +49,7 @@ let options =
        e.g., \"com.a.b.c\")" );
     ( "-with-loop",
       Arg.Set with_loop,
-      "Execute multiple test cases using loop at once (default: false)" );
+      "Execute multiple test cases using loop at once (default: true)" );
     ( "-with-fuzz",
       Arg.Set with_fuzz,
       "Use fuzzer for searching constant (default: false)" );
