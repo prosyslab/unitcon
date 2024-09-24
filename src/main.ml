@@ -14,6 +14,9 @@ let main () =
   | Some p when !Cmdline.class_info ->
       initialize ();
       ClassInfo.run p
+  | Some p when !Cmdline.constant_info ->
+      initialize ();
+      ConstantInfo.run p
   | Some p ->
       initialize ();
       RunProgram.run p

@@ -22,6 +22,8 @@ let with_fuzz = ref false
 
 let class_info = ref false
 
+let constant_info = ref false
+
 let options =
   [
     ( "-outdir",
@@ -38,7 +40,7 @@ let options =
       "Run with only prioritization (default: false)" );
     ( "-time-out",
       Arg.Set_int time_out,
-      "Time Budget except Static Analysis (default: 20m)" );
+      "Time Budget except Static Analysis (default: 10m)" );
     ( "-unknown-bug",
       Arg.Set unknown_bug,
       "Run unknown bug searching mode (default: false)" );
@@ -56,6 +58,9 @@ let options =
     ( "-class-info",
       Arg.Set class_info,
       "Analyze syntactic properties of a given Java bytecode file" );
+    ( "-constant-info",
+      Arg.Set constant_info,
+      "Parse constant values of a given Java bytecode file" );
   ]
 
 let parse_arg (x : string) =

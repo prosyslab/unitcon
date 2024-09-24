@@ -51,7 +51,6 @@ type t = {
   error_summary_file : string;
   call_prop_file : string;
   class_info_file : string;
-  enum_file : string;
   constant_file : string;
   fuzz_constant_file : string;
   test_dir : string;
@@ -70,7 +69,6 @@ let info =
       error_summary_file = "";
       call_prop_file = "";
       class_info_file = "";
-      enum_file = "";
       constant_file = "";
       fuzz_constant_file = "";
       test_dir = "";
@@ -148,13 +146,9 @@ let parse_stdlib_info (ct_info, i_info) smap mmap =
     let json = Json.from_file stdlib_file in
     Inheritance.of_stdlib_json ct_info i_info smap mmap json
 
-let parse_enum_info filename =
+let parse_gconstant_info filename =
   if not (Sys.file_exists filename) then InstanceInfo.M.empty
-  else Json.from_file filename |> Constant.of_enum_json
-
-let parse_instance_info filename inst_info =
-  if not (Sys.file_exists filename) then inst_info
-  else Json.from_file filename |> Constant.of_ginstance_json inst_info
+  else Json.from_file filename |> Constant.of_gconst_json
 
 let parse_primitive_info filename =
   let default = Constant.default_primitive in
@@ -230,8 +224,7 @@ let init program_dir =
         cons con_path "error_summaries.json" |> cons program_dir;
       call_prop_file = cons con_path "call_proposition.json" |> cons program_dir;
       class_info_file = cons con_path "class_info.json" |> cons program_dir;
-      enum_file = cons con_path "enum_info.json" |> cons program_dir;
-      constant_file = cons con_path "extra_constant.json" |> cons program_dir;
+      constant_file = cons con_path "constant_info.json" |> cons program_dir;
       fuzz_constant_file = cons con_path "fuzz_constant" |> cons program_dir;
       test_dir = cons program_dir t_dir;
       multi_test_dir = cons program_dir mt_dir;
@@ -1160,9 +1153,7 @@ let run program_dir =
   let class_info, summary, method_info =
     parse_stdlib_info class_info summary method_info
   in
-  let instance_info =
-    parse_enum_info !info.enum_file |> parse_instance_info !info.constant_file
-  in
+  let instance_info = parse_gconstant_info !info.constant_file in
   let primitive_info = parse_primitive_info !info.constant_file in
   let call_prop_map = parse_callprop !info.call_prop_file in
   let error_method_info = parse_error_summary !info.error_summary_file in
