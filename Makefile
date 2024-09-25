@@ -2,7 +2,6 @@ MAKE=@make
 DUNE=@dune
 LN=@ln -sf
 RM=@rm
-BISECT=@bisect-ppx-report
 EXE=unitcon
 
 all:
@@ -16,9 +15,7 @@ test: all
 	$(DUNE) test
 
 coverage:
-	$(DUNE) runtest --instrument-with bisect_ppx --force
-	$(BISECT) html
-	$(BISECT) summary
+	$(DUNE) runtest ./test
 
 clean:
 	$(DUNE) clean

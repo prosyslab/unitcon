@@ -19,7 +19,7 @@ jobs:
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-compiler: 4.14.2
+          ocaml-compiler: ocaml-variants.4.14.0+options,ocaml-option-flambda
 
       - name: Use cached dependencies
         id: cache-opam
@@ -49,16 +49,4 @@ jobs:
 
       - name: Run test (regression)
         run: |
-          eval $(opam env) && make coverage > coverage.txt
-
-      - name: Report check status
-        run: |
-          COVERAGE=`tail -1 coverage.txt | cut -d ' ' -f3`
-          echo $COVERAGE
-          curl \
-            -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"\
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
-            -d '{"state":"success","target_url":"","description":"'"${COVERAGE}"'","context":"check/coverage"}'
+          eval $(opam env) && make coverage

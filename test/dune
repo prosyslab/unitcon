@@ -1,7 +1,13 @@
 (rule
  (alias runtest)
+ (deps
+  (source_tree ../deps)
+  (source_tree Bears-189-buggy))
  (action
-  (run ../src/main.exe Bears-189-buggy)))
+  (progn
+   (run ln -sf src/main.exe ../unitcon)
+   (run ../unitcon Bears-189-buggy)
+   (system "[ -e Bears-189-buggy/unitcon_tests/UnitconTest3.java ]"))))
 
 (test
  (name unit)
