@@ -179,7 +179,7 @@ let parse_citv is_err mem citv =
     Condition.M.fold
       (fun head tail val_map ->
         if Condition.M.cardinal tail > 1 then
-          Value.M.add (AST.get_rh_name head)
+          Value.M.add (get_rh_name head)
             (Value.Neq Null |> value_maker is_err)
             val_map
         else val_map)

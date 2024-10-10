@@ -41,7 +41,7 @@ let equal_value v1 v2 =
   | _ -> false
 
 let get_value symbol vmap =
-  match Value.M.find_opt (AST.get_rh_name symbol) vmap with
+  match Value.M.find_opt (get_rh_name symbol) vmap with
   | Some v -> v.Value.value
   | _ -> Value.Eq NonValue
 
@@ -86,9 +86,7 @@ let get_change_field post_key pre_mem post_mem vmap field_set =
 
 let get_change_fields
     { precond = _, pre_mem; postcond = post_var, post_mem; value; _ } =
-  let post_this =
-    AST.get_next_symbol (AST.get_id_symbol post_var "this") post_mem
-  in
+  let post_this = get_next_symbol (get_id_symbol post_var "this") post_mem in
   (* e.g., post_this = v3 *)
   get_change_field post_this pre_mem post_mem value FieldSet.empty
 

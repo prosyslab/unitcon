@@ -8,6 +8,8 @@ let pruning_mode = ref false
 
 let priority_mode = ref false
 
+let test_case_ast = ref false
+
 let time_out = ref (10 * 60) (* total running time *)
 
 let unknown_bug = ref false
@@ -61,6 +63,9 @@ let options =
     ( "-constant-info",
       Arg.Set constant_info,
       "Parse constant values of a given Java bytecode file" );
+    ( "-test-case-ast",
+      Arg.Set test_case_ast,
+      "Set structure of test case to AST (default structure: def-use-graph)" );
   ]
 
 let parse_arg (x : string) =

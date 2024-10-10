@@ -19,7 +19,8 @@ let main () =
       ConstantInfo.run p
   | Some p ->
       initialize ();
-      RunProgram.run p
+      if !Cmdline.test_case_ast then RunProgramAST.run p
+      else RunProgramDUG.run p
 
 let _ =
   Sys.set_signal Sys.sigalrm RunProgram.normal_exit;

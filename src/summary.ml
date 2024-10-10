@@ -23,7 +23,7 @@ let is_new_loc_field field summary =
     | _ -> false
   in
   let _, post_mem = summary.postcond in
-  let field_var = AST.get_tail_symbol "" field post_mem in
+  let field_var = get_tail_symbol "" field post_mem in
   match Condition.M.find_opt field_var post_mem with
   | None -> false
   | Some m ->
@@ -32,7 +32,7 @@ let is_new_loc_field field summary =
           match x with
           | Condition.RH_Symbol _ ->
               if
-                is_null (AST.get_rh_name x) |> not
+                is_null (get_rh_name x) |> not
                 && contains_symbol x (snd summary.precond) |> not
               then true
               else check
@@ -41,9 +41,7 @@ let is_new_loc_field field summary =
 
 let collect_new_loc_field summary =
   let post_var, post_mem = summary.postcond in
-  let post_this =
-    AST.get_next_symbol (AST.get_id_symbol post_var "this") post_mem
-  in
+  let post_this = get_next_symbol (get_id_symbol post_var "this") post_mem in
   match Condition.M.find_opt post_this post_mem with
   | None -> []
   | Some value_map ->

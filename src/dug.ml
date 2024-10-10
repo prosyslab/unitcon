@@ -1,0 +1,991 @@
+open Language
+
+module DUGIR = struct
+  type num = int [@@deriving compare, equal]
+
+  type var = {
+    import : import;
+        (* if var is primitive type then import is class of method *)
+    variable : variable * int option;
+    field : FieldSet.t;
+    summary : summary;
+  }
+  [@@deriving compare, equal]
+
+  type f = {
+    typ : string;
+    method_name : method_name;
+    import : import;
+    summary : summary;
+  }
+  [@@deriving compare, equal]
+
+  type arg = Param of var list | Arg of var list [@@deriving compare, equal]
+
+  type func = F of f | Func [@@deriving compare, equal]
+
+  type id = Variable of var | ClassName of string | Id
+  [@@deriving compare, equal]
+
+  type primitive = Z of int | R of float | B of bool | C of char | S of string
+  [@@deriving compare, equal]
+
+  type exp =
+    | Primitive of primitive
+    | GlobalConstant of string
+    | Null
+    | WithFuzz
+    | WithLoop
+    | Exp
+  [@@deriving compare, equal]
+
+  type t =
+    | Const of (num * (id * exp))
+    | Assign of (num * (id * id * func * arg))
+    | Void of (num * (id * func * arg))
+    | Skip of num
+    | Stmt of num
+  [@@deriving compare, equal]
+
+  let mk_var import variable field summary =
+    { import; variable; field; summary }
+
+  let mk_variable var = Variable var
+
+  let mk_f typ method_name import summary =
+    F { typ; method_name; import; summary }
+end
+
+module Node = struct
+  include DUGIR
+
+  let hash = Hashtbl.hash
+end
+
+module G = struct
+  include Graph.Persistent.Digraph.ConcreteBidirectional (Node)
+
+  let graph_attributes _ = []
+
+  let default_vertex_attributes _ = []
+
+  let vertex_name v = v
+
+  let vertex_attributes _ = []
+
+  let get_subgraph _ = None
+
+  let default_edge_attributes _ = []
+
+  let edge_attributes _ = []
+end
+
+module LoopIdMap = struct
+  module M = Map.Make (struct
+    type t = DUGIR.id
+
+    let compare = compare
+  end)
+
+  type t = DUGIR.exp list M.t
+end
+
+module DUG = struct
+  include G
+  module Topological = Graph.Topological.Make_stable (G)
+  open DUGIR
+
+  let empty_var =
+    {
+      import = "";
+      variable = (This NonType, None);
+      field = FieldSet.empty;
+      summary = empty_summary;
+    }
+
+  (* id -> var *)
+  let rec get_v id =
+    match id with Variable v -> v | _ -> failwith "get_v: not supported"
+
+  (* id -> typ * string *)
+  and get_vinfo v =
+    match (get_v v).variable with
+    | Var (typ, id), _ -> (typ, id)
+    | This typ, _ -> (typ, "this")
+
+  let get_func func =
+    match func with
+    | F f -> f
+    | _ -> { typ = ""; method_name = ""; import = ""; summary = empty_summary }
+
+  let get_arg arg = match arg with Arg a -> a | _ -> []
+
+  let get_param arg = match arg with Param p -> p | _ -> []
+
+  let is_stmt = function Stmt _ -> true | _ -> false
+
+  and is_arg = function Arg _ -> true | _ -> false
+
+  and is_func = function Func -> true | _ -> false
+
+  and is_id = function Id -> true | _ -> false
+
+  and is_exp = function Exp -> true | _ -> false
+
+  and is_fuzz = function WithFuzz -> true | _ -> false
+
+  and is_loop = function WithLoop -> true | _ -> false
+
+  let ground_stmt = function
+    | Const (_, (x, exp)) -> not (is_id x || is_exp exp)
+    | Assign (_, (x0, x1, func, arg)) ->
+        not (is_id x0 || is_id x1 || is_func func || is_arg arg)
+    | Void (_, (x, func, arg)) -> not (is_id x || is_func func || is_arg arg)
+    | Skip _ -> true
+    | Stmt _ -> false
+
+  let ground g = G.fold_vertex (fun n check -> check && ground_stmt n) g true
+
+  let assign_ground_stmt = function
+    | Const (_, (x, exp)) -> not (is_id x || is_exp exp)
+    | Assign (_, (x0, x1, func, arg)) ->
+        not (is_id x0 || is_id x1 || is_func func || is_arg arg)
+    | Void (_, (x, func, arg)) -> not (is_id x || is_func func || is_arg arg)
+    | Skip _ -> true
+    | Stmt _ -> true
+
+  let assign_ground g =
+    G.fold_vertex (fun n check -> check && assign_ground_stmt n) g true
+
+  let with_withfuzz_stmt = function
+    | Const (_, (_, exp)) -> is_fuzz exp
+    | Assign _ -> false
+    | Void _ -> false
+    | Skip _ -> false
+    | Stmt _ -> false
+
+  let with_withfuzz g =
+    G.fold_vertex (fun n check -> check || with_withfuzz_stmt n) g false
+
+  let with_withloop_stmt = function
+    | Const (_, (_, exp)) -> is_loop exp
+    | Assign _ -> false
+    | Void _ -> false
+    | Skip _ -> false
+    | Stmt _ -> false
+
+  let with_withloop g =
+    G.fold_vertex (fun n check -> check || with_withloop_stmt n) g false
+
+  let rec count_nt_stmt = function
+    | Const (_, (x, exp)) -> count_id x + count_exp exp
+    | Assign (_, (x0, x1, func, _)) ->
+        count_id x0 + count_id x1 + count_func func
+    | Void (_, (x, func, _)) -> count_id x + count_func func
+    | Skip _ -> 0
+    | Stmt _ -> 0
+
+  and count_func = function Func -> 1 | _ -> 0
+
+  and count_id = function Id -> 1 | _ -> 0
+
+  and count_exp = function Exp -> 1 | _ -> 0
+
+  let count_nt g = G.fold_vertex (fun n cnt -> count_nt_stmt n + cnt) g 0
+
+  let rec count_t_stmt = function
+    | Const (_, (x, exp)) -> count_tid x + count_texp exp
+    | Assign (_, (x0, x1, f, _)) -> count_tid x0 + count_tid x1 + count_tf f
+    | Void (_, (x, f, _)) -> count_tid x + count_tf f
+    | Skip _ -> 0
+    | Stmt _ -> 0
+
+  and count_tf = function Func -> 0 | _ -> 1
+
+  and count_tid = function Id -> 0 | _ -> 1
+
+  and count_texp = function Exp -> 0 | _ -> 1
+
+  let count_t g = G.fold_vertex (fun n cnt -> count_t_stmt n + cnt) g 0
+
+  let rec count_params = function
+    | Assign (_, (_, _, _, p)) -> count_param p
+    | _ -> 0
+
+  and count_param = function Arg a -> List.length a | Param p -> List.length p
+
+  let get_stmt_num = function
+    | Const (num, _) -> num
+    | Assign (num, _) -> num
+    | Void (num, _) -> num
+    | Skip num -> num
+    | Stmt num -> num
+
+  let modify_import import v =
+    { import; variable = v.variable; field = v.field; summary = v.summary }
+
+  let is_array_init f = Utils.is_array_init (get_func f).method_name
+
+  let is_array_set f = Utils.is_array_set (get_func f).method_name
+
+  let is_file f =
+    let fname = (get_func f).method_name in
+    if Str.string_match (Str.regexp "java\\.io\\.File\\.<init>") fname 0 then
+      true
+    else false
+
+  (* ************************************** *
+     Checking for Synthesis Rules
+   * ************************************** *)
+
+  (* 1. x := Exp *)
+  let const = function
+    | Const (_, (x, exp)) -> is_id x |> not && is_exp exp
+    | _ -> false
+
+  (* 2. x := ID.F(ID) *)
+  let fcall_in_assign = function
+    | Assign (_, (x0, x1, func, arg)) ->
+        is_id x0 |> not && is_id x1 && is_func func && is_arg arg
+    | _ -> false
+
+  (* 3. x := ID.f(ID) *)
+  let recv_in_assign = function
+    | Assign (_, (x0, x1, func, arg)) ->
+        is_id x0 |> not && is_id x1 && is_func func |> not && is_arg arg
+    | _ -> false
+
+  (* 4. x0 := x1.f(ID) *)
+  let arg_in_assign = function
+    | Assign (_, (x0, x1, func, arg)) ->
+        is_id x0 |> not && is_id x1 |> not && is_func func |> not && is_arg arg
+    | _ -> false
+
+  (* 5. x0 := x1.f(arg); Stmt *)
+  let void g stmt =
+    let check_assign = function
+      | Assign (_, (x0, x1, func, arg)) ->
+          is_id x0 |> not
+          && is_id x1 |> not
+          && is_func func |> not
+          && is_arg arg |> not
+      | _ -> false
+    in
+    match stmt with
+    | Stmt _ ->
+        List.fold_left
+          (fun check stmt -> check_assign stmt || check)
+          false (G.pred g stmt)
+    | _ -> false
+
+  (* 6. ID.F(ID) *)
+  let fcall1_in_void = function
+    | Void (_, (x, func, arg)) -> is_id x && is_func func && is_arg arg
+    | _ -> false
+
+  (* 7. x.F(ID) *)
+  let fcall2_in_void = function
+    | Void (_, (x, func, arg)) -> is_id x |> not && is_func func && is_arg arg
+    | _ -> false
+
+  (* 8. ID.f(ID) *)
+  let recv_in_void = function
+    | Void (_, (x, func, arg)) -> is_id x && is_func func |> not && is_arg arg
+    | _ -> false
+
+  (* 9. x.f(ID) *)
+  let arg_in_void = function
+    | Void (_, (x, func, arg)) ->
+        is_id x |> not && is_func func |> not && is_arg arg
+    | _ -> false
+
+  (* ************************************** *
+     Basic Operations
+   * ************************************** *)
+
+  let add_vertex n g = G.add_vertex g n
+
+  let add_edge n1 n2 g = G.add_edge g n1 n2
+
+  let remove_vertex n g = G.remove_vertex g n
+
+  let remove_edge n1 n2 g = G.remove_edge g n1 n2
+
+  let pred n g = G.pred g n
+
+  let succ n g = G.succ g n
+
+  let add n1 n2 g =
+    let g' = add_vertex n1 g |> add_vertex n2 in
+    let succ = succ n1 g' in
+    let g' = List.fold_left (fun g succ' -> remove_edge n1 succ' g) g' succ in
+    let g' = List.fold_left (fun g succ' -> add_edge n2 succ' g) g' succ in
+    add_edge n1 n2 g'
+
+  let replace n1 n2 g =
+    if G.mem_vertex g n1 |> not then failwith "DUG replace: n1 is not in graph"
+    else
+      let pred = pred n1 g in
+      let succ = succ n1 g in
+      let g' = List.fold_left (fun g pred' -> remove_edge pred' n1 g) g pred in
+      let g' = List.fold_left (fun g succ' -> remove_edge n1 succ' g) g' succ in
+      let g' = remove_vertex n1 g' |> add_vertex n2 in
+      let g' = List.fold_left (fun g pred' -> G.add_edge g pred' n2) g' pred in
+      List.fold_left (fun g succ' -> G.add_edge g n2 succ') g' succ
+
+  let union g1 g2 =
+    let g' =
+      G.fold_vertex (fun n g -> add_vertex n g) g2 g1
+      |> G.fold_edges (fun n n' g -> add_edge n n' g) g2
+    in
+    G.fold_vertex
+      (fun n g ->
+        if G.out_degree g n = 0 && G.in_degree g n = 0 then remove_vertex n g
+        else g)
+      g' g'
+
+  let replace_and_union n1 n2 g1 g2 =
+    let g = replace n1 n2 g1 in
+    union g g2
+
+  let connect_and_union n g1 g2 =
+    union g1 g2
+    |> G.fold_vertex
+         (fun n' g -> if G.out_degree g2 n' <> 0 then g else add_edge n' n g)
+         g2
+
+  (* n1 is defined before n2 *)
+  let gt n1 n2 g =
+    Topological.fold
+      (fun node ((chk1, chk2), is_gt) ->
+        let chk1 = if n1 = node then true else chk1 in
+        let chk2 = if n2 = node then true else chk2 in
+        let is_gt =
+          if chk1 && not chk2 then true
+          else if (not chk1) && chk2 then false
+          else is_gt
+        in
+        ((chk1, chk2), is_gt))
+      g
+      ((false, false), false)
+    |> snd
+
+  let get_id n =
+    match n with
+    | Const (_, (id, _)) -> id
+    | Assign (_, (id, _, _, _)) -> id
+    | _ -> Id
+
+  let get_recv_id n = match n with Assign (_, (_, id, _, _)) -> id | _ -> Id
+
+  let is_similar n1 n2 =
+    let id1 = get_id n1 in
+    let id2 = get_id n2 in
+    if id1 = Id || id2 = Id then false
+    else if fst (get_vinfo id1) = fst (get_vinfo id2) then true
+    else false
+
+  let is_recv_similar n1 n2 =
+    let id1 = get_recv_id n1 in
+    let id2 = get_id n2 in
+    if id1 = Id || id2 = Id then false
+    else if fst (get_vinfo id1) = fst (get_vinfo id2) then true
+    else false
+
+  let get_already_nodes ?(is_recv = false) x g =
+    G.fold_vertex
+      (fun n cands ->
+        let check = if is_recv then is_recv_similar x n else is_similar x n in
+        if check then n :: cands else cands)
+      g []
+
+  let is_already_node ?(is_recv = false) std_node x g =
+    get_already_nodes ~is_recv x g
+    |> List.fold_left
+         (fun check n -> if gt n std_node g then true else check)
+         false
+
+  let find_node ?(is_recv = false) std_node x g =
+    (* return the node corresponding to variable x in graph g *)
+    get_already_nodes ~is_recv x g
+    |> List.fold_left
+         (fun found n -> if gt n std_node g then n else found)
+         (Skip 0)
+
+  (* ************************************** *
+     Synthesis Rules
+   * ************************************** *)
+
+  (* 2 *)
+  let const_rule1 s n graph =
+    match s with
+    | Const (num, (x, _)) ->
+        let s' = Const (num, (x, n)) in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  let const_rule2 s g graph =
+    match s with
+    | Const (num, (x, _)) ->
+        let s' = Const (num, (x, g)) in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  let const_rule2_1 s f arg graph =
+    match s with
+    | Const (num, (x, _)) ->
+        let g = ClassName ((get_func f).method_name |> Utils.get_class_name) in
+        let s' = Assign (num, (x, g, f, arg)) in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  let const_rule3 s graph =
+    match s with
+    | Const (num, (x, _)) ->
+        let s' = Const (num, (x, Null)) in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  let const_rule_loop s graph =
+    match s with
+    | Const (num, (x, _)) ->
+        let s' = Const (num, (x, WithLoop)) in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  (* 3 *)
+  let fcall_in_assign_rule s field f arg graph =
+    match s with
+    | Assign (num, (x0, x1, _, _)) ->
+        let new_x0 =
+          Variable
+            {
+              import = (get_v x0).import;
+              variable = (get_v x0).variable;
+              field;
+              summary = (get_v x0).summary;
+            }
+        in
+        let s' = Assign (num, (new_x0, x1, f, arg)) in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  (* TODO: change function name to fcall_in_assign_rule_mock *)
+  let mk_mock_statement s graph =
+    match s with
+    | Assign (num, (x0, _, _, _)) ->
+        let class_name = get_vinfo x0 |> fst |> get_class_name in
+        let f = mk_f "" "mock" "" empty_summary in
+        let variable = (Var (NonType, class_name), None) in
+        let arg = Param [ mk_var "" variable FieldSet.empty empty_summary ] in
+        let s' = Assign (num, (x0, ClassName "Mockito", f, arg)) in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  (* 4 *)
+  let get_field_from_ufmap target var ufmap =
+    let symbol =
+      Condition.M.fold
+        (fun sym id find ->
+          match id with Condition.RH_Var i when i = target -> sym | _ -> find)
+        var Condition.RH_Any
+    in
+    match UseFieldMap.M.find_opt symbol ufmap with
+    | Some f -> f
+    | _ -> FieldSet.empty
+
+  let recv_in_assign_rule1 s c graph =
+    match s with
+    | Assign (num, (x0, _, func, arg)) ->
+        let s' = Assign (num, (x0, c, func, arg)) in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  let recv_in_assign_rule2 s id idx graph =
+    match s with
+    | Assign (num, (x0, _, func, arg)) ->
+        let typ = match func with Func -> "" | F f -> f.typ in
+        let x1_field =
+          match func with
+          | Func -> FieldSet.empty
+          | F f ->
+              get_field_from_ufmap "this" (fst f.summary.precond)
+                f.summary.use_field
+        in
+        let x1 =
+          Variable
+            (mk_var
+               (match func with Func -> "" | F f -> f.import)
+               (Var (Object typ, id), Some idx)
+               x1_field
+               (match func with Func -> empty_summary | F f -> f.summary))
+        in
+        (* edge: const(s'') -> assign(s') *)
+        let s' = Assign (num, (x0, x1, func, arg)) in
+        let s'' = Const (num + 1, (x1, Exp)) in
+        (s', replace s s' graph |> add s'' s')
+    | _ -> (s, graph)
+
+  let recv_in_assign_rule2_1 s x1 f arg graph =
+    (* x1: inner receiver *)
+    match s with
+    | Assign (num, (x0, _, _, _)) ->
+        (* edge: const(s'') -> assign(s') *)
+        let s' = Assign (num, (x0, x1, f, arg)) in
+        let s'' = Const (num + 1, (x1, Exp)) in
+        (s', replace s s' graph |> add s'' s')
+    | _ -> (s, graph)
+
+  let recv_in_assign_rule3 s id idx graph =
+    match s with
+    | Assign (num, (x0, _, func, arg)) ->
+        let typ = match func with Func -> "" | F f -> f.typ in
+        let x1_field =
+          match func with
+          | Func -> FieldSet.empty
+          | F f ->
+              get_field_from_ufmap "this" (fst f.summary.precond)
+                f.summary.use_field
+        in
+        let x1 =
+          Variable
+            (mk_var
+               (match func with Func -> "" | F f -> f.import)
+               (Var (Object typ, id), Some idx)
+               x1_field
+               (match func with Func -> empty_summary | F f -> f.summary))
+        in
+        (* edge: assign(s'') --> stmt(s''') --> assign(s') *)
+        let s' = Assign (num, (x0, x1, func, arg)) in
+        let s'' = Stmt (num + 2) in
+        let s''' = Assign (num + 1, (x1, Id, Func, Arg [])) in
+        (s', replace s s' graph |> add s'' s' |> add s''' s'')
+    | _ -> (s, graph)
+
+  let recv_in_assign_rule3_1 s x1 f arg graph =
+    (* x1: inner receiver *)
+    match s with
+    | Assign (num, (x0, _, _, _)) ->
+        (* edge: assign(s'') --> stmt(s''') --> assign(s') *)
+        let s' = Assign (num, (x0, x1, f, arg)) in
+        let s'' = Stmt (num + 2) in
+        let s''' = Assign (num + 1, (x1, Id, Func, Arg [])) in
+        (s', replace s s' graph |> add s'' s' |> add s''' s'')
+    | _ -> (s, graph)
+
+  let recv_in_assign_rule4 s x1 graph =
+    match s with
+    | Assign (num, (x0, _, func, arg)) ->
+        (* receiver recycle *)
+        let x1_node = find_node ~is_recv:true s x1 graph in
+        let new_x1 = get_id x1_node in
+        let s' = Assign (num, (x0, new_x1, func, arg)) in
+        (s', replace s s' graph |> add x1_node s')
+    | _ -> (s, graph)
+
+  (* 5, 9 *)
+  let mk_const_arg num arg graph =
+    let s' = Const (num + 1, (arg, Exp)) in
+    G.add_vertex graph s'
+
+  let mk_assign_arg num arg graph =
+    let s' = Stmt (num + 2) in
+    let s'' = Assign (num + 1, (arg, Id, Func, Arg [])) in
+    add s'' s' graph
+
+  let mk_already_arg s x graph arg_graph =
+    let x_node = find_node s x graph in
+    G.add_vertex arg_graph x_node
+
+  let arg_in_assign_rule s arg_seq arg graph =
+    match s with
+    | Assign (num, (x0, x1, func, _)) ->
+        let s' = Assign (num, (x0, x1, func, arg)) in
+        let rep_graph = replace s s' graph in
+        (s', connect_and_union s' rep_graph arg_seq)
+    | _ -> (s, graph)
+
+  let arg_in_void_rule s arg_seq arg graph =
+    match s with
+    | Void (num, (x, func, _)) ->
+        let s' = Void (num, (x, func, arg)) in
+        let rep_graph = replace s s' graph in
+        (s', connect_and_union s' rep_graph arg_seq)
+    | _ -> (s, graph)
+
+  (* 6 *)
+
+  let new_id id summary =
+    Variable
+      {
+        import = (get_v id).import;
+        variable = (get_v id).variable;
+        field = (get_v id).field;
+        summary;
+      }
+
+  let new_field id field =
+    Variable
+      {
+        import = (get_v id).import;
+        variable = (get_v id).variable;
+        field;
+        summary = (get_v id).summary;
+      }
+
+  let void_rule1 s graph =
+    match s with
+    | Stmt num ->
+        let s' = Skip num in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  let rec void_rule2 prev_s s graph =
+    match s with
+    | Stmt num_s -> (
+        match prev_s with
+        | Assign (num_a, (x0, x1, f, arg)) when is_array_init f ->
+            void_rule2_array prev_s s num_a num_s x0 x1 f arg graph
+        | Assign (_, (x0, _, _, _)) ->
+            (prev_s, void_rule2_normal s num_s x0 graph)
+        | _ -> (prev_s, graph))
+    | _ -> (prev_s, graph)
+
+  and void_rule2_normal s ns x0 graph =
+    let s' = Void (ns, (x0, Func, Arg [])) in
+    let s'' = Stmt (ns + 1) in
+    replace s s'' graph |> add s'' s'
+
+  and void_rule2_array prev_s s na ns x0 x1 f arg graph =
+    let arr_id = get_vinfo x0 |> snd in
+    let new_idx, new_elem = get_array_index arr_id (get_v x0).summary in
+    (* remove setter of duplicate index *)
+    if FieldSet.mem (snd new_idx |> get_index_value) (get_v x0).field then
+      (prev_s, graph)
+    else
+      let nfield =
+        FieldSet.add (snd new_idx |> get_index_value) (get_v x0).field
+      in
+      let new_next_summary =
+        next_summary_in_void (get_v x0).summary
+          (remove_array_index arr_id (fst new_idx) (get_v x0).summary)
+      in
+      let new_current_summary =
+        current_summary_in_assign (get_v x0).summary
+          (array_field_var (get_v x0).summary (new_idx, new_elem))
+          (array_current_mem (get_v x0).summary (new_idx, new_elem))
+      in
+      let assign =
+        Assign (na, (new_id (new_field x0 nfield) new_next_summary, x1, f, arg))
+      in
+      let s' = Void (ns, (new_id x0 new_current_summary, Func, Arg [])) in
+      let s'' = Stmt (ns + 1) in
+      (assign, replace prev_s assign graph |> replace s s'' |> add s'' s')
+
+  (* 7 *)
+  let fcall_in_void_rule s f arg graph =
+    match s with
+    | Void (num, (x0, _, _)) ->
+        let s' = Void (num, (x0, f, arg)) in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  (* 8 *)
+  let recv_in_void_rule1 s c graph =
+    match s with
+    | Void (num, (_, func, arg)) ->
+        let s' = Void (num, (c, func, arg)) in
+        (s', replace s s' graph)
+    | _ -> (s, graph)
+
+  let recv_in_void_rule2 s id idx graph =
+    match s with
+    | Void (num, (_, func, arg)) ->
+        let typ = match func with Func -> "" | F f -> f.typ in
+        let x_field =
+          match func with
+          | Func -> FieldSet.empty
+          | F f ->
+              get_field_from_ufmap "this" (fst f.summary.precond)
+                f.summary.use_field
+        in
+        let x =
+          Variable
+            (mk_var
+               (match func with Func -> "" | F f -> f.import)
+               (Var (Object typ, id), Some idx)
+               x_field
+               (match func with Func -> empty_summary | F f -> f.summary))
+        in
+        let s' = Void (num, (x, func, arg)) in
+        let s'' = Const (num + 1, (x, Exp)) in
+        (s', replace s s' graph |> add s'' s')
+    | _ -> (s, graph)
+
+  let recv_in_void_rule3 s id idx graph =
+    match s with
+    | Void (num, (_, func, arg)) ->
+        let typ = match func with Func -> "" | F f -> f.typ in
+        let x_field =
+          match func with
+          | Func -> FieldSet.empty
+          | F f ->
+              get_field_from_ufmap "this" (fst f.summary.precond)
+                f.summary.use_field
+        in
+        let x =
+          Variable
+            (mk_var
+               (match func with Func -> "" | F f -> f.import)
+               (Var (Object typ, id), Some idx)
+               x_field
+               (match func with Func -> empty_summary | F f -> f.summary))
+        in
+        let s' = Void (num, (x, func, arg)) in
+        let s'' = Stmt (num + 2) in
+        let s''' = Assign (num + 1, (x, Id, Func, Arg [])) in
+        (s', replace s s' graph |> add s''' s'' |> add s'' s')
+    | _ -> (s, graph)
+
+  (* ************************************** *
+     Return Code
+   * ************************************** *)
+
+  let get_method_name m =
+    Regexp.first_rm (Str.regexp "(.*)") m
+    |> Str.split Regexp.dot |> List.rev |> List.hd
+
+  let get_short_class_name c =
+    Regexp.first_rm (Str.regexp "\\.<init>(.*)") c
+    |> Str.split Regexp.dot |> List.rev |> List.hd
+
+  let array_code dim content =
+    let rec code d = if d = 0 then "" else "[" ^ content ^ "]" ^ code (d - 1) in
+    code dim
+
+  let arg_code f arg =
+    let cc code x idx = code ^ ", " ^ x ^ string_of_int idx in
+    match arg with
+    | Param p ->
+        let param =
+          List.fold_left
+            (fun pc p ->
+              match p.variable with
+              | Var (_, id), None ->
+                  (id |> get_short_class_name) ^ ".class" (* mock *)
+              | Var (_, id), Some idx -> cc pc id idx
+              | _ -> pc)
+            "" p
+          |> Regexp.rm_first_rest
+        in
+        if is_array_init f then
+          array_code
+            (Utils.get_array_dim_from_class_name (get_func f).typ)
+            param
+        else if is_array_set f then
+          let lst = Str.split Regexp.bm param in
+          array_code
+            (Utils.get_array_dim_from_class_name (get_func f).typ)
+            (List.hd lst |> Regexp.rm_space)
+          ^ " = "
+          ^ (List.tl lst |> List.hd |> Regexp.rm_space)
+        else "(" ^ param ^ ")"
+    | Arg x -> "Arg(" ^ (List.length x |> string_of_int) ^ ")"
+
+  let func_code func =
+    match func with
+    | F f ->
+        if is_array_init func then
+          Utils.rm_object_array_import f.typ
+          |> Str.split Regexp.dot |> List.rev |> List.hd
+          |> Regexp.first_rm (Str.regexp "Array[0-9]*")
+          |> Utils.get_array_class_name |> String.cat "new "
+        else if is_array_set func then ""
+        else if Utils.is_init_method f.method_name then
+          get_short_class_name f.method_name
+          |> Utils.replace_nested_symbol |> String.cat "new "
+        else get_method_name f.method_name |> Utils.replace_nested_symbol
+    | _ -> "Func"
+
+  let is_var = function Variable _ -> true | _ -> false
+
+  and is_cn = function ClassName _ -> true | _ -> false
+
+  let var_code v =
+    let v =
+      match v.variable with
+      | Var (typ, id), Some idx -> (typ, id ^ string_of_int idx)
+      | _, None -> (NonType, "")
+      | This _, _ -> (NonType, "")
+    in
+    match fst v with
+    | Int -> "int " ^ snd v
+    | Long -> "long " ^ snd v
+    | Short -> "short " ^ snd v
+    | Byte -> "byte " ^ snd v
+    | Float -> "float " ^ snd v
+    | Double -> "double " ^ snd v
+    | Bool -> "boolean " ^ snd v
+    | Char -> "char " ^ snd v
+    | String -> "String " ^ snd v
+    | Object name ->
+        (get_short_class_name name |> Utils.replace_nested_symbol) ^ " " ^ snd v
+    | Array typ -> (
+        match get_array_typ typ with
+        | Int -> "int" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Long -> "long" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Short -> "short" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Byte -> "byte" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Float -> "float" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Double -> "double" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Char -> "char" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | String -> "String" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+        | Object name ->
+            (get_short_class_name name |> Utils.replace_nested_symbol)
+            ^ array_code (get_array_dim typ) ""
+            ^ " " ^ snd v
+        | _ -> "")
+    | _ -> ""
+
+  let recv_name_code recv func =
+    match recv with
+    | Variable v -> (
+        match v.variable with
+        | Var (_, id), Some idx when is_array_set func -> id ^ string_of_int idx
+        | Var (_, id), Some idx -> id ^ string_of_int idx ^ "."
+        | _ -> "")
+    | ClassName c when c = "Mockito" -> "" (* mock *)
+    | ClassName c ->
+        (get_short_class_name c |> Utils.replace_nested_symbol) ^ "."
+    | _ -> "ID."
+
+  let id_code = function
+    | Variable v -> var_code v
+    | ClassName c -> c
+    | Id -> "ID"
+
+  let primitive_code p x =
+    match p with
+    | Z z -> (
+        match get_vinfo x |> fst with
+        | Bool -> if z = 0 then string_of_bool false else string_of_bool true
+        | String -> "\"" ^ string_of_int z ^ "\""
+        | _ -> string_of_int z)
+    | R r ->
+        (* e.g., float --> 0.f, double --> 0. *)
+        let type_cast =
+          match get_vinfo x |> fst with Float -> "f" | _ -> ""
+        in
+        string_of_float r ^ type_cast
+    | B b -> string_of_bool b
+    | C c -> "\'" ^ String.make 1 c ^ "\'"
+    | S s ->
+        let replace s =
+          Str.global_replace (Str.regexp "\\") "\\\\\\\\" s
+          |> Str.global_replace (Str.regexp "\"") "\\\""
+          |> Str.global_replace (Str.regexp "\'") "\\\'"
+        in
+        "\"" ^ replace s ^ "\""
+
+  let loop_id_lval_code v =
+    match (get_v v).variable with
+    | Var (typ, id), Some idx -> (typ, "unitcon_" ^ id ^ string_of_int idx)
+    | _, None -> (NonType, "")
+    | This _, _ -> (NonType, "")
+
+  let exp_code exp x =
+    match exp with
+    | Primitive p -> primitive_code p x
+    | GlobalConstant g -> Utils.replace_nested_symbol g
+    | Null -> (
+        (* If type inference from the summaries is fail,
+           correct it in the code output step. *)
+        match get_vinfo x |> fst with
+        | Int | Short | Byte | Char -> "0"
+        | Long -> "0l"
+        | Float -> "0.f"
+        | Double -> "0."
+        | Bool -> "false"
+        | _ -> "null")
+    | WithFuzz ->
+        if !Cmdline.with_fuzz then
+          match get_vinfo x |> fst with
+          | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
+              get_consume_func (get_vinfo x |> fst)
+          | _ -> "Exp"
+        else "Exp"
+    | WithLoop ->
+        if !Cmdline.with_loop then
+          let v_type, v_id = loop_id_lval_code x in
+          match v_type with
+          | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
+              v_id ^ "_comb[" ^ v_id ^ "_index]"
+          | _ -> "Exp"
+        else "Exp"
+    | Exp -> "Exp"
+
+  let code = function
+    | Const (_, (x, exp)) -> id_code x ^ " = " ^ exp_code exp x ^ ";\n"
+    | Assign (_, (x0, x1, func, arg)) ->
+        if is_var x1 then
+          id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
+          ^ arg_code func arg ^ ";\n"
+        else if Utils.is_init_method (get_func func).method_name then
+          let code =
+            id_code x0 ^ " = " ^ func_code func ^ arg_code func arg ^ ";\n"
+          in
+          if is_file func then
+            code ^ recv_name_code x0 func ^ "createNewFile();\n"
+          else code
+        else
+          id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
+          ^ arg_code func arg ^ ";\n"
+    | Void (_, (x, func, arg)) ->
+        if Utils.is_init_method (get_func func).method_name then
+          func_code func ^ arg_code func arg ^ ";\n"
+        else recv_name_code x func ^ func_code func ^ arg_code func arg ^ ";\n"
+    | Skip _ -> ""
+    | Stmt _ -> "Stmt"
+
+  let loop_id_code loop_id exp_list =
+    let v = loop_id_lval_code loop_id in
+    let lval =
+      match fst v with
+      | Int -> "int[] " ^ snd v
+      | Long -> "long[] " ^ snd v
+      | Short -> "short[] " ^ snd v
+      | Byte -> "byte[] " ^ snd v
+      | Float -> "float[] " ^ snd v
+      | Double -> "double[] " ^ snd v
+      | Bool -> "boolean[] " ^ snd v
+      | Char -> "char[] " ^ snd v
+      | String -> "String[] " ^ snd v
+      | Object name ->
+          (get_short_class_name name |> Utils.replace_nested_symbol)
+          ^ "[] " ^ snd v
+      | _ -> ""
+    in
+    let rec rval id exps =
+      match exps with hd :: tl -> ", " ^ exp_code hd id ^ rval id tl | _ -> ""
+    in
+    let comb_func_name = function
+      | Int -> "Int"
+      | Long -> "Long"
+      | Short -> "Short"
+      | Byte -> "Byte"
+      | Float -> "Float"
+      | Double -> "Double"
+      | Char -> "Char"
+      | Bool -> "Bool"
+      | String -> "String"
+      | _ -> ""
+    in
+    lval ^ " = " ^ "{"
+    ^ Regexp.rm_first_rest (rval loop_id exp_list)
+    ^ "};\n" ^ lval ^ "_comb = UnitconCombinator.combine"
+    ^ comb_func_name (fst v)
+    ^ "(" ^ snd v ^ ");\n"
+
+  let topological_code g =
+    Topological.fold (fun node codes -> codes ^ code node) g ""
+end

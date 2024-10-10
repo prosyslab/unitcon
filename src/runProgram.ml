@@ -416,246 +416,6 @@ let simple_compiler program_dir command =
   Sys.chdir current_dir;
   (ic_out, ic_err)
 
-let get_package p = if p = "" then p else "package " ^ p ^ ";\n"
-
-let get_imports i_set =
-  let is_default_path i = String.contains i '.' |> not in
-  let str_set =
-    ImportSet.fold
-      (fun i s ->
-        let path = Utils.rm_object_array_import i in
-        if i = "" || (Utils.is_array i && path = i) || is_default_path i then s
-        else
-          ImportSet.add ("import " ^ Utils.replace_nested_symbol path ^ ";\n") s)
-      i_set ImportSet.empty
-  in
-  let init =
-    if !Cmdline.mock then "import static org.mockito.Mockito.mock;\n" else ""
-  in
-  ImportSet.fold (fun i s -> s ^ i) str_set init
-
-let need_default_interface tc_body =
-  match Str.search_forward (Str.regexp "UnitconInterface") tc_body 0 with
-  | exception _ -> ()
-  | _ -> require_interface_class := true
-
-let need_default_enum tc_body =
-  match Str.search_forward (Str.regexp "UnitconEnum") tc_body 0 with
-  | exception _ -> ()
-  | _ -> require_enum_class := true
-
-let need_default_class tc_body =
-  need_default_interface tc_body;
-  need_default_enum tc_body
-
-let insert_test oc (file_num, tc, time) =
-  let insert oc (i_set, m_bodies) =
-    let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
-    let start = "@Test\npublic void test() {\n" in
-    need_default_class m_bodies;
-    get_package !Cmdline.extension |> output_string oc;
-    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
-    get_imports i_set ^ "import org.junit.Test;\n\n" |> output_string oc;
-    output_string oc time;
-    "public class UnitconTest" ^ string_of_int file_num ^ " {\n"
-    |> output_string oc;
-    start ^ "try {\n" ^ m_bodies
-    ^ "}\ncatch(Exception e) {\ne.printStackTrace();\n}\n" ^ "}\n}\n"
-    |> output_string oc;
-    flush oc;
-    close_out oc
-  in
-  insert oc tc
-
-let insert_loop loop_id =
-  let lval = AST.loop_id_lval_code loop_id in
-  let id = snd lval in
-  let index = id ^ "_index" in
-  let init = index ^ " = 0; " in
-  let cond = index ^ " < " ^ id ^ "_comb.length; " in
-  let incr = index ^ "++" in
-  "for(int " ^ init ^ cond ^ incr ^ ") {\n"
-
-let insert_loops loop_id_map =
-  AST.LoopIdMap.M.fold
-    (fun id _ (code, count) -> (code ^ insert_loop id, count + 1))
-    loop_id_map ("", 0)
-
-let rec close_bracket count =
-  if count <= 0 then "" else "}\n" ^ close_bracket (count - 1)
-
-let insert_multi_test_log loop_id_map =
-  let end_signal = "System.err.println(\"-----LogEnd-----\");\n" in
-  let log lval =
-    let id = snd lval in
-    "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " ^ id ^ "_comb["
-    ^ id ^ "_index" ^ "]" ^ ");\n"
-  in
-  AST.LoopIdMap.M.fold
-    (fun id _ code -> log (AST.loop_id_lval_code id) ^ code)
-    loop_id_map end_signal
-
-let print_stack_trace bug_type log =
-  let bug =
-    try bug_type |> Str.split (Str.regexp "\\.") |> List.rev |> List.hd
-    with _ -> ""
-  in
-  let typ = if bug = "" then "Exception" else bug in
-  let common =
-    "catch(" ^ typ ^ " e) {\n" ^ "System.err.println(e.toString());\n"
-    ^ "StackTraceElement[] stackTrace = e.getStackTrace();\n"
-    ^ "for (int i = 0; i < stackTrace.length; i++) {\n"
-    ^ "if ((stackTrace[i].toString()).contains(\"UnitconMultiTest\")) break;\n"
-    ^ "System.err.println(\"at \" + stackTrace[i]);\n" ^ "}\n" ^ log ^ "}\n"
-  in
-  if bug = "" then common else common ^ "catch(Exception e) { }\n"
-
-let insert_multi_test oc (file_num, tc, loop_id_map, time) =
-  let insert oc (i_set, m_bodies) =
-    let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
-    let start = "@Test\npublic void test() {\n" in
-    let array_for_loop =
-      AST.LoopIdMap.M.fold
-        (fun id exps code -> code ^ AST.loop_id_code id exps)
-        loop_id_map ""
-    in
-    let loop_stmt, loop_cnt = insert_loops loop_id_map in
-    let loop_input_log = insert_multi_test_log loop_id_map in
-    let bug_type =
-      (* ref: get_bug_type, nested exception can not catch ... *)
-      match Str.search_forward Regexp.dollar !bug_type 0 with
-      | exception Not_found -> !bug_type
-      | _ -> ""
-    in
-    let import =
-      let common = get_imports i_set ^ "import org.junit.Test;\n" in
-      if bug_type = "" then common ^ "\n"
-      else common ^ "import " ^ bug_type ^ ";\n\n"
-    in
-    need_default_class m_bodies;
-    get_package !Cmdline.extension |> output_string oc;
-    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
-    import |> output_string oc;
-    output_string oc time;
-    "public class UnitconMultiTest" ^ string_of_int file_num ^ " {\n"
-    |> output_string oc;
-    start ^ array_for_loop ^ loop_stmt ^ "try {\n" ^ m_bodies ^ "}\n"
-    ^ print_stack_trace bug_type loop_input_log
-    ^ close_bracket loop_cnt ^ "}\n}\n"
-    |> output_string oc;
-    flush oc;
-    close_out oc
-  in
-  insert oc tc
-
-let insert_driver oc (file_num, tc, time) =
-  let insert oc (i_set, m_bodies) =
-    let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
-    let start =
-      "public static void fuzzerTestOneInput(FuzzedDataProvider data) throws \
-       Exception, Throwable {\n"
-    in
-    need_default_class m_bodies;
-    get_package !Cmdline.extension |> output_string oc;
-    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
-    get_imports i_set
-    ^ "import com.code_intelligence.jazzer.api.FuzzedDataProvider;\n\n"
-    |> output_string oc;
-    output_string oc time;
-    "public class UnitconDriver" ^ string_of_int file_num ^ " {\n"
-    |> output_string oc;
-    start ^ m_bodies ^ "}\n}\n" |> output_string oc;
-    flush oc;
-    close_out oc
-  in
-  insert oc tc
-
-let insert_log_driver oc (file_num, tc, time) =
-  let get_id stmt =
-    if check_substring "data\\.consume" stmt then
-      Str.split (Str.regexp " ") stmt |> List.tl |> List.hd |> Regexp.rm_space
-    else ""
-  in
-  let log id = "System.err.println(\"Log=\" + " ^ id ^ ");\n" in
-  let rec add_log lst =
-    match lst with
-    | hd :: tl ->
-        let id = get_id hd in
-        if id <> "" then hd ^ "\n" ^ log id ^ add_log tl
-        else hd ^ "\n" ^ add_log tl
-    | _ -> ""
-  in
-  let insert oc (i_set, m_bodies) =
-    let time = "/* Duration of synthesis: " ^ string_of_float time ^ "*/\n" in
-    let start =
-      "public static void fuzzerTestOneInput(FuzzedDataProvider data) throws \
-       Exception, Throwable {\n"
-    in
-    get_package !Cmdline.extension |> output_string oc;
-    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
-    get_imports i_set
-    ^ "import com.code_intelligence.jazzer.api.FuzzedDataProvider;\n\n"
-    |> output_string oc;
-    output_string oc time;
-    "public class UnitconDriver" ^ string_of_int file_num ^ " {\n"
-    |> output_string oc;
-    let modified_m_bodies = Str.split (Str.regexp "\n") m_bodies |> add_log in
-    start ^ modified_m_bodies ^ "}\n}\n" |> output_string oc;
-    flush oc;
-    close_out oc
-  in
-  insert oc tc
-
-let add_default_class test_dir =
-  let need_default_interface () =
-    if !require_interface_class then (
-      let oc = open_out (Filename.concat test_dir "UnitconInterface.java") in
-      get_package !Cmdline.extension |> output_string oc;
-      output_string oc "interface UnitconInterface {}\n";
-      close_out oc)
-  in
-  let need_default_enum () =
-    if !require_enum_class then (
-      let oc = open_out (Filename.concat test_dir "UnitconEnum.java") in
-      get_package !Cmdline.extension |> output_string oc;
-      output_string oc "enum UnitconEnum {}\n";
-      close_out oc)
-  in
-  need_default_interface ();
-  need_default_enum ()
-
-let add_testcase test_dir file_num (tc, time) =
-  let oc =
-    open_out
-      (Filename.concat test_dir
-         (test_basename ^ string_of_int file_num ^ ".java"))
-  in
-  insert_test oc (file_num, tc, time)
-
-let add_multi_testcase test_dir file_num (tc, loop_ids, time) =
-  let oc =
-    open_out
-      (Filename.concat test_dir
-         (multi_test_basename ^ string_of_int file_num ^ ".java"))
-  in
-  insert_multi_test oc (file_num, tc, loop_ids, time)
-
-let add_driver driver_dir file_num (tc, time) =
-  let oc =
-    open_out
-      (Filename.concat driver_dir
-         (driver_basename ^ string_of_int file_num ^ ".java"))
-  in
-  insert_driver oc (file_num, tc, time)
-
-let add_log_driver driver_dir file_num (tc, time) =
-  let oc =
-    open_out
-      (Filename.concat driver_dir
-         (driver_basename ^ string_of_int file_num ^ ".java"))
-  in
-  insert_log_driver oc (file_num, tc, time)
-
 let get_compilation_error_files data =
   let get_f_name line =
     String.split_on_char ':' line |> List.hd |> Filename.basename
@@ -711,6 +471,49 @@ let checking_bug_presence error_trace expected_bug =
     && check_target_method_presence error_trace
     && check_useless_npe error_trace |> not
   else compare_stack_trace (string_of_expected_bug expected_bug) error_trace
+
+let is_empty_file file =
+  if not (Sys.file_exists file) then failwith (file ^ " not found");
+  let ic = open_in file in
+  let s = really_input_string ic (in_channel_length ic) in
+  close_in ic;
+  if Regexp.rm_space s = "" then true else false
+
+(* ************************************** *
+   make test contents
+ * ************************************** *)
+
+let get_package p = if p = "" then p else "package " ^ p ^ ";\n"
+
+let get_imports i_set =
+  let is_default_path i = String.contains i '.' |> not in
+  let str_set =
+    ImportSet.fold
+      (fun i s ->
+        let path = Utils.rm_object_array_import i in
+        if i = "" || (Utils.is_array i && path = i) || is_default_path i then s
+        else
+          ImportSet.add ("import " ^ Utils.replace_nested_symbol path ^ ";\n") s)
+      i_set ImportSet.empty
+  in
+  let init =
+    if !Cmdline.mock then "import static org.mockito.Mockito.mock;\n" else ""
+  in
+  ImportSet.fold (fun i s -> s ^ i) str_set init
+
+let need_default_interface tc_body =
+  match Str.search_forward (Str.regexp "UnitconInterface") tc_body 0 with
+  | exception _ -> ()
+  | _ -> require_interface_class := true
+
+let need_default_enum tc_body =
+  match Str.search_forward (Str.regexp "UnitconEnum") tc_body 0 with
+  | exception _ -> ()
+  | _ -> require_enum_class := true
+
+let need_default_class tc_body =
+  need_default_interface tc_body;
+  need_default_enum tc_body
 
 let get_const_sequence tc =
   let consume_func t =
@@ -776,42 +579,186 @@ let driver_to_tc typs inputs tc =
   in
   func_to_value typs inputs tc
 
-let str_to_primitive v value =
-  match AST.get_vinfo v |> fst with
-  | Int | Long | Short | Byte -> AST.Primitive (Z (int_of_string value))
-  | Float | Double -> AST.Primitive (R (float_of_string value))
-  | Bool -> AST.Primitive (B (bool_of_string value))
-  | Char -> AST.Primitive (C value.[0])
-  | String -> if value = "null" then AST.Null else AST.Primitive (S value)
-  | _ -> failwith "Fail: convert string to primitive"
-
-let get_id_to_be_modified v id =
-  (* array_id, index_id *)
-  match AST.get_vinfo v |> fst with
-  | Int | Long | Short | Byte | Float | Double | Bool | Char | String ->
-      (id ^ "_comb", id ^ "_index")
-  | _ -> failwith "Fail: get id to be modified"
-
-let loop_value_to_tc rep_input loop_id_map tc =
-  let find_id str_id =
-    AST.LoopIdMap.M.fold
-      (fun id _ found ->
-        if str_id = (AST.loop_id_lval_code id |> snd) then id else found)
-      loop_id_map AST.Id
+let insert_test oc (file_num, tc, time) =
+  let insert oc (i_set, m_bodies) =
+    let time = "/* Duration of synthesis: " ^ string_of_float time ^ " */\n" in
+    let start = "@Test\npublic void test() {\n" in
+    need_default_class m_bodies;
+    get_package !Cmdline.extension |> output_string oc;
+    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
+    get_imports i_set ^ "import org.junit.Test;\n\n" |> output_string oc;
+    output_string oc time;
+    "public class UnitconTest" ^ string_of_int file_num ^ " {\n"
+    |> output_string oc;
+    start ^ "try {\n" ^ m_bodies
+    ^ "}\ncatch(Exception e) {\ne.printStackTrace();\n}\n" ^ "}\n}\n"
+    |> output_string oc;
+    flush oc;
+    close_out oc
   in
-  List.fold_left
-    (fun old_tc (id, value) ->
-      let ast_id = find_id id in
-      let array_id, index_id = get_id_to_be_modified ast_id id in
-      let to_be_modified = array_id ^ "\\[" ^ index_id ^ "\\]" in
-      let real_input = str_to_primitive ast_id value in
-      let input_code = AST.exp_code real_input ast_id in
-      Str.replace_first (Str.regexp to_be_modified) input_code old_tc)
-    tc rep_input
+  insert oc tc
 
-(* return: (testcase * list(partial testcase)) *)
-let make_testcase ~is_start queue e_method_info program_info =
-  Generator.mk_testcases ~is_start queue e_method_info program_info
+let print_stack_trace bug_type log =
+  let bug =
+    try bug_type |> Str.split (Str.regexp "\\.") |> List.rev |> List.hd
+    with _ -> ""
+  in
+  let typ = if bug = "" then "Exception" else bug in
+  let common =
+    "catch(" ^ typ ^ " e) {\n" ^ "System.err.println(e.toString());\n"
+    ^ "StackTraceElement[] stackTrace = e.getStackTrace();\n"
+    ^ "for (int i = 0; i < stackTrace.length; i++) {\n"
+    ^ "if ((stackTrace[i].toString()).contains(\"UnitconMultiTest\")) break;\n"
+    ^ "System.err.println(\"at \" + stackTrace[i]);\n" ^ "}\n" ^ log ^ "}\n"
+  in
+  if bug = "" then common else common ^ "catch(Exception e) { }\n"
+
+let rec close_bracket count =
+  if count <= 0 then "" else "}\n" ^ close_bracket (count - 1)
+
+let insert_multi_test oc
+    (file_num, tc, (arrays, loop_stmt, loop_cnt, loop_input_log), time) =
+  let insert oc (i_set, m_bodies) =
+    let time = "/* Duration of synthesis: " ^ string_of_float time ^ " */\n" in
+    let start = "@Test\npublic void test() {\n" in
+    let bug_type =
+      (* ref: get_bug_type, nested exception can not catch ... *)
+      match Str.search_forward Regexp.dollar !bug_type 0 with
+      | exception Not_found -> !bug_type
+      | _ -> ""
+    in
+    let import =
+      let common = get_imports i_set ^ "import org.junit.Test;\n" in
+      if bug_type = "" then common ^ "\n"
+      else common ^ "import " ^ bug_type ^ ";\n\n"
+    in
+    need_default_class m_bodies;
+    get_package !Cmdline.extension |> output_string oc;
+    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
+    import |> output_string oc;
+    output_string oc time;
+    "public class UnitconMultiTest" ^ string_of_int file_num ^ " {\n"
+    |> output_string oc;
+    start ^ arrays ^ loop_stmt ^ "try {\n" ^ m_bodies ^ "}\n"
+    ^ print_stack_trace bug_type loop_input_log
+    ^ close_bracket loop_cnt ^ "}\n}\n"
+    |> output_string oc;
+    flush oc;
+    close_out oc
+  in
+  insert oc tc
+
+let insert_driver oc (file_num, tc, time) =
+  let insert oc (i_set, m_bodies) =
+    let time = "/* Duration of synthesis: " ^ string_of_float time ^ " */\n" in
+    let start =
+      "public static void fuzzerTestOneInput(FuzzedDataProvider data) throws \
+       Exception, Throwable {\n"
+    in
+    need_default_class m_bodies;
+    get_package !Cmdline.extension |> output_string oc;
+    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
+    get_imports i_set
+    ^ "import com.code_intelligence.jazzer.api.FuzzedDataProvider;\n\n"
+    |> output_string oc;
+    output_string oc time;
+    "public class UnitconDriver" ^ string_of_int file_num ^ " {\n"
+    |> output_string oc;
+    start ^ m_bodies ^ "}\n}\n" |> output_string oc;
+    flush oc;
+    close_out oc
+  in
+  insert oc tc
+
+let insert_log_driver oc (file_num, tc, time) =
+  let get_id stmt =
+    if check_substring "data\\.consume" stmt then
+      Str.split (Str.regexp " ") stmt |> List.tl |> List.hd |> Regexp.rm_space
+    else ""
+  in
+  let log id = "System.err.println(\"Log=\" + " ^ id ^ ");\n" in
+  let rec add_log lst =
+    match lst with
+    | hd :: tl ->
+        let id = get_id hd in
+        if id <> "" then hd ^ "\n" ^ log id ^ add_log tl
+        else hd ^ "\n" ^ add_log tl
+    | _ -> ""
+  in
+  let insert oc (i_set, m_bodies) =
+    let time = "/* Duration of synthesis: " ^ string_of_float time ^ " */\n" in
+    let start =
+      "public static void fuzzerTestOneInput(FuzzedDataProvider data) throws \
+       Exception, Throwable {\n"
+    in
+    get_package !Cmdline.extension |> output_string oc;
+    (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
+    get_imports i_set
+    ^ "import com.code_intelligence.jazzer.api.FuzzedDataProvider;\n\n"
+    |> output_string oc;
+    output_string oc time;
+    "public class UnitconDriver" ^ string_of_int file_num ^ " {\n"
+    |> output_string oc;
+    let modified_m_bodies = Str.split (Str.regexp "\n") m_bodies |> add_log in
+    start ^ modified_m_bodies ^ "}\n}\n" |> output_string oc;
+    flush oc;
+    close_out oc
+  in
+  insert oc tc
+
+let add_default_class test_dir =
+  let need_default_interface () =
+    if !require_interface_class then (
+      let oc = open_out (Filename.concat test_dir "UnitconInterface.java") in
+      get_package !Cmdline.extension |> output_string oc;
+      output_string oc "interface UnitconInterface {}\n";
+      close_out oc)
+  in
+  let need_default_enum () =
+    if !require_enum_class then (
+      let oc = open_out (Filename.concat test_dir "UnitconEnum.java") in
+      get_package !Cmdline.extension |> output_string oc;
+      output_string oc "enum UnitconEnum {}\n";
+      close_out oc)
+  in
+  need_default_interface ();
+  need_default_enum ()
+
+let add_testcase test_dir file_num (tc, time) =
+  let oc =
+    open_out
+      (Filename.concat test_dir
+         (test_basename ^ string_of_int file_num ^ ".java"))
+  in
+  insert_test oc (file_num, tc, time)
+
+let add_multi_testcase test_dir file_num (tc, loop_info, time) =
+  let oc =
+    open_out
+      (Filename.concat test_dir
+         (multi_test_basename ^ string_of_int file_num ^ ".java"))
+  in
+  insert_multi_test oc (file_num, tc, loop_info, time)
+
+let add_driver driver_dir file_num (tc, time) =
+  let oc =
+    open_out
+      (Filename.concat driver_dir
+         (driver_basename ^ string_of_int file_num ^ ".java"))
+  in
+  insert_driver oc (file_num, tc, time)
+
+let add_log_driver driver_dir file_num (tc, time) =
+  let oc =
+    open_out
+      (Filename.concat driver_dir
+         (driver_basename ^ string_of_int file_num ^ ".java"))
+  in
+  insert_log_driver oc (file_num, tc, time)
+
+(* ************************************** *
+   run test cases
+ * ************************************** *)
 
 let compile_cmd =
   "find ./unitcon_tests/ -name \"*.java\" > test_files; "
@@ -901,13 +848,6 @@ let multi_test_execute_cmd =
   "java -cp with_dependency.jar:./unitcon_multi_tests/:"
   ^ Filename.concat unitcon_path "deps/junit-4.11.jar:. "
   ^ "org.junit.runner.JUnitCore"
-
-let is_empty_file file =
-  if not (Sys.file_exists file) then failwith (file ^ " not found");
-  let ic = open_in file in
-  let s = really_input_string ic (in_channel_length ic) in
-  close_in ic;
-  if Regexp.rm_space s = "" then true else false
 
 let driver_execute_cmd d_file =
   let execute_cmd =
@@ -1051,65 +991,6 @@ let run_fuzzer () =
     (Unix.gettimeofday () -. compile_start);
   found_rep_file
 
-(* queue: (testcase * list(partial testcase)) *)
-let rec run_test ~is_start info queue e_method_info p_info =
-  let completion, tc, loop_id_map, tc_list =
-    make_testcase ~is_start queue e_method_info p_info
-  in
-  if completion = Need_Loop then (
-    (* clean before executing multi tests *)
-    remove_all_files info.multi_test_dir;
-    let _time = Unix.gettimeofday () -. !time in
-    incr num_of_multi_tc_files;
-    add_multi_testcase info.multi_test_dir !num_of_multi_tc_files
-      (tc, loop_id_map, _time);
-    let found_rep_input = run_multi_testfile () in
-    if found_rep_input = [] then
-      run_test ~is_start:false info tc_list e_method_info p_info
-    else
-      (* found crash input with loop *)
-      let new_tc = loop_value_to_tc found_rep_input loop_id_map (tc |> snd) in
-      let _time = Unix.gettimeofday () -. !time in
-      incr num_of_tc_files;
-      add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
-      if !num_of_tc_files mod 15 = 0 || !abnormal_keep_going then
-        run_testfile ()
-      else ();
-      run_test ~is_start:false info tc_list e_method_info p_info)
-  else if completion = Need_Fuzzer then (
-    (* clean before running fuzzer *)
-    remove_all_files info.driver_dir;
-    let _time = Unix.gettimeofday () -. !time in
-    incr num_of_driver_files;
-    add_driver info.driver_dir !num_of_driver_files (tc, _time);
-    let fuzz_seq = get_const_sequence (tc |> snd) in
-    let found_rep_file = run_fuzzer () |> Filename.remove_extension in
-    if found_rep_file = "" then
-      run_test ~is_start:false info tc_list e_method_info p_info
-    else
-      (* found crash input with fuzzer *)
-      let _time = Unix.gettimeofday () -. !time in
-      add_log_driver info.driver_dir !num_of_driver_files (tc, _time);
-      let input = run_reproducer found_rep_file in
-      incr num_of_tc_files;
-      let new_tc = driver_to_tc fuzz_seq input (tc |> snd) in
-      let _time = Unix.gettimeofday () -. !time in
-      add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
-      if !num_of_tc_files mod 15 = 0 || !abnormal_keep_going then
-        run_testfile ()
-      else ();
-      run_test ~is_start:false info tc_list e_method_info p_info)
-  else if completion = Incomplete then (
-    (* early stopping *)
-    if !num_of_last_exec_tc < !num_of_tc_files then run_testfile () else ();
-    Unix.kill (Unix.getpid ()) Sys.sigusr1)
-  else
-    let _time = Unix.gettimeofday () -. !time in
-    incr num_of_tc_files;
-    add_testcase info.test_dir !num_of_tc_files (tc, _time);
-    if !num_of_tc_files mod 15 = 0 then run_testfile () else ();
-    run_test ~is_start:false info tc_list e_method_info p_info
-
 (* force stop if generated test cases are not executed and only synthesis is long *)
 let abnormal_run_test =
   Sys.Signal_handle
@@ -1132,42 +1013,44 @@ let interrupt pid =
   Unix.sleep (!Cmdline.time_out - 10);
   Unix.kill pid Sys.sigusr2
 
-let run program_dir =
+let setup program_dir =
   (* for early stopping *)
   Sys.set_signal Sys.sigusr1 normal_exit;
   Sys.set_signal Sys.sigusr2 abnormal_run_test;
   Thread.create interrupt (Unix.getpid ()) |> ignore;
   time := Unix.gettimeofday ();
   init program_dir;
-  let method_info = parse_method_info !info.summary_file in
-  let type_info = Summary.from_method_type method_info in
-  let summary = parse_summary !info.summary_file method_info in
-  let callgraph =
+  let m_info = parse_method_info !info.summary_file in
+  let t_info = Summary.from_method_type m_info in
+  let summary = parse_summary !info.summary_file m_info in
+  let cg =
     parse_callgraph !info.summary_file
     |> parse_extra_callgraph !info.class_info_file
   in
-  let setter_map = get_setter summary method_info in
-  let class_info, summary, method_info =
-    parse_class_info !info.class_info_file summary method_info
+  let setter_map = get_setter summary m_info in
+  let c_info, summary, m_info =
+    parse_class_info !info.class_info_file summary m_info
   in
-  let class_info, summary, method_info =
-    parse_stdlib_info class_info summary method_info
-  in
-  let instance_info = parse_gconstant_info !info.constant_file in
-  let primitive_info = parse_primitive_info !info.constant_file in
-  let call_prop_map = parse_callprop !info.call_prop_file in
+  let c_info, summary, m_info = parse_stdlib_info c_info summary m_info in
+  let inst_info = parse_gconstant_info !info.constant_file in
+  let prim_info = parse_primitive_info !info.constant_file in
+  let cp_map = parse_callprop !info.call_prop_file in
   let error_method_info = parse_error_summary !info.error_summary_file in
   (* for unknown bug detection *)
   error_method_name :=
     Regexp.first_rm (Str.regexp "(.*)") (fst error_method_info)
     |> Str.split Regexp.dot |> List.rev |> List.hd;
-  run_test ~is_start:true !info [] error_method_info
-    ( callgraph,
-      summary,
-      call_prop_map,
-      method_info,
-      type_info,
-      class_info,
-      setter_map,
-      instance_info,
-      primitive_info )
+  let data =
+    {
+      Generator.cg;
+      summary;
+      cp_map;
+      m_info;
+      t_info;
+      c_info;
+      setter_map;
+      inst_info;
+      prim_info;
+    }
+  in
+  (error_method_info, data)
