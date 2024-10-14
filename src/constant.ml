@@ -82,7 +82,7 @@ let add_gconst cname assoc mmap =
   else
     let new_gc =
       match InstanceInfo.M.find_opt cname mmap with
-      | Some old_gc when List.mem value old_gc |> not -> List.cons value old_gc
+      | Some old_gc when List.mem value old_gc |> not -> value :: old_gc
       | Some old_gc -> old_gc
       | None -> [ value ]
     in
@@ -99,16 +99,15 @@ let add_constant c_or_m_name assoc cmap =
   PrimitiveInfo.ClassMap.add c_or_m_name new_c cmap
 
 let of_gconst_json json =
+  let json = JsonUtil.to_assoc json in
   List.fold_left
-    (fun mmap cname ->
-      let assoc = JsonUtil.member cname json in
-      add_gconst cname assoc mmap)
-    InstanceInfo.M.empty (JsonUtil.keys json)
+    (fun mmap (cname, assoc) -> add_gconst cname assoc mmap)
+    InstanceInfo.M.empty json
 
 let of_primitive_json mmap json =
+  let json = JsonUtil.to_assoc json in
   List.fold_left
-    (fun mmap c_or_m_name ->
-      let assoc = JsonUtil.member c_or_m_name json in
+    (fun mmap (c_or_m_name, assoc) ->
       let val_type = JsonUtil.member "val_type" assoc |> JsonUtil.to_string in
       if
         List.mem val_type basic_types |> not
@@ -122,4 +121,4 @@ let of_primitive_json mmap json =
         in
         let new_cmap = add_constant c_or_m_name assoc cmap in
         PrimitiveInfo.TypeMap.add (str_to_typ val_type) new_cmap mmap)
-    mmap (JsonUtil.keys json)
+    mmap json
