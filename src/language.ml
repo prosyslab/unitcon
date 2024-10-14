@@ -94,6 +94,12 @@ type params = variable list [@@deriving compare, equal]
 
 type symbol = string (* e.g. v1 *) [@@deriving compare, equal]
 
+let is_string = function String -> true | _ -> false
+
+let is_primitive = function
+  | Int | Long | Short | Byte | Float | Double | Bool | Char | String -> true
+  | _ -> false
+
 let rec get_array_typ typ =
   match typ with Array t -> get_array_typ t | _ -> typ
 
