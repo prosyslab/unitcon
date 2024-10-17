@@ -29,6 +29,9 @@ let equal_value v1 v2 =
   in
   match (v1, v2) with
   | Value.Eq NonValue, _ | _, Value.Eq NonValue -> false
+  | Neq Null, Neq Null ->
+      (* Kinds of objects are enormous. So it doesn't mean that both values are the same *)
+      false
   | _ when v1 = v2 -> true
   | Eq c1, Eq c2
   | Neq c1, Neq c2

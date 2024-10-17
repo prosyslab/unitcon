@@ -298,7 +298,7 @@ module DUG = struct
 
   let add_vertex n g = G.add_vertex g n
 
-  let add_edge n1 n2 g = G.add_edge g n1 n2
+  let add_edge n1 n2 g = if n1 = n2 then g else G.add_edge g n1 n2
 
   let remove_vertex n g = G.remove_vertex g n
 
@@ -323,8 +323,8 @@ module DUG = struct
       let g' = List.fold_left (fun g pred' -> remove_edge pred' n1 g) g pred in
       let g' = List.fold_left (fun g succ' -> remove_edge n1 succ' g) g' succ in
       let g' = remove_vertex n1 g' |> add_vertex n2 in
-      let g' = List.fold_left (fun g pred' -> G.add_edge g pred' n2) g' pred in
-      List.fold_left (fun g succ' -> G.add_edge g n2 succ') g' succ
+      let g' = List.fold_left (fun g pred' -> add_edge pred' n2 g) g' pred in
+      List.fold_left (fun g succ' -> add_edge n2 succ' g) g' succ
 
   let union g1 g2 =
     let g' =
@@ -336,6 +336,18 @@ module DUG = struct
         if G.out_degree g n = 0 && G.in_degree g n = 0 then remove_vertex n g
         else g)
       g' g'
+
+  let remove_edge g1 g2 =
+    let remove_cond n1 n2 g1 g2 =
+      G.mem_vertex g1 n1 && G.mem_vertex g1 n2 && G.mem_edge g2 n1 n2 |> not
+    in
+    G.fold_vertex
+      (fun n g ->
+        G.fold_vertex
+          (fun n' g' ->
+            if remove_cond n n' g1 g2 then remove_edge n n' g' else g')
+          g2 g)
+      g2 g1
 
   let get_variable n =
     match n with Variable v -> v.variable | _ -> (This NonType, None)
@@ -349,9 +361,11 @@ module DUG = struct
       (fun n' g ->
         if ground_stmt n && ground_stmt n' then
           match (n, n') with
-          | Void (v, _), Void (v', _) when equal_variables v v' ->
+          | Void (v, (_, f, arg)), Void (v', (_, f', arg'))
+            when equal_variables v v' && f = f' && arg = arg' ->
               replace n' n g
-          | Assign (v, _), Assign (v', _) when equal_variables v v' ->
+          | Assign (v, (_, x1, f, arg)), Assign (v', (_, x1', f', arg'))
+            when equal_variables v v' && x1 = x1' && f = f' && arg = arg' ->
               replace n' n g
           | _ -> g
         else g)
@@ -365,7 +379,8 @@ module DUG = struct
         (fun n g -> if G.mem_vertex g n |> not then update n g else g)
         g2 g
     in
-    union g g2
+    let g = union g g2 in
+    remove_edge g g2
 
   (* connect arguments to method that need the arguments *)
   let connect_and_union n g1 g2 =
@@ -406,7 +421,7 @@ module DUG = struct
     let v1 = get_var n1 in
     let v2 = get_var n2 in
     if fst v1 = This NonType || fst v2 = This NonType then false
-    else if v1 = v2 then true
+    else if fst v1 = fst v2 then true
     else false
 
   let get_already_nodes x g =
@@ -446,7 +461,7 @@ module DUG = struct
     match s with
     | Const (var, (x, _)) ->
         let s' = Const (var, (x, n)) in
-        (s', replace s s' graph)
+        (s', add_vertex s' G.empty)
     | _ -> (s, graph)
 
   let const_rule2 s g graph =
@@ -598,11 +613,10 @@ module DUG = struct
         (s', replace s s' graph |> add s'' s' |> add s''' s'')
     | _ -> (s, graph)
 
-  let recv_in_assign_rule4 s x1 graph =
+  let recv_in_assign_rule4 s x1_node graph =
     match s with
     | Assign (var, (x0, _, func, arg)) ->
         (* receiver recycle *)
-        let x1_node = find_node s x1 graph in
         let e_of_x1_node = get_edge_of_find_node x1_node var graph in
         let new_x1 = get_id x1_node in
         let s' = Assign (var, (x0, new_x1, func, arg)) in
@@ -619,8 +633,7 @@ module DUG = struct
     let s'' = Assign ((get_v arg).variable, (arg, Id, Func, Arg [])) in
     add s'' s' graph
 
-  let mk_already_arg s x x_var graph arg_graph =
-    let x_node = find_node s x graph in
+  let mk_already_arg x_node x_var graph arg_graph =
     let e_of_x_node = get_edge_of_find_node x_node x_var graph in
     add_vertex e_of_x_node arg_graph
 
@@ -675,7 +688,7 @@ module DUG = struct
     | Stmt var_s -> (
         match prev_s with
         | Assign (var_a, (x0, x1, f, arg)) when is_array_init f ->
-            void_rule2_array prev_s s var_a var_s x0 x1 f arg graph
+            void_rule2_array s var_a var_s x0 x1 f arg graph
         | Assign (_, (x0, _, _, _)) -> void_rule2_normal prev_s s var_s x0 graph
         | _ -> (s, graph))
     | _ -> (s, graph)
@@ -688,7 +701,7 @@ module DUG = struct
     let g = List.fold_left (fun g succ' -> add s' succ' g) g succ in
     (s', add prev_s s'' g |> add s'' s')
 
-  and void_rule2_array prev_s s va vs x0 x1 f arg graph =
+  and void_rule2_array s va vs x0 x1 f arg graph =
     let arr_id = get_vinfo x0 |> snd in
     let new_idx, new_elem = get_array_index arr_id (get_v x0).summary in
     (* remove setter of duplicate index *)

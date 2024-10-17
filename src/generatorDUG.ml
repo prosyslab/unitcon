@@ -735,6 +735,17 @@ let cname_condition m_name m_info c_info =
 
 let get_cname f = DUGIR.ClassName (DUG.get_func f).DUGIR.typ
 
+let is_matched_variable already_var new_var =
+  let summary1 = (DUG.get_v already_var).summary in
+  let summary2 = (DUG.get_v new_var).summary in
+  let this_sym1 = get_id_symbol (fst summary1.precond) "this" |> get_rh_name in
+  let this_sym2 = get_id_symbol (fst summary2.precond) "this" |> get_rh_name in
+  let check =
+    check_intersect ~is_init:true summary1 summary2 [ (this_sym1, this_sym2) ]
+    |> List.filter (fun (_, c) -> c = false)
+  in
+  if check = [] then true else false
+
 let get_arg_seq stmt tc (args : DUGIR.id list) =
   let already_arg = ref [] in
   List.fold_left
@@ -751,9 +762,12 @@ let get_arg_seq stmt tc (args : DUGIR.id list) =
           if DUG.is_already_node stmt temp_node tc then
             List.fold_left
               (fun lst (ids, x) ->
-                let found = DUG.find_node stmt temp_node tc |> DUG.get_id in
-                (found :: ids, DUG.mk_already_arg stmt temp_node temp_var tc x)
-                :: lst)
+                let found_node = DUG.find_node stmt temp_node tc in
+                let found_id = DUG.get_id found_node in
+                if is_matched_variable found_id arg then
+                  (found_id :: ids, DUG.mk_already_arg found_node temp_var tc x)
+                  :: lst
+                else lst)
               [] s
           else []
         in
@@ -823,8 +837,9 @@ let const_unroll (s : DUGIR.t) p { summary; m_info; inst_info; prim_info; _ } =
         match snd x1 with
         | DUGIR.Primitive _ -> lst
         | _ ->
-            (fst x1, DUG.const_rule3 s p.tc, empty_id_map, empty_obj_type_map)
-            :: lst)
+            [
+              (fst x1, DUG.const_rule3 s p.tc, empty_id_map, empty_obj_type_map);
+            ])
       [] (get_value x prim_info)
   in
   let get_r2 x =
@@ -947,8 +962,7 @@ let fcall_in_assign_unroll (s : DUGIR.t) p obj_types
 let recv_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
     { m_info; c_info; _ } =
   match s with
-  | Assign (_, (_, _, f, arg)) when DUG.recv_in_assign s ->
-      (* TODO: apply rules using predefined variable (recv_in_assign_rule4) *)
+  | Assign (_, (x0, _, f, arg)) when DUG.recv_in_assign s ->
       if
         is_nested_class (DUG.get_func f).import
         && is_static_class (DUG.get_func f).import c_info |> not
@@ -979,16 +993,21 @@ let recv_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
           (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ]
         in
         if DUG.is_already_node s (fst r2) tc then
-          let r4 = DUG.recv_in_assign_rule4 s (fst r2) tc in
-          (prec, r4, loop_ids, obj_types) :: applied
+          let found_node = DUG.find_node s (fst r2) tc in
+          let found_id = DUG.get_id found_node in
+          if is_matched_variable found_id x0 then
+            let r4 = DUG.recv_in_assign_rule4 s found_node tc in
+            (prec, r4, loop_ids, obj_types) :: applied
+          else applied
         else applied
   | _ -> failwith "Fail: recv_in_assign_unroll"
 
-let arg_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
+let arg_in_assign_unroll org_tc (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
+    =
   match s with
   | Assign (_, (_, _, f, arg)) when DUG.arg_in_assign s ->
       let class_name = Utils.get_class_name (DUG.get_func f).method_name in
-      mk_arg_seq arg class_name s tc
+      mk_arg_seq arg class_name s org_tc
       |> List.fold_left
            (fun lst (args, x) ->
              ( prec,
@@ -1048,11 +1067,11 @@ let recv_in_void_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
         (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ]
   | _ -> failwith "Fail: recv_in_void_unroll"
 
-let arg_in_void_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
+let arg_in_void_unroll org_tc (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
   match s with
   | Void (_, (_, f, arg)) when DUG.arg_in_void s ->
       let class_name = Utils.get_class_name (DUG.get_func f).method_name in
-      mk_arg_seq arg class_name s tc
+      mk_arg_seq arg class_name s org_tc
       |> List.fold_left
            (fun lst (args, x) ->
              ( prec,
@@ -1085,7 +1104,8 @@ let one_unroll (s : DUGIR.t) p obj_types p_data =
                 recv_in_assign_unroll x p_data |> append acc_lst)
               [] p_lst
             |> List.fold_left
-                 (fun acc_lst x -> arg_in_assign_unroll x |> append acc_lst)
+                 (fun acc_lst x ->
+                   arg_in_assign_unroll p.tc x |> append acc_lst)
                  []
           in
           if
@@ -1106,13 +1126,13 @@ let one_unroll (s : DUGIR.t) p obj_types p_data =
            (fun acc_lst x -> recv_in_void_unroll x p_data |> append acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll p.tc x |> append acc_lst)
            []
   | Void _ when DUG.fcall2_in_void s ->
       (* fcall2_in_void --> arg_in_void *)
       fcall_in_void_unroll s p p_data
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll p.tc x |> append acc_lst)
            []
   | Void _ when DUG.recv_in_void s ->
       (* unroll error entry *)
@@ -1120,7 +1140,7 @@ let one_unroll (s : DUGIR.t) p obj_types p_data =
         (0, (s, p.tc), empty_id_map, empty_obj_type_map)
         p_data
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll p.tc x |> append acc_lst)
            []
   | _ -> failwith "Fail: one_unroll"
 
@@ -1145,13 +1165,16 @@ and all_unroll_void s p obj_types p_data stmt_map =
   | _ -> failwith "Fail: all_unroll_void"
 
 let return_stmts graph =
-  let is_grounded s =
-    match s with
+  let is_grounded assign_ground s =
+    match (s : DUGIR.t) with
     | _ when DUG.ground_stmt s -> true (* ground check of partial tc is first *)
+    | Stmt _ when not assign_ground -> true
     | _ -> false
   in
+  let decide_void_unroll = DUG.ground graph |> not && DUG.assign_ground graph in
   G.fold_vertex
-    (fun n set -> if is_grounded n then set else ReturnStmtSet.add n set)
+    (fun n set ->
+      if is_grounded decide_void_unroll n then set else ReturnStmtSet.add n set)
     graph ReturnStmtSet.empty
 
 let to_list set =
