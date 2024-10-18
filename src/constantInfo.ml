@@ -71,7 +71,16 @@ and string_of_object_type = function
 
 let basic_types =
   [
-    "bool"; "byte"; "char"; "short"; "int"; "long"; "float"; "double"; "String";
+    "bool";
+    "byte";
+    "char";
+    "short";
+    "int";
+    "long";
+    "float";
+    "double";
+    "String";
+    "java.lang.String";
   ]
 
 let assoc_of_value ?(is_enum = false) typ value =
@@ -149,7 +158,23 @@ let handle_methods cname methods =
           acc)
     methods []
 
-let handle_global_constant ?(is_enum = false) consts =
+let handle_field_constant cname fields =
+  let usable_field cf =
+    cf.Javalib.cf_access = `Public && cf.Javalib.cf_static
+  in
+  JBasics.FieldMap.fold
+    (fun fs cf acc ->
+      let ft = JBasics.fs_type fs in
+      if
+        List.mem (ft |> string_of_value_type) basic_types |> not
+        && usable_field cf
+      then
+        let item = assoc_of_value "Object" (cname ^ "." ^ JBasics.fs_name fs) in
+        (ft |> string_of_value_type, item) :: acc
+      else acc)
+    fields []
+
+let handle_enum_constant cname consts =
   Array.fold_left
     (fun acc v ->
       match v with
@@ -158,13 +183,9 @@ let handle_global_constant ?(is_enum = false) consts =
           | SValue vt
             when List.mem (vt |> string_of_value_type) basic_types |> not ->
               let item =
-                [
-                  ("is_enum", `Bool is_enum);
-                  ("val_type", `String "Object");
-                  ("value", `String name);
-                ]
+                assoc_of_value ~is_enum:true "Object" (cname ^ "." ^ name)
               in
-              (vt |> string_of_value_type, `Assoc item) :: acc
+              (vt |> string_of_value_type, item) :: acc
           | _ -> acc)
       | _ -> acc)
     [] consts
@@ -177,7 +198,10 @@ let handle_class c =
   in
   let const = if is_enum then [] else handle_methods cname c.c_methods in
   let g_const =
-    if is_usable_class then handle_global_constant ~is_enum c.c_consts else []
+    if is_usable_class then
+      if is_enum then handle_enum_constant cname c.c_consts
+      else handle_field_constant cname c.c_fields
+    else []
   in
   List.rev_append const g_const
 
