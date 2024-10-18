@@ -329,7 +329,7 @@ let get_same_type_param params (_, _) =
     List.fold_left
       (fun set op_p ->
         let t2 = get_type op_p in
-        if t1 = t2 && get_type p <> NonType then VarSet.add op_p set else set)
+        if t1 = t2 && t1 <> NonType then VarSet.add op_p set else set)
       (VarSet.add p VarSet.empty)
       params
   in
@@ -512,15 +512,17 @@ let get_param_list param std_param curr_param_list =
       [] curr_param_list
 
 let mk_params_list summary p_set org_param =
-  let org_params = get_org_params_list summary org_param in
+  let org_param_list = get_org_params_list summary org_param in
   let rec mk_params org_params params_list =
     match org_params with
     | hd :: tl ->
-        let same_param = get_same_param hd p_set |> find_org_param org_params in
+        let same_param =
+          get_same_param hd p_set |> find_org_param org_param_list
+        in
         get_param_list hd same_param params_list |> mk_params tl
     | _ -> params_list
   in
-  mk_params org_params []
+  mk_params org_param_list []
 
 let mk_arg ~is_s param s c_info =
   let param = if is_s then param else List.tl param in
