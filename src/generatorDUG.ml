@@ -385,7 +385,9 @@ let find_enum_var_list c_name i_info =
   match InstanceInfo.M.find_opt c_name i_info with
   | None -> []
   | Some info ->
-      List.fold_left (fun lst const -> mk_gvar c_name const :: lst) [] info
+      List.fold_left
+        (fun lst const -> (0, DUGIR.GlobalConstant const) :: lst)
+        [] info
 
 let all_global_var c_name s_trace =
   Condition.M.fold
@@ -1347,6 +1349,7 @@ let rec mk_testcase p_data queue =
   in
   match queue with
   | p :: tl ->
+      Logger.info "tc: %s" (DUG.topological_code p.tc);
       if !Cmdline.with_fuzz && DUG.ground p.tc && DUG.with_withfuzz p.tc then
         [ (Need_Fuzzer, pretty_format p.tc, p.loop_ids, tl) ]
       else if !Cmdline.with_loop && DUG.ground p.tc && DUG.with_withloop p.tc
