@@ -776,12 +776,18 @@ let get_arg_seq prev_num stmt tc (args : DUGIR.id list) =
           else []
         in
         let x =
-          List.rev_append
-            (List.fold_left
-               (fun lst (ids, x) ->
-                 (arg :: ids, DUG.mk_const_arg arg (prev_num + 1) x) :: lst)
-               [] s)
-            reuse
+          if reuse = [] then
+            List.fold_left
+              (fun lst (ids, x) ->
+                (arg :: ids, DUG.mk_const_arg arg (prev_num + 1) x) :: lst)
+              [] s
+          else
+            List.rev_append
+              (List.fold_left
+                 (fun lst (ids, x) ->
+                   (arg :: ids, DUG.mk_const_arg arg (prev_num + 1) x) :: lst)
+                 [] s)
+              reuse
         in
         if is_primitive_from_id arg then x
         else
@@ -825,8 +831,15 @@ let is_instream_obj x = is_instream_obj (DUG.get_vinfo x |> fst)
 
 let is_outstream_obj x = is_outstream_obj (DUG.get_vinfo x |> fst)
 
+let is_reader_obj x = is_reader_obj (DUG.get_vinfo x |> fst)
+
+let is_writer_obj x = is_writer_obj (DUG.get_vinfo x |> fst)
+
 let not_null_obj x =
-  if is_file_obj x || is_instream_obj x || is_outstream_obj x then true
+  if
+    is_file_obj x || is_instream_obj x || is_outstream_obj x || is_reader_obj x
+    || is_writer_obj x
+  then true
   else false
 
 let is_comparable x = is_comparable (DUG.get_vinfo x |> fst)
@@ -1349,7 +1362,6 @@ let rec mk_testcase p_data queue =
   in
   match queue with
   | p :: tl ->
-      Logger.info "tc: %s" (DUG.topological_code p.tc);
       if !Cmdline.with_fuzz && DUG.ground p.tc && DUG.with_withfuzz p.tc then
         [ (Need_Fuzzer, pretty_format p.tc, p.loop_ids, tl) ]
       else if !Cmdline.with_loop && DUG.ground p.tc && DUG.with_withloop p.tc

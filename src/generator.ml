@@ -129,6 +129,14 @@ let is_outstream_obj = function
   | Object t when t = "java.io.OutputStream" -> true
   | _ -> false
 
+let is_reader_obj = function
+  | Object t when t = "java.io.Reader" -> true
+  | _ -> false
+
+let is_writer_obj = function
+  | Object t when t = "java.io.Writer" -> true
+  | _ -> false
+
 let is_comparable = function
   | Object t when t = "java.lang.Comparable" -> true
   | _ -> false

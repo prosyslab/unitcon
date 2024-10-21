@@ -776,8 +776,15 @@ let is_instream_obj x = is_instream_obj (AST.get_vinfo x |> fst)
 
 let is_outstream_obj x = is_outstream_obj (AST.get_vinfo x |> fst)
 
+let is_reader_obj x = is_reader_obj (AST.get_vinfo x |> fst)
+
+let is_writer_obj x = is_writer_obj (AST.get_vinfo x |> fst)
+
 let not_null_obj x =
-  if is_file_obj x || is_instream_obj x || is_outstream_obj x then true
+  if
+    is_file_obj x || is_instream_obj x || is_outstream_obj x || is_reader_obj x
+    || is_writer_obj x
+  then true
   else false
 
 let is_comparable x = is_comparable (AST.get_vinfo x |> fst)
