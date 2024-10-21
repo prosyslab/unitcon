@@ -40,11 +40,11 @@ module DUGIR = struct
   [@@deriving compare, equal]
 
   type t =
-    | Const of ((variable * int option) * (id * exp))
-    | Assign of ((variable * int option) * (id * id * func * arg))
-    | Void of ((variable * int option) * (id * func * arg))
-    | Skip of (variable * int option)
-    | Stmt of (variable * int option)
+    | Const of (num * (variable * int option) * (id * exp))
+    | Assign of (num * (variable * int option) * (id * id * func * arg))
+    | Void of (num * (variable * int option) * (id * func * arg))
+    | Skip of (num * (variable * int option))
+    | Stmt of (num * (variable * int option))
   [@@deriving compare, equal]
 
   let mk_var import variable field summary =
@@ -137,20 +137,20 @@ module DUG = struct
   and is_loop = function WithLoop -> true | _ -> false
 
   let ground_stmt = function
-    | Const (_, (x, exp)) -> not (is_id x || is_exp exp)
-    | Assign (_, (x0, x1, func, arg)) ->
+    | Const (_, _, (x, exp)) -> not (is_id x || is_exp exp)
+    | Assign (_, _, (x0, x1, func, arg)) ->
         not (is_id x0 || is_id x1 || is_func func || is_arg arg)
-    | Void (_, (x, func, arg)) -> not (is_id x || is_func func || is_arg arg)
+    | Void (_, _, (x, func, arg)) -> not (is_id x || is_func func || is_arg arg)
     | Skip _ -> true
     | Stmt _ -> false
 
   let ground g = G.fold_vertex (fun n check -> check && ground_stmt n) g true
 
   let assign_ground_stmt = function
-    | Const (_, (x, exp)) -> not (is_id x || is_exp exp)
-    | Assign (_, (x0, x1, func, arg)) ->
+    | Const (_, _, (x, exp)) -> not (is_id x || is_exp exp)
+    | Assign (_, _, (x0, x1, func, arg)) ->
         not (is_id x0 || is_id x1 || is_func func || is_arg arg)
-    | Void (_, (x, func, arg)) -> not (is_id x || is_func func || is_arg arg)
+    | Void (_, _, (x, func, arg)) -> not (is_id x || is_func func || is_arg arg)
     | Skip _ -> true
     | Stmt _ -> true
 
@@ -158,7 +158,7 @@ module DUG = struct
     G.fold_vertex (fun n check -> check && assign_ground_stmt n) g true
 
   let with_withfuzz_stmt = function
-    | Const (_, (_, exp)) -> is_fuzz exp
+    | Const (_, _, (_, exp)) -> is_fuzz exp
     | Assign _ -> false
     | Void _ -> false
     | Skip _ -> false
@@ -168,7 +168,7 @@ module DUG = struct
     G.fold_vertex (fun n check -> check || with_withfuzz_stmt n) g false
 
   let with_withloop_stmt = function
-    | Const (_, (_, exp)) -> is_loop exp
+    | Const (_, _, (_, exp)) -> is_loop exp
     | Assign _ -> false
     | Void _ -> false
     | Skip _ -> false
@@ -178,10 +178,10 @@ module DUG = struct
     G.fold_vertex (fun n check -> check || with_withloop_stmt n) g false
 
   let rec count_nt_stmt = function
-    | Const (_, (x, exp)) -> count_id x + count_exp exp
-    | Assign (_, (x0, x1, func, _)) ->
+    | Const (_, _, (x, exp)) -> count_id x + count_exp exp
+    | Assign (_, _, (x0, x1, func, _)) ->
         count_id x0 + count_id x1 + count_func func
-    | Void (_, (x, func, _)) -> count_id x + count_func func
+    | Void (_, _, (x, func, _)) -> count_id x + count_func func
     | Skip _ -> 0
     | Stmt _ -> 0
 
@@ -194,9 +194,9 @@ module DUG = struct
   let count_nt g = G.fold_vertex (fun n cnt -> count_nt_stmt n + cnt) g 0
 
   let rec count_t_stmt = function
-    | Const (_, (x, exp)) -> count_tid x + count_texp exp
-    | Assign (_, (x0, x1, f, _)) -> count_tid x0 + count_tid x1 + count_tf f
-    | Void (_, (x, f, _)) -> count_tid x + count_tf f
+    | Const (_, _, (x, exp)) -> count_tid x + count_texp exp
+    | Assign (_, _, (x0, x1, f, _)) -> count_tid x0 + count_tid x1 + count_tf f
+    | Void (_, _, (x, f, _)) -> count_tid x + count_tf f
     | Skip _ -> 0
     | Stmt _ -> 0
 
@@ -209,7 +209,7 @@ module DUG = struct
   let count_t g = G.fold_vertex (fun n cnt -> count_t_stmt n + cnt) g 0
 
   let rec count_params = function
-    | Assign (_, (_, _, _, p)) -> count_param p
+    | Assign (_, _, (_, _, _, p)) -> count_param p
     | _ -> 0
 
   and count_param = function Arg a -> List.length a | Param p -> List.length p
@@ -233,30 +233,30 @@ module DUG = struct
 
   (* 1. x := Exp *)
   let const = function
-    | Const (_, (x, exp)) -> is_id x |> not && is_exp exp
+    | Const (_, _, (x, exp)) -> is_id x |> not && is_exp exp
     | _ -> false
 
   (* 2. x := ID.F(ID) *)
   let fcall_in_assign = function
-    | Assign (_, (x0, x1, func, arg)) ->
+    | Assign (_, _, (x0, x1, func, arg)) ->
         is_id x0 |> not && is_id x1 && is_func func && is_arg arg
     | _ -> false
 
   (* 3. x := ID.f(ID) *)
   let recv_in_assign = function
-    | Assign (_, (x0, x1, func, arg)) ->
+    | Assign (_, _, (x0, x1, func, arg)) ->
         is_id x0 |> not && is_id x1 && is_func func |> not && is_arg arg
     | _ -> false
 
   (* 4. x0 := x1.f(ID) *)
   let arg_in_assign = function
-    | Assign (_, (x0, x1, func, arg)) ->
+    | Assign (_, _, (x0, x1, func, arg)) ->
         is_id x0 |> not && is_id x1 |> not && is_func func |> not && is_arg arg
     | _ -> false
 
   (* 5. x0 := x1.f(arg); Stmt *)
   let check_assign stmt_var = function
-    | Assign (var, (x0, x1, func, arg)) when stmt_var = var ->
+    | Assign (_, var, (x0, x1, func, arg)) when stmt_var = var ->
         is_id x0 |> not
         && is_id x1 |> not
         && is_func func |> not
@@ -265,7 +265,7 @@ module DUG = struct
 
   let void g stmt =
     match stmt with
-    | Stmt var ->
+    | Stmt (_, var) ->
         List.fold_left
           (fun check stmt -> check_assign var stmt || check)
           false (G.pred g stmt)
@@ -273,22 +273,24 @@ module DUG = struct
 
   (* 6. ID.F(ID) *)
   let fcall1_in_void = function
-    | Void (_, (x, func, arg)) -> is_id x && is_func func && is_arg arg
+    | Void (_, _, (x, func, arg)) -> is_id x && is_func func && is_arg arg
     | _ -> false
 
   (* 7. x.F(ID) *)
   let fcall2_in_void = function
-    | Void (_, (x, func, arg)) -> is_id x |> not && is_func func && is_arg arg
+    | Void (_, _, (x, func, arg)) ->
+        is_id x |> not && is_func func && is_arg arg
     | _ -> false
 
   (* 8. ID.f(ID) *)
   let recv_in_void = function
-    | Void (_, (x, func, arg)) -> is_id x && is_func func |> not && is_arg arg
+    | Void (_, _, (x, func, arg)) ->
+        is_id x && is_func func |> not && is_arg arg
     | _ -> false
 
   (* 9. x.f(ID) *)
   let arg_in_void = function
-    | Void (_, (x, func, arg)) ->
+    | Void (_, _, (x, func, arg)) ->
         is_id x |> not && is_func func |> not && is_arg arg
     | _ -> false
 
@@ -361,11 +363,13 @@ module DUG = struct
       (fun n' g ->
         if ground_stmt n && ground_stmt n' then
           match (n, n') with
-          | Void (v, (_, f, arg)), Void (v', (_, f', arg'))
-            when equal_variables v v' && f = f' && arg = arg' ->
+          | Void (num, v, (_, f, arg)), Void (num', v', (_, f', arg'))
+            when equal_variables v v' && num = num' && f = f' && arg = arg' ->
               replace n' n g
-          | Assign (v, (_, x1, f, arg)), Assign (v', (_, x1', f', arg'))
-            when equal_variables v v' && x1 = x1' && f = f' && arg = arg' ->
+          | ( Assign (num, v, (_, x1, f, arg)),
+              Assign (num', v', (_, x1', f', arg')) )
+            when equal_variables v v' && num = num' && x1 = x1' && f = f'
+                 && arg = arg' ->
               replace n' n g
           | _ -> g
         else g)
@@ -407,14 +411,14 @@ module DUG = struct
 
   let get_id n =
     match n with
-    | Const (_, (id, _)) -> id
-    | Assign (_, (id, _, _, _)) -> id
+    | Const (_, _, (id, _)) -> id
+    | Assign (_, _, (id, _, _, _)) -> id
     | _ -> Id
 
   let get_var n =
     match n with
-    | Const (var, (_, _)) -> var
-    | Assign (var, (_, _, _, _)) -> var
+    | Const (_, var, (_, _)) -> var
+    | Assign (_, var, (_, _, _, _)) -> var
     | _ -> (This NonType, None)
 
   let is_similar n1 n2 =
@@ -440,15 +444,15 @@ module DUG = struct
     get_already_nodes x g
     |> List.fold_left
          (fun found n -> if gt n std_node g then n else found)
-         (Skip (This NonType, None))
+         (Skip (0, (This NonType, None)))
 
   let get_edge_of_find_node node node_var graph =
     let succ = succ node graph in
     List.fold_left
       (fun found succ' ->
         match succ' with
-        | Stmt var when var = node_var -> succ'
-        | Void (var, _) when var = node_var -> succ'
+        | Stmt (_, var) when var = node_var -> succ'
+        | Void (_, var, _) when var = node_var -> succ'
         | _ -> found)
       node succ
 
@@ -459,44 +463,44 @@ module DUG = struct
   (* 2 *)
   let const_rule1 s n graph =
     match s with
-    | Const (var, (x, _)) ->
-        let s' = Const (var, (x, n)) in
+    | Const (num, var, (x, _)) ->
+        let s' = Const (num, var, (x, n)) in
         (s', add_vertex s' G.empty)
     | _ -> (s, graph)
 
   let const_rule2 s g graph =
     match s with
-    | Const (var, (x, _)) ->
-        let s' = Const (var, (x, g)) in
+    | Const (num, var, (x, _)) ->
+        let s' = Const (num, var, (x, g)) in
         (s', add_vertex s' G.empty)
     | _ -> (s, graph)
 
   let const_rule2_1 s f arg graph =
     match s with
-    | Const (var, (x, _)) ->
+    | Const (num, var, (x, _)) ->
         let g = ClassName ((get_func f).method_name |> Utils.get_class_name) in
-        let s' = Assign (var, (x, g, f, arg)) in
+        let s' = Assign (num, var, (x, g, f, arg)) in
         (s', add_vertex s' G.empty)
     | _ -> (s, graph)
 
   let const_rule3 s graph =
     match s with
-    | Const (var, (x, _)) ->
-        let s' = Const (var, (x, Null)) in
+    | Const (num, var, (x, _)) ->
+        let s' = Const (num, var, (x, Null)) in
         (s', add_vertex s' G.empty)
     | _ -> (s, graph)
 
   let const_rule_loop s graph =
     match s with
-    | Const (var, (x, _)) ->
-        let s' = Const (var, (x, WithLoop)) in
+    | Const (num, var, (x, _)) ->
+        let s' = Const (num, var, (x, WithLoop)) in
         (s', add_vertex s' G.empty)
     | _ -> (s, graph)
 
   (* 3 *)
   let fcall_in_assign_rule s field f arg graph =
     match s with
-    | Assign (var, (x0, x1, _, _)) ->
+    | Assign (num, var, (x0, x1, _, _)) ->
         let new_x0 =
           Variable
             {
@@ -506,19 +510,19 @@ module DUG = struct
               summary = (get_v x0).summary;
             }
         in
-        let s' = Assign (var, (new_x0, x1, f, arg)) in
+        let s' = Assign (num, var, (new_x0, x1, f, arg)) in
         (s', add_vertex s' G.empty)
     | _ -> (s, graph)
 
   (* TODO: change function name to fcall_in_assign_rule_mock *)
   let mk_mock_statement s graph =
     match s with
-    | Assign (var, (x0, _, _, _)) ->
+    | Assign (num, var, (x0, _, _, _)) ->
         let class_name = get_vinfo x0 |> fst |> get_class_name in
         let f = mk_f "" "mock" "" empty_summary in
         let variable = (Var (NonType, class_name), None) in
         let arg = Param [ mk_var "" variable FieldSet.empty empty_summary ] in
-        let s' = Assign (var, (x0, ClassName "Mockito", f, arg)) in
+        let s' = Assign (num, var, (x0, ClassName "Mockito", f, arg)) in
         (s', replace s s' graph)
     | _ -> (s, graph)
 
@@ -536,14 +540,14 @@ module DUG = struct
 
   let recv_in_assign_rule1 s c graph =
     match s with
-    | Assign (var, (x0, _, func, arg)) ->
-        let s' = Assign (var, (x0, c, func, arg)) in
+    | Assign (num, var, (x0, _, func, arg)) ->
+        let s' = Assign (num, var, (x0, c, func, arg)) in
         (s', replace s s' graph)
     | _ -> (s, graph)
 
   let recv_in_assign_rule2 s id idx graph =
     match s with
-    | Assign (var, (x0, _, func, arg)) ->
+    | Assign (num, var, (x0, _, func, arg)) ->
         let typ = match func with Func -> "" | F f -> f.typ in
         let x1_field =
           match func with
@@ -561,24 +565,24 @@ module DUG = struct
                (match func with Func -> empty_summary | F f -> f.summary))
         in
         (* edge: const(s'') -> assign(s') *)
-        let s' = Assign (var, (x0, x1, func, arg)) in
-        let s'' = Const (x1_var, (x1, Exp)) in
+        let s' = Assign (num, var, (x0, x1, func, arg)) in
+        let s'' = Const (num + 1, x1_var, (x1, Exp)) in
         (s', replace s s' graph |> add s'' s')
     | _ -> (s, graph)
 
   let recv_in_assign_rule2_1 s x1 f arg graph =
     (* x1: inner receiver *)
     match s with
-    | Assign (var, (x0, _, _, _)) ->
+    | Assign (num, var, (x0, _, _, _)) ->
         (* edge: const(s'') -> assign(s') *)
-        let s' = Assign (var, (x0, x1, f, arg)) in
-        let s'' = Const ((get_v x1).variable, (x1, Exp)) in
+        let s' = Assign (num, var, (x0, x1, f, arg)) in
+        let s'' = Const (num + 1, (get_v x1).variable, (x1, Exp)) in
         (s', replace s s' graph |> add s'' s')
     | _ -> (s, graph)
 
   let recv_in_assign_rule3 s id idx graph =
     match s with
-    | Assign (var, (x0, _, func, arg)) ->
+    | Assign (num, var, (x0, _, func, arg)) ->
         let typ = match func with Func -> "" | F f -> f.typ in
         let x1_field =
           match func with
@@ -596,41 +600,45 @@ module DUG = struct
                (match func with Func -> empty_summary | F f -> f.summary))
         in
         (* edge: assign(s'') --> stmt(s''') --> assign(s') *)
-        let s' = Assign (var, (x0, x1, func, arg)) in
-        let s'' = Stmt (get_v x1).variable in
-        let s''' = Assign ((get_v x1).variable, (x1, Id, Func, Arg [])) in
+        let s' = Assign (num, var, (x0, x1, func, arg)) in
+        let s'' = Stmt (num + 2, (get_v x1).variable) in
+        let s''' =
+          Assign (num + 1, (get_v x1).variable, (x1, Id, Func, Arg []))
+        in
         (s', replace s s' graph |> add s'' s' |> add s''' s'')
     | _ -> (s, graph)
 
   let recv_in_assign_rule3_1 s x1 f arg graph =
     (* x1: inner receiver *)
     match s with
-    | Assign (var, (x0, _, _, _)) ->
+    | Assign (num, var, (x0, _, _, _)) ->
         (* edge: assign(s'') --> stmt(s''') --> assign(s') *)
-        let s' = Assign (var, (x0, x1, f, arg)) in
-        let s'' = Stmt (get_v x1).variable in
-        let s''' = Assign ((get_v x1).variable, (x1, Id, Func, Arg [])) in
+        let s' = Assign (num, var, (x0, x1, f, arg)) in
+        let s'' = Stmt (num + 2, (get_v x1).variable) in
+        let s''' =
+          Assign (num + 1, (get_v x1).variable, (x1, Id, Func, Arg []))
+        in
         (s', replace s s' graph |> add s'' s' |> add s''' s'')
     | _ -> (s, graph)
 
   let recv_in_assign_rule4 s x1_node graph =
     match s with
-    | Assign (var, (x0, _, func, arg)) ->
+    | Assign (num, var, (x0, _, func, arg)) ->
         (* receiver recycle *)
         let e_of_x1_node = get_edge_of_find_node x1_node var graph in
         let new_x1 = get_id x1_node in
-        let s' = Assign (var, (x0, new_x1, func, arg)) in
+        let s' = Assign (num, var, (x0, new_x1, func, arg)) in
         (s', replace s s' graph |> add e_of_x1_node s')
     | _ -> (s, graph)
 
   (* 5, 9 *)
-  let mk_const_arg arg graph =
-    let s' = Const ((get_v arg).variable, (arg, Exp)) in
+  let mk_const_arg arg num graph =
+    let s' = Const (num, (get_v arg).variable, (arg, Exp)) in
     add_vertex s' graph
 
-  let mk_assign_arg arg graph =
-    let s' = Stmt (get_v arg).variable in
-    let s'' = Assign ((get_v arg).variable, (arg, Id, Func, Arg [])) in
+  let mk_assign_arg arg num graph =
+    let s' = Stmt (num + 1, (get_v arg).variable) in
+    let s'' = Assign (num, (get_v arg).variable, (arg, Id, Func, Arg [])) in
     add s'' s' graph
 
   let mk_already_arg x_node x_var graph arg_graph =
@@ -639,16 +647,16 @@ module DUG = struct
 
   let arg_in_assign_rule s arg_seq arg graph =
     match s with
-    | Assign (var, (x0, x1, func, _)) ->
-        let s' = Assign (var, (x0, x1, func, arg)) in
+    | Assign (num, var, (x0, x1, func, _)) ->
+        let s' = Assign (num, var, (x0, x1, func, arg)) in
         let rep_graph = replace s s' graph in
         (s', connect_and_union s' rep_graph arg_seq)
     | _ -> (s, graph)
 
   let arg_in_void_rule s arg_seq arg graph =
     match s with
-    | Void (var, (x, func, _)) ->
-        let s' = Void (var, (x, func, arg)) in
+    | Void (num, var, (x, func, _)) ->
+        let s' = Void (num, var, (x, func, arg)) in
         let rep_graph = replace s s' graph in
         (s', connect_and_union s' rep_graph arg_seq)
     | _ -> (s, graph)
@@ -685,23 +693,24 @@ module DUG = struct
 
   let rec void_rule2 prev_s s graph =
     match s with
-    | Stmt var_s -> (
+    | Stmt (num_s, var_s) -> (
         match prev_s with
-        | Assign (var_a, (x0, x1, f, arg)) when is_array_init f ->
-            void_rule2_array s var_a var_s x0 x1 f arg graph
-        | Assign (_, (x0, _, _, _)) -> void_rule2_normal prev_s s var_s x0 graph
+        | Assign (num_a, var_a, (x0, x1, f, arg)) when is_array_init f ->
+            void_rule2_array s num_a num_s var_a var_s x0 x1 f arg graph
+        | Assign (_, _, (x0, _, _, _)) ->
+            void_rule2_normal prev_s s num_s var_s x0 graph
         | _ -> (s, graph))
     | _ -> (s, graph)
 
-  and void_rule2_normal prev_s s vs x0 graph =
-    let s' = Void (vs, (x0, Func, Arg [])) in
-    let s'' = Stmt vs in
+  and void_rule2_normal prev_s s ns vs x0 graph =
+    let s' = Void (ns, vs, (x0, Func, Arg [])) in
+    let s'' = Stmt (ns + 1, vs) in
     let succ = succ s graph in
     let g = add_vertex s' G.empty in
     let g = List.fold_left (fun g succ' -> add s' succ' g) g succ in
     (s', add prev_s s'' g |> add s'' s')
 
-  and void_rule2_array s va vs x0 x1 f arg graph =
+  and void_rule2_array s na ns va vs x0 x1 f arg graph =
     let arr_id = get_vinfo x0 |> snd in
     let new_idx, new_elem = get_array_index arr_id (get_v x0).summary in
     (* remove setter of duplicate index *)
@@ -721,10 +730,11 @@ module DUG = struct
           (array_current_mem (get_v x0).summary (new_idx, new_elem))
       in
       let assign =
-        Assign (va, (new_id (new_field x0 nfield) new_next_summary, x1, f, arg))
+        Assign
+          (na, va, (new_id (new_field x0 nfield) new_next_summary, x1, f, arg))
       in
-      let s' = Void (vs, (new_id x0 new_current_summary, Func, Arg [])) in
-      let s'' = Stmt vs in
+      let s' = Void (ns, vs, (new_id x0 new_current_summary, Func, Arg [])) in
+      let s'' = Stmt (ns + 1, vs) in
       let succ = succ s graph in
       let g = add_vertex assign G.empty in
       let g = List.fold_left (fun g succ' -> add s' succ' g) g succ in
@@ -733,22 +743,22 @@ module DUG = struct
   (* 7 *)
   let fcall_in_void_rule s f arg graph =
     match s with
-    | Void (var, (x0, _, _)) ->
-        let s' = Void (var, (x0, f, arg)) in
+    | Void (num, var, (x0, _, _)) ->
+        let s' = Void (num, var, (x0, f, arg)) in
         (s', add_vertex s' G.empty)
     | _ -> (s, graph)
 
   (* 8 *)
   let recv_in_void_rule1 s c graph =
     match s with
-    | Void (var, (_, func, arg)) ->
-        let s' = Void (var, (c, func, arg)) in
+    | Void (num, var, (_, func, arg)) ->
+        let s' = Void (num, var, (c, func, arg)) in
         (s', replace s s' graph)
     | _ -> (s, graph)
 
   let recv_in_void_rule2 s id idx graph =
     match s with
-    | Void (var, (_, func, arg)) ->
+    | Void (num, var, (_, func, arg)) ->
         let typ = match func with Func -> "" | F f -> f.typ in
         let x_field =
           match func with
@@ -765,14 +775,14 @@ module DUG = struct
                x_field
                (match func with Func -> empty_summary | F f -> f.summary))
         in
-        let s' = Void (var, (x, func, arg)) in
-        let s'' = Const ((get_v x).variable, (x, Exp)) in
+        let s' = Void (num, var, (x, func, arg)) in
+        let s'' = Const (num + 1, (get_v x).variable, (x, Exp)) in
         (s', replace s s' graph |> add s'' s')
     | _ -> (s, graph)
 
   let recv_in_void_rule3 s id idx graph =
     match s with
-    | Void (var, (_, func, arg)) ->
+    | Void (num, var, (_, func, arg)) ->
         let typ = match func with Func -> "" | F f -> f.typ in
         let x_field =
           match func with
@@ -789,9 +799,11 @@ module DUG = struct
                x_field
                (match func with Func -> empty_summary | F f -> f.summary))
         in
-        let s' = Void (var, (x, func, arg)) in
-        let s'' = Stmt (get_v x).variable in
-        let s''' = Assign ((get_v x).variable, (x, Id, Func, Arg [])) in
+        let s' = Void (num, var, (x, func, arg)) in
+        let s'' = Stmt (num + 2, (get_v x).variable) in
+        let s''' =
+          Assign (num + 1, (get_v x).variable, (x, Id, Func, Arg []))
+        in
         (s', replace s s' graph |> add s''' s'' |> add s'' s')
     | _ -> (s, graph)
 
@@ -973,8 +985,8 @@ module DUG = struct
     | Exp -> "Exp"
 
   let code = function
-    | Const (_, (x, exp)) -> id_code x ^ " = " ^ exp_code exp x ^ ";\n"
-    | Assign (_, (x0, x1, func, arg)) ->
+    | Const (_, _, (x, exp)) -> id_code x ^ " = " ^ exp_code exp x ^ ";\n"
+    | Assign (_, _, (x0, x1, func, arg)) ->
         if is_var x1 then
           id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
           ^ arg_code func arg ^ ";\n"
@@ -988,7 +1000,7 @@ module DUG = struct
         else
           id_code x0 ^ " = " ^ recv_name_code x1 func ^ func_code func
           ^ arg_code func arg ^ ";\n"
-    | Void (_, (x, func, arg)) ->
+    | Void (_, _, (x, func, arg)) ->
         if Utils.is_init_method (get_func func).method_name then
           func_code func ^ arg_code func arg ^ ";\n"
         else recv_name_code x func ^ func_code func ^ arg_code func arg ^ ";\n"

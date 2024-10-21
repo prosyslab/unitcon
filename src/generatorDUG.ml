@@ -748,7 +748,7 @@ let is_matched_variable already_var new_var =
   in
   if check = [] then true else false
 
-let get_arg_seq stmt tc (args : DUGIR.id list) =
+let get_arg_seq prev_num stmt tc (args : DUGIR.id list) =
   let already_arg = ref [] in
   List.fold_left
     (fun s arg ->
@@ -759,7 +759,7 @@ let get_arg_seq stmt tc (args : DUGIR.id list) =
       else (
         already_arg := arg :: !already_arg;
         let temp_var = (DUG.get_v arg).variable in
-        let temp_node = DUGIR.Const (temp_var, (arg, Exp)) in
+        let temp_node = DUGIR.Const (prev_num + 1, temp_var, (arg, Exp)) in
         let reuse =
           if DUG.is_already_node stmt temp_node tc then
             List.fold_left
@@ -776,7 +776,8 @@ let get_arg_seq stmt tc (args : DUGIR.id list) =
         let x =
           List.rev_append
             (List.fold_left
-               (fun lst (ids, x) -> (arg :: ids, DUG.mk_const_arg arg x) :: lst)
+               (fun lst (ids, x) ->
+                 (arg :: ids, DUG.mk_const_arg arg (prev_num + 1) x) :: lst)
                [] s)
             reuse
         in
@@ -785,18 +786,18 @@ let get_arg_seq stmt tc (args : DUGIR.id list) =
           List.rev_append
             (List.fold_left
                (fun lst (ids, x) ->
-                 (arg :: ids, DUG.mk_assign_arg arg x) :: lst)
+                 (arg :: ids, DUG.mk_assign_arg arg (prev_num + 1) x) :: lst)
                [] s)
             x))
     [ ([], DUG.empty) ]
     args
 
-let mk_arg_seq arg class_name s tc =
+let mk_arg_seq arg prev_num class_name s tc =
   let modified_x x =
     if is_primitive_from_v x then DUG.modify_import class_name x else x
   in
   let seq =
-    get_arg_seq s tc
+    get_arg_seq prev_num s tc
       (List.fold_left
          (fun lst x -> DUGIR.Variable (modified_x x) :: lst)
          [] (DUG.get_arg arg))
@@ -890,7 +891,7 @@ let const_unroll (s : DUGIR.t) p { summary; m_info; inst_info; prim_info; _ } =
            (DUG.get_v x).summary summary m_info inst_info)
   in
   match s with
-  | Const (_, (x, _)) ->
+  | Const (_, _, (x, _)) ->
       if is_primitive_from_id x then
         if !Cmdline.with_loop then
           let prec, exps =
@@ -925,7 +926,7 @@ let const_unroll (s : DUGIR.t) p { summary; m_info; inst_info; prim_info; _ } =
 let fcall_in_assign_unroll (s : DUGIR.t) p obj_types
     { summary; m_info; t_info; c_info; setter_map; _ } =
   match s with
-  | Assign (_, (x0, _, _, _)) ->
+  | Assign (_, _, (x0, _, _, _)) ->
       let field_set = get_field_set x0 setter_map in
       let class_name = DUG.get_vinfo x0 |> fst |> get_class_name in
       let org_c_lst, c_lst, ret_c_lst =
@@ -964,7 +965,7 @@ let fcall_in_assign_unroll (s : DUGIR.t) p obj_types
 let recv_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
     { m_info; c_info; _ } =
   match s with
-  | Assign (_, (x0, _, f, arg)) when DUG.recv_in_assign s ->
+  | Assign (_, _, (x0, _, f, arg)) when DUG.recv_in_assign s ->
       if
         is_nested_class (DUG.get_func f).import
         && is_static_class (DUG.get_func f).import c_info |> not
@@ -1007,9 +1008,9 @@ let recv_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
 let arg_in_assign_unroll org_tc (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
     =
   match s with
-  | Assign (_, (_, _, f, arg)) when DUG.arg_in_assign s ->
+  | Assign (num, _, (_, _, f, arg)) when DUG.arg_in_assign s ->
       let class_name = Utils.get_class_name (DUG.get_func f).method_name in
-      mk_arg_seq arg class_name s org_tc
+      mk_arg_seq arg num class_name s org_tc
       |> List.fold_left
            (fun lst (args, x) ->
              ( prec,
@@ -1024,7 +1025,7 @@ let arg_in_assign_unroll org_tc (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
 
 let void_unroll (s : DUGIR.t) p =
   match s with
-  | Stmt var ->
+  | Stmt (_, var) ->
       let void_rule2 =
         List.fold_left
           (fun lst prev ->
@@ -1040,7 +1041,7 @@ let void_unroll (s : DUGIR.t) p =
 
 let fcall_in_void_unroll (s : DUGIR.t) p p_data =
   match s with
-  | Void (_, (x, _, _)) ->
+  | Void (_, _, (x, _, _)) ->
       let lst = get_void_func x p_data in
       if lst = [] then raise Not_found_setter
       else
@@ -1057,7 +1058,7 @@ let fcall_in_void_unroll (s : DUGIR.t) p p_data =
 let recv_in_void_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
     { m_info; c_info; _ } =
   match s with
-  | Void (_, (_, f, _)) when DUG.recv_in_void s ->
+  | Void (_, _, (_, f, _)) when DUG.recv_in_void s ->
       if cname_condition (DUG.get_func f).method_name m_info c_info then
         [
           (prec, DUG.recv_in_void_rule1 s (get_cname f) tc, loop_ids, obj_types);
@@ -1071,9 +1072,9 @@ let recv_in_void_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
 
 let arg_in_void_unroll org_tc (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
   match s with
-  | Void (_, (_, f, arg)) when DUG.arg_in_void s ->
+  | Void (num, _, (_, f, arg)) when DUG.arg_in_void s ->
       let class_name = Utils.get_class_name (DUG.get_func f).method_name in
-      mk_arg_seq arg class_name s org_tc
+      mk_arg_seq arg num class_name s org_tc
       |> List.fold_left
            (fun lst (args, x) ->
              ( prec,
@@ -1308,14 +1309,14 @@ let rec find_ee e_method e_summary p_data =
 
 let stmt_import (s : DUGIR.t) set =
   match s with
-  | Const (_, (x, _)) -> add_import (DUG.get_v x).import set
-  | Assign (_, (x0, _, f, arg)) ->
+  | Const (_, _, (x, _)) -> add_import (DUG.get_v x).import set
+  | Assign (_, _, (x0, _, f, arg)) ->
       List.fold_left
         (fun s (a : DUGIR.var) -> add_import a.import s)
         set (DUG.get_param arg)
       |> add_import (DUG.get_v x0).import
       |> add_import (DUG.get_func f).import
-  | Void (_, (_, f, arg)) ->
+  | Void (_, _, (_, f, arg)) ->
       List.fold_left
         (fun s (a : DUGIR.var) -> add_import a.import s)
         set (DUG.get_param arg)
@@ -1371,7 +1372,7 @@ let rec mk_testcase p_data queue =
 
 let mk_testcases ~is_start queue (e_method, error_summary) p_data =
   let apply_rule list =
-    let start_node = DUGIR.Void ((This NonType, None), (Id, Func, Arg [])) in
+    let start_node = DUGIR.Void (0, (This NonType, None), (Id, Func, Arg [])) in
     let empty_graph = DUG.add_vertex start_node DUG.empty in
     List.fold_left
       (fun lst (_, f, arg) ->
