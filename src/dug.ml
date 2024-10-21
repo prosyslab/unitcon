@@ -339,18 +339,6 @@ module DUG = struct
         else g)
       g' g'
 
-  let remove_edge g1 g2 =
-    let remove_cond n1 n2 g1 g2 =
-      G.mem_vertex g1 n1 && G.mem_vertex g1 n2 && G.mem_edge g2 n1 n2 |> not
-    in
-    G.fold_vertex
-      (fun n g ->
-        G.fold_vertex
-          (fun n' g' ->
-            if remove_cond n n' g1 g2 then remove_edge n n' g' else g')
-          g2 g)
-      g2 g1
-
   let get_variable n =
     match n with Variable v -> v.variable | _ -> (This NonType, None)
 
@@ -383,8 +371,7 @@ module DUG = struct
         (fun n g -> if G.mem_vertex g n |> not then update n g else g)
         g2 g
     in
-    let g = union g g2 in
-    remove_edge g g2
+    union g g2
 
   (* connect arguments to method that need the arguments *)
   let connect_and_union n g1 g2 =
