@@ -124,8 +124,9 @@ let get_case_const mname matches =
       let value = Int32.to_int case in
       let str_of_value = string_of_int value in
       if value > 32 && value < 127 then
-        (mname, assoc_of_value "char" str_of_value)
-        :: (mname, assoc_of_value "String" str_of_value)
+        let char = Char.chr value |> String.make 1 in
+        (mname, assoc_of_value "char" char)
+        :: (mname, assoc_of_value "String" char)
         :: (mname, assoc_of_value "int" str_of_value)
         :: acc
       else (mname, assoc_of_value "int" str_of_value) :: acc)
