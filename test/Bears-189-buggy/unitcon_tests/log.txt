@@ -1,6 +1,0 @@
-[20240411-16:09:55][INFO] Start UnitCon for /home/yeonhee/unitcon-experiment/unitcon/test/Bears-189-buggy/
-[20240411-16:09:56][INFO] Start compilation! (# of test files: 0)
-[20240411-16:09:57][INFO] End compilation! (duration: 0.168312)
-[20240411-16:09:57][INFO] Normal End UnitCon for /home/yeonhee/unitcon-experiment/unitcon/test/Bears-189-buggy/: false(0) (total time: 1.307966)
-
-[20240411-16:09:57][INFO] First Success Test: 

@@ -11,8 +11,8 @@ all:
 fmt:
 	$(DUNE) build @fmt --auto-promote
 
-test: all
-	$(DUNE) test
+test-unitcon: all
+	./run.sh
 
 coverage:
 	$(DUNE) runtest ./test

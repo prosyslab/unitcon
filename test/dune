@@ -2,12 +2,14 @@
  (alias runtest)
  (deps
   (source_tree ../deps)
-  (source_tree Bears-189-buggy))
+  (source_tree ../script)
+  (source_tree Main)
+  test_Main.sh)
  (action
   (progn
    (run ln -sf src/main.exe ../unitcon)
-   (run ../unitcon Bears-189-buggy)
-   (system "[ -e Bears-189-buggy/unitcon_tests/UnitconTest3.java ]"))))
+   (run ./test_Main.sh -make-test)
+   (system "[ -e Main/unitcon_tests/UnitconTest1.java ]"))))
 
 (test
  (name unit)

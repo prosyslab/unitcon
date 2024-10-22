@@ -1,0 +1,1 @@
+{"Procname":"Main.toString(int):java.lang.String","Postcond_Heap":"[{ v1 -> { * -> v3 } }]","Postcond_Stack":"[{ &j=v1 }]","Precond_Heap":"[{ v1 -> { * -> v3 } }]","Precond_Stack":"[{ &j=v1 }]","CItv":"{ v3 -> >=10 }","BoItv":"{ v3 -> [max(10 v3) v3] }"}

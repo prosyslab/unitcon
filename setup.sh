@@ -28,16 +28,6 @@ else
   opam switch $UNITCON_OPAM_SWITCH
 fi
 
-git submodule init
-git submodule update
-if [ ! -d "venv" ]; then
-  python3 -m venv venv
-fi
-
-if [ ! -d "build" ]; then
-  mkdir build
-fi
-
 eval $(SHELL=bash opam config env --switch=$UNITCON_OPAM_SWITCH)
 opam pin add git+https://github.com/prosyslab/logger.git
 opam install -j $NCPU dune ocamlgraph yojson ppx_compare z3 core logger ounit bisect_ppx sawja

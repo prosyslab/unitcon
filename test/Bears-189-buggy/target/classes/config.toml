@@ -1,7 +1,0 @@
-# This is a so-called `table` grouping properties together
-[general]
-    # This is a key-value property
-    debug = false
-
-[virtualFunctionBus]
-    debug = false

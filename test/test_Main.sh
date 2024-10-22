@@ -4,10 +4,14 @@
 UNITCON_OPAM_SWITCH=unitcon-4.14.0+flambda
 INFER_OPAM_SWITCH=4.14.0+flambda
 
-# Start at Unitcon directory
-UNITCON_PATH=$(pwd)
+# Start at test directory
+UNITCON_PATH=$(dirname $(pwd))
 UNITCON_BIN=$UNITCON_PATH/unitcon
-INFER_BIN=$UNITCON_PATH/unitcon-infer/infer/bin/infer
+if [ "$1" == "-make-test" ]; then
+  INFER_BIN=$(dirname $(dirname $(dirname $(pwd))))/unitcon-infer/infer/bin/infer
+else
+  INFER_BIN=$UNITCON_PATH/unitcon-infer/infer/bin/infer
+fi
 PROJECT=$UNITCON_PATH/test/Main
 
 # make dependencies.jar
