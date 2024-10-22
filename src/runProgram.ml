@@ -108,8 +108,7 @@ let parse_extra_callgraph filename cg =
 let get_setter summary m_info = Setter.from_summary_map summary m_info
 
 let get_bug_type filename =
-  if not (Sys.file_exists filename) then
-    bug_type := "java.lang.NullPointerException"
+  if not (Sys.file_exists filename) then bug_type := ""
   else
     let ic = open_in filename in
     bug_type :=
@@ -321,12 +320,13 @@ let run_type str =
   else failwith "not supported build type"
 
 let string_of_expected_bug file =
-  if not (Sys.file_exists file) then failwith (file ^ " not found");
-  let ic = open_in file in
-  let s = really_input_string ic (in_channel_length ic) in
-  close_in ic;
-  Str.global_replace Regexp.dollar "\\$" s
-  |> Str.global_replace (Str.regexp "\n") "[ \t\r\n]+"
+  if not (Sys.file_exists file) then ""
+  else
+    let ic = open_in file in
+    let s = really_input_string ic (in_channel_length ic) in
+    close_in ic;
+    Str.global_replace Regexp.dollar "\\$" s
+    |> Str.global_replace (Str.regexp "\n") "[ \t\r\n]+"
 
 let get_index_of_substring substr str start =
   match Str.search_forward (Str.regexp substr) str start with

@@ -1,4 +1,0 @@
-{
-  "Main.getObject": { "is_enum": false, "val_type": "byte", "value": "10" },
-  "Main.getObject": { "is_enum": false, "val_type": "int", "value": "10" }
-}

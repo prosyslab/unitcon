@@ -4,13 +4,36 @@
 
 ## Dependencies
 - Java 8
+- Python 3
 
 ## Build
 ```
 $ ./setup.sh
 ```
 
-## Prerequisites
+## Easy Run
+We provide a script called `run.py` to make running Unitcon easier.  
+If you want to run Unitcon easily, please organize the directory structure as follows and run the script below from within the Unitcon directory.
+- directory structure
+```
+target_dir
+    └--unitcon_properties
+        └--build_command
+```
+- command to run the script
+```
+python3 run.py PATH/TO/TARGET/DIR
+```
+
+## Example
+You can run Unitcon on the `Main` program inside the `test` directory by executing the following command.
+```sh
+python3 run.py test/Main
+```
+
+## Obtain the required data before synthesis
+If you want to make the data you need to run the Unitcon one by one, please follow it from here.
+
 ```sh
 # Make a jar file with the target program compiled.
 $ python3 script/command_maker.py PATH/TO/TARGET/DIR
@@ -21,7 +44,7 @@ $ PATH/TO/INFER capture -- [build command]
 $ PATH/TO/INFER analyze --pulse-only --show-latent
 $ PATH/TO/INFER debug --procedures --procedures-summary-json > infer-out/summary.json
 
-# Analyze the extra information for test case synthesis.
+# Analyze the extra data for test case synthesis.
 $ ./unitcon PATH/TO/TARGET/DIR -class-info
 $ ./unitcon PATH/TO/TARGET/DIR -constant-info
 ```
@@ -45,10 +68,3 @@ target_dir
 $ ./unitcon PATH/TO/TARGET/DIR
 ```
 If Unitcon successfully synthesizes the `error-triggering test case`, the completed test case will be located in `PATH/TO/TARGET/DIR/unitcon_tests`.
-
-## Example
-You can run UnitCon on the `Bears-189-buggy` program inside the `test` directory by executing the following command.  
-The executable files for `Java` and `Maven` required for running the example have been included in the `test` directory.
-```sh
-./run.sh
-```
