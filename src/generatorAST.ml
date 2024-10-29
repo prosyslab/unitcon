@@ -366,7 +366,9 @@ let find_enum_var_list c_name i_info =
   match InstanceInfo.M.find_opt c_name i_info with
   | None -> []
   | Some info ->
-      List.fold_left (fun lst const -> mk_gvar c_name const :: lst) [] info
+      List.fold_left
+        (fun lst const -> (0, ASTIR.GlobalConstant const) :: lst)
+        [] info
 
 let all_global_var c_name s_trace =
   Condition.M.fold
