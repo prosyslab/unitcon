@@ -105,29 +105,6 @@ let rec run_test ~is_start info queue e_method_info p_data =
         run_testfile ()
       else ();
       run_test ~is_start:false info tc_list e_method_info p_data)
-  else if completion = Need_Fuzzer then (
-    (* clean before running fuzzer *)
-    remove_all_files info.driver_dir;
-    let _time = Unix.gettimeofday () -. !time in
-    incr num_of_driver_files;
-    add_driver info.driver_dir !num_of_driver_files (tc, _time);
-    let fuzz_seq = get_const_sequence (tc |> snd) in
-    let found_rep_file = run_fuzzer () |> Filename.remove_extension in
-    if found_rep_file = "" then
-      run_test ~is_start:false info tc_list e_method_info p_data
-    else
-      (* found crash input with fuzzer *)
-      let _time = Unix.gettimeofday () -. !time in
-      add_log_driver info.driver_dir !num_of_driver_files (tc, _time);
-      let input = run_reproducer found_rep_file in
-      incr num_of_tc_files;
-      let new_tc = driver_to_tc fuzz_seq input (tc |> snd) in
-      let _time = Unix.gettimeofday () -. !time in
-      add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
-      if !num_of_tc_files mod 15 = 0 || !abnormal_keep_going then
-        run_testfile ()
-      else ();
-      run_test ~is_start:false info tc_list e_method_info p_data)
   else if completion = Incomplete then (
     (* early stopping *)
     if !num_of_last_exec_tc < !num_of_tc_files then run_testfile () else ();

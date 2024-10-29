@@ -28,7 +28,6 @@ module ASTIR = struct
     | Primitive of primitive
     | GlobalConstant of string
     | Null
-    | WithFuzz
     | WithLoop
     | Exp
 
@@ -99,8 +98,6 @@ module AST = struct
 
   and is_exp = function Exp -> true | _ -> false
 
-  and is_fuzz = function WithFuzz -> true | _ -> false
-
   and is_loop = function WithLoop -> true | _ -> false
 
   let rec ground = function
@@ -120,14 +117,6 @@ module AST = struct
     | Seq (s1, s2) -> assign_ground s1 && assign_ground s2
     | Skip -> true
     | Stmt -> true
-
-  let rec with_withfuzz = function
-    | Const (_, exp) -> is_fuzz exp
-    | Assign _ -> false
-    | Void _ -> false
-    | Seq (s1, s2) -> with_withfuzz s1 || with_withfuzz s2
-    | Skip -> false
-    | Stmt -> false
 
   let rec with_withloop = function
     | Const (_, exp) -> is_loop exp
@@ -692,13 +681,6 @@ module AST = struct
         | Double -> "0."
         | Bool -> "false"
         | _ -> "null")
-    | WithFuzz ->
-        if !Cmdline.with_fuzz then
-          match get_vinfo x |> fst with
-          | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
-              get_consume_func (get_vinfo x |> fst)
-          | _ -> "Exp"
-        else "Exp"
     | WithLoop ->
         if !Cmdline.with_loop then
           let v_type, v_id = loop_id_lval_code x in

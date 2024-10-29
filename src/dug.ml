@@ -34,7 +34,6 @@ module DUGIR = struct
     | Primitive of primitive
     | GlobalConstant of string
     | Null
-    | WithFuzz
     | WithLoop
     | Exp
   [@@deriving compare, equal]
@@ -132,8 +131,6 @@ module DUG = struct
 
   and is_exp = function Exp -> true | _ -> false
 
-  and is_fuzz = function WithFuzz -> true | _ -> false
-
   and is_loop = function WithLoop -> true | _ -> false
 
   let ground_stmt = function
@@ -156,16 +153,6 @@ module DUG = struct
 
   let assign_ground g =
     G.fold_vertex (fun n check -> check && assign_ground_stmt n) g true
-
-  let with_withfuzz_stmt = function
-    | Const (_, _, (_, exp)) -> is_fuzz exp
-    | Assign _ -> false
-    | Void _ -> false
-    | Skip _ -> false
-    | Stmt _ -> false
-
-  let with_withfuzz g =
-    G.fold_vertex (fun n check -> check || with_withfuzz_stmt n) g false
 
   let with_withloop_stmt = function
     | Const (_, _, (_, exp)) -> is_loop exp
@@ -954,13 +941,6 @@ module DUG = struct
         | Double -> "0."
         | Bool -> "false"
         | _ -> "null")
-    | WithFuzz ->
-        if !Cmdline.with_fuzz then
-          match get_vinfo x |> fst with
-          | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
-              get_consume_func (get_vinfo x |> fst)
-          | _ -> "Exp"
-        else "Exp"
     | WithLoop ->
         if !Cmdline.with_loop then
           let v_type, v_id = loop_id_lval_code x in

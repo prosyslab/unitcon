@@ -46,8 +46,6 @@ let extension = ref ""
 
 let with_loop = ref true
 
-let with_fuzz = ref false
-
 let docs = Manpage.s_common_options
 
 let _debug =
@@ -122,10 +120,6 @@ let _extension =
   in
   Arg.(value & opt string "" & info [ "modifier-extension" ] ~doc)
 
-let _with_fuzz =
-  let doc = "Use fuzzer for searching constant (default: false)" in
-  Arg.(value & flag & info [ "with-fuzz" ] ~doc)
-
 let init _debug _quiet _target_program _out_dir =
   Filename.mkdir _out_dir 0o755 ~exists_ok:true;
   Filename.mkdir Filename.(_out_dir / "marshal") 0o755 ~exists_ok:true;
@@ -174,7 +168,7 @@ end
 
 module Synthesize = struct
   let opt _copt _basic_mode _pruning_mode _priority_mode _test_case_ast
-      _time_out _unknown_bug _mock _extension _with_fuzz =
+      _time_out _unknown_bug _mock _extension =
     command := Synthesize;
     basic_mode := _basic_mode;
     pruning_mode := _pruning_mode;
@@ -183,8 +177,7 @@ module Synthesize = struct
     time_out := _time_out;
     unknown_bug := _unknown_bug;
     mock := _mock;
-    extension := _extension;
-    with_fuzz := _with_fuzz
+    extension := _extension
 
   let cmd =
     let name = "synthesize" in
@@ -194,8 +187,7 @@ module Synthesize = struct
     Cmd.v info
       Term.(
         const opt $ common_opt $ _basic_mode $ _pruning_mode $ _priority_mode
-        $ _test_case_ast $ _time_out $ _unknown_bug $ _mock $ _extension
-        $ _with_fuzz)
+        $ _test_case_ast $ _time_out $ _unknown_bug $ _mock $ _extension)
 end
 
 let main_cmd =

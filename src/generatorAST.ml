@@ -296,10 +296,7 @@ let get_value v p_info =
   let typ, id = AST.get_vinfo v in
   let find_value1 = find_target_value id (AST.get_v v).summary in
   let find_value2 = find_target_value_from_this id (AST.get_v v).summary in
-  let default =
-    if !Cmdline.with_fuzz then [ ASTIR.WithFuzz ]
-    else default_value_list typ (AST.get_v v).import p_info
-  in
+  let default = default_value_list typ (AST.get_v v).import p_info in
   let found_value =
     if not_found_value find_value1 then
       if not_found_value find_value2 then
@@ -310,17 +307,7 @@ let get_value v p_info =
       else calc_value id find_value2 default
     else calc_value id find_value1 default
   in
-  if !Cmdline.with_fuzz then
-    let null_exists lst =
-      List.fold_left
-        (fun exist (_, value) -> if value = ASTIR.Null then true else exist)
-        false lst
-    in
-    if typ = String && not (null_exists found_value) then
-      (* fuzzer can not generate a null value, so add a null value if needed *)
-      (0, ASTIR.Null) :: found_value
-    else found_value
-  else found_value
+  found_value
 
 let get_same_type_param params (_, _) =
   let get_type p = match p with Var (t, _) -> t | _ -> NonType in
@@ -1290,10 +1277,8 @@ let rec mk_testcase p_data queue =
   in
   match queue with
   | p :: tl ->
-      if !Cmdline.with_fuzz && AST.ground p.tc && AST.with_withfuzz p.tc then
-        [ (Need_Fuzzer, pretty_format p.tc, p.loop_ids, tl) ]
-      else if !Cmdline.with_loop && AST.ground p.tc && AST.with_withloop p.tc
-      then [ (Need_Loop, pretty_format p.tc, p.loop_ids, tl) ]
+      if !Cmdline.with_loop && AST.ground p.tc && AST.with_withloop p.tc then
+        [ (Need_Loop, pretty_format p.tc, p.loop_ids, tl) ]
       else if AST.ground p.tc then
         [ (Complete, pretty_format p.tc, p.loop_ids, tl) ]
       else
