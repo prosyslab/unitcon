@@ -7,13 +7,13 @@ HAMCREST_FILE="deps/hamcrest-core-1.3.jar"
 JAZZER_FILE="deps/jazzer-linux.tar.gz"
 
 if [ ! -e $JUNIT_FILE ]; then
-  wget https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar -P $JUNIT_FILE
+  wget https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar -P deps/
 fi
 if [ ! -e $HAMCREST_FILE ]; then
-  wget https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar -P $HAMCREST_FILE
+  wget https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar -P deps/
 fi
 if [ ! -e $JAZZER_FILE ]; then
-  wget https://github.com/CodeIntelligenceTesting/jazzer/releases/download/v0.22.1/jazzer-linux.tar.gz -P $JAZZER_FILE
+  wget https://github.com/CodeIntelligenceTesting/jazzer/releases/download/v0.22.1/jazzer-linux.tar.gz -P deps/
   tar -xzf $JAZZER_FILE -C deps/
 fi
 

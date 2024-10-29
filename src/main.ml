@@ -29,12 +29,13 @@ let finalize t0 =
 let main () =
   let t0 = Sys.time () in
   Cmdline.parse ();
+  ignore (Unix.alarm !Cmdline.time_out);
   (match !Cmdline.command with
   | Cmdline.Build -> build ()
   | Cmdline.Analyze -> analyze ()
-  | Cmdline.Synthesize ->
-      Sys.set_signal Sys.sigalrm RunProgram.normal_exit;
-      synthesize ());
+  | Cmdline.Synthesize -> synthesize ());
   finalize t0
 
-let _ = main ()
+let _ =
+  Sys.set_signal Sys.sigalrm RunProgram.normal_exit;
+  main ()
