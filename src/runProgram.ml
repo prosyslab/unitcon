@@ -1,17 +1,10 @@
 open Language
-module F = Format
+open Utils
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 module ImportSet = Utils.ImportSet
 
 exception Compilation_Error
-
-let con_path = "unitcon_properties"
-
-let unitcon_path =
-  let path = Filename.dirname Sys.argv.(0) in
-  if Filename.is_relative path then Filename.concat (Unix.getcwd ()) path
-  else path
 
 let test_basename = "UnitconTest"
 
@@ -139,7 +132,7 @@ let parse_class_info filename summary_map method_map =
   Inheritance.of_json summary_map method_map json
 
 let parse_stdlib_info (ct_info, i_info) smap mmap =
-  let stdlib_file = Filename.concat unitcon_path "deps/class_info.json" in
+  let stdlib_file = Filename.(Utils.unitcon_path / "deps/class-info.json") in
   if not (Sys.file_exists stdlib_file) then ((ct_info, i_info), smap, mmap)
   else
     let json = Json.from_file stdlib_file in
@@ -160,12 +153,11 @@ let parse_primitive_info filename =
 
 let remove_file fname =
   if Sys.file_exists fname then
-    try Unix.unlink fname with _ -> Logger.info "Fail delete %s" fname
+    try Unix.unlink fname with _ -> L.info "Fail delete %s" fname
 
 let remove_files dir (pattern : Str.regexp) =
   let remove_file file =
-    if Str.string_match pattern file 0 then
-      Unix.unlink (Filename.concat dir file)
+    if Str.string_match pattern file 0 then Unix.unlink Filename.(dir / file)
   in
   let files = Array.to_list (Sys.readdir dir) in
   List.iter (fun file -> remove_file file) files
@@ -176,66 +168,64 @@ let remove_all_test_files test_dir = remove_files test_dir Regexp.test_file
 
 let remove_all_files dir = remove_files dir (Str.regexp ".*")
 
-let make_folder path =
-  try Unix.mkdir path 0o775
-  with Unix.Unix_error (EEXIST, _, _) ->
-    remove_all_test_classes path;
-    remove_all_test_files path;
-    remove_file (Filename.concat path "UnitconInterface.java");
-    remove_file (Filename.concat path "UnitconEnum.java");
-    remove_file (Filename.concat path "UnitconInterface.class");
-    remove_file (Filename.concat path "UnitconEnum.class")
+let make_folder path = Filename.mkdir ~exists_ok:true path 0o755
 
 let init_folder dir =
   let folders = Str.split (Str.regexp Filename.dir_sep) dir in
   let rec make_folders path = function
     | [] -> ()
     | f :: dep ->
-        let p = path ^ Filename.dir_sep ^ f in
+        let p = Filename.(path / f) in
         make_folder p;
         make_folders p dep
   in
   make_folders "" folders
 
+let init_folders () =
+  Filename.unlink_dir !info.test_dir;
+  Filename.unlink_dir !info.multi_test_dir;
+  Filename.unlink_dir !info.driver_dir;
+  Filename.mkpath ~exists_ok:true !info.test_dir 0o755;
+  Filename.mkpath ~exists_ok:true !info.multi_test_dir 0o755;
+  Filename.mkpath ~exists_ok:true !info.driver_dir 0o755
+
 let init program_dir =
-  let cons = Filename.concat in
-  let program_dir =
-    if Filename.is_relative program_dir then cons (Unix.getcwd ()) program_dir
-    else program_dir
-  in
   let t_dir =
-    if !Cmdline.extension = "" then "unitcon_tests"
+    if !Cmdline.extension = "" then "unitcon-tests"
     else Utils.dot_to_dir_sep !Cmdline.extension
   in
   let d_dir =
-    if !Cmdline.extension = "" then "unitcon_drivers"
+    if !Cmdline.extension = "" then "unitcon-drivers"
     else Utils.dot_to_dir_sep !Cmdline.extension
   in
   let mt_dir =
-    if !Cmdline.extension = "" then "unitcon_multi_tests"
+    if !Cmdline.extension = "" then "unitcon-multi-tests"
     else Utils.dot_to_dir_sep !Cmdline.extension
   in
   info :=
     {
       program_dir;
-      summary_file = cons con_path "summary.json" |> cons program_dir;
+      summary_file =
+        Filename.(program_dir / Filename.(Utils.input_path / "summary.json"));
       error_summary_file =
-        cons con_path "error_summaries.json" |> cons program_dir;
-      call_prop_file = cons con_path "call_proposition.json" |> cons program_dir;
-      class_info_file = cons con_path "class_info.json" |> cons program_dir;
-      constant_file = cons con_path "constant_info.json" |> cons program_dir;
-      fuzz_constant_file = cons con_path "fuzz_constant" |> cons program_dir;
-      test_dir = cons program_dir t_dir;
-      multi_test_dir = cons program_dir mt_dir;
-      driver_dir = cons program_dir d_dir;
-      expected_bug = cons con_path "expected_bug" |> cons program_dir;
+        Filename.(
+          program_dir / Filename.(Utils.input_path / "error-summaries.json"));
+      call_prop_file =
+        Filename.(
+          program_dir / Filename.(Utils.input_path / "call-proposition.json"));
+      class_info_file = Filename.(!Cmdline.out_dir / "class-info.json");
+      constant_file = Filename.(!Cmdline.out_dir / "constant-info.json");
+      fuzz_constant_file = Filename.(!Cmdline.out_dir / "fuzz-constant");
+      test_dir = Filename.(!Cmdline.out_dir / t_dir);
+      multi_test_dir = Filename.(!Cmdline.out_dir / mt_dir);
+      driver_dir = Filename.(!Cmdline.out_dir / d_dir);
+      expected_bug =
+        Filename.(program_dir / Filename.(Utils.input_path / "expected-bug"));
     };
-  init_folder !info.test_dir;
-  init_folder !info.multi_test_dir;
-  init_folder !info.driver_dir;
-  cons !info.test_dir "log.txt" |> Logger.from_file;
-  get_bug_type (cons con_path "expected_bug_type" |> cons !info.program_dir);
-  Logger.info "Start UnitCon for %s" program_dir
+  init_folders ();
+  get_bug_type
+    Filename.(
+      !info.program_dir / Filename.(Utils.input_path / "expected-bug-type"))
 
 (* ************************************** *
    run program
@@ -313,7 +303,7 @@ let run_type str =
   else if Str.string_match (Str.regexp "^find") str 0 then Group
   else if Str.string_match (Str.regexp "^java") str 0 then Test
   else if
-    let start_cmd = "^" ^ Filename.concat unitcon_path "deps/jazzer" in
+    let start_cmd = "^" ^ Filename.(Utils.unitcon_path / "deps/jazzer") in
     Str.string_match (Str.regexp start_cmd) str 0
   then Fuzzer
   else if Str.string_match (Str.regexp "^chattr") str 0 then Fuzzer
@@ -432,22 +422,20 @@ let get_compilation_error_files data =
 let remove_last_file test_dir =
   decr num_of_tc_files;
   let last_file = "UnitconTest" ^ string_of_int !num_of_tc_files ^ ".java" in
-  remove_file (Filename.concat test_dir last_file)
+  remove_file Filename.(test_dir / last_file)
 
 let rec remove_no_exec_files curr_num test_dir =
   if curr_num > !num_of_tc_files then ()
   else
     let curr_tc = "UnitconTest" ^ string_of_int curr_num ^ ".java" in
     let curr_class = "UnitconTest" ^ string_of_int curr_num ^ ".class" in
-    remove_file (Filename.concat test_dir curr_tc);
-    remove_file (Filename.concat test_dir curr_class);
+    remove_file Filename.(test_dir / curr_tc);
+    remove_file Filename.(test_dir / curr_class);
     remove_no_exec_files (curr_num + 1) test_dir
 
 let modify_files test_dir data =
   let error_files = get_compilation_error_files data in
-  List.iter
-    (fun file -> remove_file (Filename.concat test_dir file))
-    error_files
+  List.iter (fun file -> remove_file Filename.(test_dir / file)) error_files
 
 let checking_init_err data =
   match
@@ -709,14 +697,14 @@ let insert_log_driver oc (file_num, tc, time) =
 let add_default_class test_dir =
   let need_default_interface () =
     if !require_interface_class then (
-      let oc = open_out (Filename.concat test_dir "UnitconInterface.java") in
+      let oc = open_out Filename.(test_dir / "UnitconInterface.java") in
       get_package !Cmdline.extension |> output_string oc;
       output_string oc "interface UnitconInterface {}\n";
       close_out oc)
   in
   let need_default_enum () =
     if !require_enum_class then (
-      let oc = open_out (Filename.concat test_dir "UnitconEnum.java") in
+      let oc = open_out Filename.(test_dir / "UnitconEnum.java") in
       get_package !Cmdline.extension |> output_string oc;
       output_string oc "enum UnitconEnum {}\n";
       close_out oc)
@@ -727,32 +715,31 @@ let add_default_class test_dir =
 let add_testcase test_dir file_num (tc, time) =
   let oc =
     open_out
-      (Filename.concat test_dir
-         (test_basename ^ string_of_int file_num ^ ".java"))
+      Filename.(test_dir / (test_basename ^ string_of_int file_num ^ ".java"))
   in
   insert_test oc (file_num, tc, time)
 
 let add_multi_testcase test_dir file_num (tc, loop_info, time) =
   let oc =
     open_out
-      (Filename.concat test_dir
-         (multi_test_basename ^ string_of_int file_num ^ ".java"))
+      Filename.(
+        test_dir / (multi_test_basename ^ string_of_int file_num ^ ".java"))
   in
   insert_multi_test oc (file_num, tc, loop_info, time)
 
 let add_driver driver_dir file_num (tc, time) =
   let oc =
     open_out
-      (Filename.concat driver_dir
-         (driver_basename ^ string_of_int file_num ^ ".java"))
+      Filename.(
+        driver_dir / (driver_basename ^ string_of_int file_num ^ ".java"))
   in
   insert_driver oc (file_num, tc, time)
 
 let add_log_driver driver_dir file_num (tc, time) =
   let oc =
     open_out
-      (Filename.concat driver_dir
-         (driver_basename ^ string_of_int file_num ^ ".java"))
+      Filename.(
+        driver_dir / (driver_basename ^ string_of_int file_num ^ ".java"))
   in
   insert_log_driver oc (file_num, tc, time)
 
@@ -760,27 +747,37 @@ let add_log_driver driver_dir file_num (tc, time) =
    run test cases
  * ************************************** *)
 
-let compile_cmd =
-  "find ./unitcon_tests/ -name \"*.java\" > test_files; "
-  ^ "javac -cp with_dependency.jar:"
-  ^ Filename.concat unitcon_path "deps/junit-4.11.jar"
-  ^ " @test_files"
+let compile_cmd info =
+  "find " ^ info.test_dir ^ " -name \"*.java\" > "
+  ^ Filename.(!Cmdline.out_dir / "test-files")
+  ^ "; javac -cp with-dependency.jar:"
+  ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
+  ^ ":"
+  ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
+  ^ " @"
+  ^ Filename.(!Cmdline.out_dir / "test-files")
 
-let multi_test_compile_cmd =
-  "find ./unitcon_multi_tests/ -name \"*.java\" > multi_test_files; "
-  ^ "javac -cp with_dependency.jar:"
-  ^ Filename.concat unitcon_path "deps/junit-4.11.jar"
-  ^ " @multi_test_files"
+let multi_test_compile_cmd info =
+  "find " ^ info.multi_test_dir ^ " -name \"*.java\" > "
+  ^ Filename.(!Cmdline.out_dir / "multi-test-files")
+  ^ "; javac -cp with-dependency.jar:"
+  ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
+  ^ ":"
+  ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
+  ^ " @"
+  ^ Filename.(!Cmdline.out_dir / "multi-test-files")
 
-let driver_compile_cmd =
-  "find ./unitcon_drivers/ -name \"*.java\" > driver_files; "
-  ^ "javac -cp with_dependency.jar:"
-  ^ Filename.concat unitcon_path "deps/jazzer_standalone.jar"
-  ^ " @driver_files"
+let driver_compile_cmd info =
+  "find " ^ info.driver_dir ^ " -name \"*.java\" > "
+  ^ Filename.(!Cmdline.out_dir / "driver-files")
+  ^ "; javac -cp with-dependency.jar:"
+  ^ Filename.(Utils.unitcon_path / "deps/jazzer_standalone.jar")
+  ^ " @"
+  ^ Filename.(!Cmdline.out_dir / "driver-files")
 
 let build_program info =
   let rec compile_loop () =
-    let ic_out, ic_err = simple_compiler info.program_dir compile_cmd in
+    let ic_out, ic_err = simple_compiler !Cmdline.out_dir (compile_cmd info) in
     let data_out = my_really_read_string ic_out in
     let data_err = my_really_read_string ic_err in
     close_in ic_out;
@@ -799,13 +796,15 @@ let build_program info =
 
 let build_multi_test info =
   let ic_out, ic_err =
-    simple_compiler info.program_dir multi_test_compile_cmd
+    simple_compiler !Cmdline.out_dir (multi_test_compile_cmd info)
   in
   close_in ic_out;
   close_in ic_err
 
 let build_driver info =
-  let ic_out, ic_err = simple_compiler info.program_dir driver_compile_cmd in
+  let ic_out, ic_err =
+    simple_compiler !Cmdline.out_dir (driver_compile_cmd info)
+  in
   close_in ic_out;
   close_in ic_err
 
@@ -818,17 +817,17 @@ let normal_exit =
       in
       close_in ic_out;
       close_in ic_err;
-      Logger.info "Normal End UnitCon for %s: %b(%d) (total time: %f)"
+      L.info "Normal End UnitCon for %s: %b(%d) (total time: %f)"
         !info.program_dir
         (if !num_of_success > 0 then true else false)
         !num_of_success
         (Unix.gettimeofday () -. !time);
-      Logger.info "First Success Test: %s" !first_success_tc;
-      Logger.info "Last Success Test: %s" !last_success_tc;
+      L.info "First Success Test: %s" !first_success_tc;
+      L.info "Last Success Test: %s" !last_success_tc;
       (* clean up useless files and directories *)
       remove_no_exec_files (!num_of_last_exec_tc + 1) !info.test_dir;
-      remove_file (Filename.concat !info.program_dir "multi_test_files");
-      remove_file (Filename.concat !info.program_dir "driver_files");
+      remove_file Filename.(!info.program_dir / "multi-test-files");
+      remove_file Filename.(!info.program_dir / "driver-files");
       remove_all_files !info.multi_test_dir;
       remove_all_files !info.driver_dir;
       Unix.rmdir !info.multi_test_dir;
@@ -839,20 +838,28 @@ let get_test_path path base_name =
   if path = "" then base_name
   else Utils.dot_to_dir_sep path ^ Filename.dir_sep ^ base_name
 
+(* Relative path should be used instead of absolute path
+   e.g., ./unitcon-tests *)
 let execute_cmd =
-  "java -cp with_dependency.jar:./unitcon_tests/:"
-  ^ Filename.concat unitcon_path "deps/junit-4.11.jar:. "
-  ^ "org.junit.runner.JUnitCore"
+  "java -cp with-dependency.jar:./unitcon-tests/:"
+  ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
+  ^ ":"
+  ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
+  ^ ":. " ^ "org.junit.runner.JUnitCore"
 
+(* Relative path should be used instead of absolute path
+   e.g., ./unitcon-multi-tests *)
 let multi_test_execute_cmd =
-  "java -cp with_dependency.jar:./unitcon_multi_tests/:"
-  ^ Filename.concat unitcon_path "deps/junit-4.11.jar:. "
-  ^ "org.junit.runner.JUnitCore"
+  "java -cp with-dependency.jar:./unitcon-multi-tests/:"
+  ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
+  ^ ":"
+  ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
+  ^ ":. " ^ "org.junit.runner.JUnitCore"
 
 let driver_execute_cmd d_file =
   let execute_cmd =
     let common =
-      Filename.concat unitcon_path "deps/jazzer "
+      Filename.(Utils.unitcon_path / "deps/jazzer ")
       ^ "--cp=with_dependency.jar:./unitcon_drivers/:. " ^ "--target_class="
       ^ d_file
       ^ " --keep_going=30 --hooks=false --dedup=true \
@@ -869,22 +876,24 @@ let driver_execute_cmd d_file =
   ^ "; " ^ execute_cmd
   ^ unlock_read_only !info.program_dir
 
+(* Relative path should be used instead of absolute path
+   e.g., ./unitcon-drivers *)
 let log_driver_execute_cmd crash_file =
-  "java -cp with_dependency.jar:"
-  ^ Filename.concat unitcon_path
-      "deps/jazzer_standalone.jar:./unitcon_drivers:. "
-  ^ crash_file
+  "java -cp with-dependency.jar:./unitcon-drivers/:"
+  ^ Filename.(Utils.unitcon_path / "deps/jazzer_standalone.jar")
+  ^ ":. " ^ crash_file
 
 let run_testfile () =
   let compile_start = Unix.gettimeofday () in
   add_default_class !info.test_dir;
-  Logger.info "Start compilation! (# of test files: %d)" !num_of_tc_files;
+  L.info "Start compilation! (# of test files: %d)" !num_of_tc_files;
   build_program !info;
-  Logger.info "End compilation! (duration: %f)"
+  L.info "End compilation! (duration: %f)"
     (Unix.gettimeofday () -. compile_start);
-  let execute program_dir test_dir expected_bug t_file num_of_t_file =
+  let execute _ test_dir expected_bug t_file num_of_t_file =
     let ic_out, ic_err =
-      simple_compiler program_dir (modify_execute_command execute_cmd t_file)
+      simple_compiler !Cmdline.out_dir
+        (modify_execute_command execute_cmd t_file)
     in
     let data = my_really_read_string ic_err in
     close_in ic_out;
@@ -894,13 +903,13 @@ let run_testfile () =
       if !first_success_tc = "" then first_success_tc := t_file;
       last_success_tc := t_file;
       incr num_of_success;
-      Logger.info "Success Test: %s" t_file;
+      L.info "Success Test: %s" t_file;
       Unix.kill (Unix.getpid ()) Sys.sigusr1)
-    else if not (Sys.file_exists (Filename.concat test_dir (t_file ^ ".java")))
-    then ()
+    else if not (Sys.file_exists Filename.(test_dir / (t_file ^ ".java"))) then
+      ()
     else (
-      remove_file (Filename.concat test_dir (t_file ^ ".java"));
-      remove_file (Filename.concat test_dir (t_file ^ ".class")))
+      remove_file Filename.(test_dir / (t_file ^ ".java"));
+      remove_file Filename.(test_dir / (t_file ^ ".class")))
   in
   let rec execute_test current_f_num program_dir test_dir expected_bug =
     if current_f_num <= !num_of_tc_files then (
@@ -917,16 +926,16 @@ let run_multi_testfile () =
   let compile_start = Unix.gettimeofday () in
   add_default_class !info.multi_test_dir;
   copy_file
-    (Filename.concat unitcon_path "deps/UnitconCombinator.java")
-    (Filename.concat !info.multi_test_dir "UnitconCombinator.java");
-  Logger.info "Start multi-test! (# of multi-test: %d)" !num_of_multi_tc_files;
+    Filename.(Utils.unitcon_path / "deps/UnitconCombinator.java")
+    Filename.(!info.multi_test_dir / "UnitconCombinator.java");
+  L.info "Start multi-test! (# of multi-test: %d)" !num_of_multi_tc_files;
   build_multi_test !info;
   let mt_file =
     get_test_path !Cmdline.extension multi_test_basename
     ^ string_of_int !num_of_multi_tc_files
   in
   let ic_out, ic_err =
-    simple_compiler !info.program_dir
+    simple_compiler !Cmdline.out_dir
       (modify_execute_command multi_test_execute_cmd mt_file)
   in
   let data = my_really_read_string ic_err in
@@ -934,12 +943,11 @@ let run_multi_testfile () =
   close_in ic_err;
   let found_rep_inputs =
     if checking_bug_presence data !info.expected_bug then (
-      Logger.info "Found bug with loop: %s" mt_file;
+      L.info "Found bug with loop: %s" mt_file;
       get_rep_input data !info.expected_bug)
     else []
   in
-  Logger.info "End multi-test! (duration: %f)"
-    (Unix.gettimeofday () -. compile_start);
+  L.info "End multi-test! (duration: %f)" (Unix.gettimeofday () -. compile_start);
   found_rep_inputs
 
 let run_reproducer crash_file =
@@ -952,43 +960,41 @@ let run_reproducer crash_file =
     | _ -> []
   in
   let compile_start = Unix.gettimeofday () in
-  Logger.info "Start reproducer! (# of driver: %d)" !num_of_driver_files;
+  L.info "Start reproducer! (# of driver: %d)" !num_of_driver_files;
   build_driver !info;
   let crash_file = get_test_path !Cmdline.extension crash_file in
   let ic_out, ic_err =
-    simple_compiler !info.program_dir (log_driver_execute_cmd crash_file)
+    simple_compiler !Cmdline.out_dir (log_driver_execute_cmd crash_file)
   in
   let data = my_really_read_string ic_err in
   close_in ic_out;
   close_in ic_err;
   let input = Str.split (Str.regexp "\n") data |> get_input in
-  Logger.info "End reproducer! (duration: %f)"
-    (Unix.gettimeofday () -. compile_start);
+  L.info "End reproducer! (duration: %f)" (Unix.gettimeofday () -. compile_start);
   input
 
 let run_fuzzer () =
   let compile_start = Unix.gettimeofday () in
   add_default_class !info.driver_dir;
-  Logger.info "Start fuzzer! (# of driver: %d)" !num_of_driver_files;
+  L.info "Start fuzzer! (# of driver: %d)" !num_of_driver_files;
   build_driver !info;
   let d_file =
     get_test_path !Cmdline.extension driver_basename
     ^ string_of_int !num_of_driver_files
   in
   let ic_out, ic_err =
-    simple_compiler !info.program_dir (driver_execute_cmd d_file)
+    simple_compiler !Cmdline.out_dir (driver_execute_cmd d_file)
   in
   let data = my_really_read_string ic_err in
   close_in ic_out;
   close_in ic_err;
   let found_rep_file =
     if checking_bug_presence data !info.expected_bug then (
-      Logger.info "Found bug with fuzzer: %s" d_file;
+      L.info "Found bug with fuzzer: %s" d_file;
       get_rep_file data !info.expected_bug)
     else ""
   in
-  Logger.info "End fuzzer! (duration: %f)"
-    (Unix.gettimeofday () -. compile_start);
+  L.info "End fuzzer! (duration: %f)" (Unix.gettimeofday () -. compile_start);
   found_rep_file
 
 (* force stop if generated test cases are not executed and only synthesis is long *)
@@ -1002,11 +1008,11 @@ let abnormal_run_test =
       close_in ic_out;
       close_in ic_err;
       if !num_of_tc_files mod 15 <> 0 then (
-        Logger.info "Abnormal Run Test";
+        L.info "Abnormal Run Test";
         run_testfile ();
         Unix.kill (Unix.getpid ()) Sys.sigusr1)
       else (
-        Logger.info "Keep Going";
+        L.info "Keep Going";
         abnormal_keep_going := true))
 
 let interrupt pid =

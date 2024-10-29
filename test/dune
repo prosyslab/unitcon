@@ -2,21 +2,13 @@
  (alias runtest)
  (deps
   (source_tree ../deps)
-  (source_tree ../script)
-  (source_tree Main)
-  ../run.py)
+  (source_tree Main))
  (action
   (progn
    (run ln -sf src/main.exe ../unitcon)
-   (run
-    python3
-    ../run.py
-    Main
-    --unitcon_path
-    ../unitcon
-    --infer_path
-    ../../../unitcon-infer/infer/bin/infer)
-   (system "[ -e Main/results_0/UnitconTest1.java ]"))))
+   (run ../unitcon build Main)
+   (run ../unitcon synthesize Main)
+   (system "[ -e unitcon-out/unitcon-tests/UnitconTest1.java ]"))))
 
 (test
  (name unit)

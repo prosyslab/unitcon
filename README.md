@@ -11,60 +11,40 @@
 $ ./setup.sh
 ```
 
-## Easy Run
-We provide a script called `run.py` to make running Unitcon easier.  
-If you want to run Unitcon easily, please organize the directory structure as follows and run the script below from within the Unitcon directory.
-- directory structure
-```
-target_dir
-    └--unitcon_properties
-        └--build_command
-```
-- command to run the script
-```
-python3 run.py PATH/TO/TARGET/DIR
-```
-
 ## Example
 You can run Unitcon on the `Main` program inside the `test` directory by executing the following command.
 ```sh
-python3 run.py test/Main
+./unitcon build test/Main
+./unitcon synthesize test/Main
 ```
 
 ## Obtain the required data before synthesis
 If you want to make the data you need to run the Unitcon one by one, please follow it from here.
 
 ```sh
-# Make a jar file with the target program compiled.
-$ python3 script/command_maker.py PATH/TO/TARGET/DIR
+# Make a jar file with the target program compiled
+# and analyze the extra data for test case synthesis.
+$ ./unitcon build PATH/TO/TARGET/DIR
 
 # Analyze the target program.
 $ cd PATH/TO/TARGET/DIR
 $ PATH/TO/INFER capture -- [build command]
-$ PATH/TO/INFER analyze --pulse-only --show-latent
+$ PATH/TO/INFER analyze --pulse-only --show-latent --target-file-name [fname] --target-file-line [line]
 $ PATH/TO/INFER debug --procedures --procedures-summary-json > infer-out/summary.json
-
-# Analyze the extra data for test case synthesis.
-$ ./unitcon PATH/TO/TARGET/DIR -class-info
-$ ./unitcon PATH/TO/TARGET/DIR -constant-info
 ```
-All data needed for synthesis must be contained in the `unitcon_properties` directory within the target directory.
+All data needed for synthesis must be contained in the `unitcon-properties` directory within the target directory.  
+But, `expected-bug` and `expected-bug-type` may not be contained in the `unitcon-properties` if you do not need to synthesize test case for target.
 ```
 target_dir
-    |--with_dependency.jar
-    └--unitcon_properties
-        |--error_summaries.json (static analysis result)
-        |--call_proposition.json (static analysis result)
-        |--summary.json (static analysis result)
-        |--build_command (for making with_dependency.jar)
-        |--class_info.json
-        |--constant_info.json
-        |--expected_bug (option)
-        └--expected_bug_type (option)
+    |--with-dependency.jar
+    └--unitcon-properties
+        |--build-command (for making with-dependency.jar)
+        |--expected-bug (option)
+        └--expected-bug-type (option)
 ```
 
 ## Synthesize
 ```sh
-$ ./unitcon PATH/TO/TARGET/DIR
+$ ./unitcon synthesize PATH/TO/TARGET/DIR
 ```
-If Unitcon successfully synthesizes the `error-triggering test case`, the completed test case will be located in `PATH/TO/TARGET/DIR/unitcon_tests`.
+If Unitcon successfully synthesizes the `error-triggering test case`, the completed test case will be located in `unitcon-out/unitcon-tests`.

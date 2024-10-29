@@ -1,4 +1,5 @@
 open! Javalib_pack
+open Utils
 
 let is_file f =
   try (Unix.stat f).Unix.st_kind = Unix.S_REG
@@ -216,10 +217,6 @@ let run p =
     fold (fun acc ioc -> fold_class acc ioc) [] p
   in
   let r = `Assoc x in
-  let cons = Filename.concat in
-  let p_dir = if Filename.is_relative p then cons (Unix.getcwd ()) p else p in
-  let oc =
-    cons (cons p_dir "unitcon_properties") "constant_info.json" |> open_out
-  in
+  let oc = Filename.concat !Cmdline.out_dir "constant-info.json" |> open_out in
   Yojson.Safe.pretty_to_channel oc r;
   close_out oc

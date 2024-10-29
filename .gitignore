@@ -18,6 +18,9 @@ infer-out/
 # java bytecode
 *.class
 
+# test data
+test/Main/unitcon-out
+
 # ocamlbuild targets
 *.byte
 *.native
@@ -36,6 +39,9 @@ setup.log
 constraint
 test/example1
 test/example2
+deps/*.jar
+deps/jazzer
+deps/jazzer-linux.tar.gz
 
 # llvm files
 *.bc

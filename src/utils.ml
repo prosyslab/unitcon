@@ -1,8 +1,60 @@
+module F = Format
+module L = Logger
+
 module ImportSet = Set.Make (struct
   type t = string
 
   let compare = compare
 end)
+
+module Filename = struct
+  include Filename
+
+  let ( / ) l r = concat l r
+
+  let cwd = Sys.getcwd ()
+
+  let resolve path = if is_relative path then Unix.realpath path else path
+
+  let exists = Sys.file_exists
+
+  let mkdir ?(exists_ok = false) dir perm =
+    if not (exists dir) then Unix.mkdir dir perm
+    else if exists_ok then ()
+    else L.error "Directory %s already exists" dir
+
+  let mkpath ?(exists_ok = false) path perm =
+    let path = Str.split (Str.regexp dir_sep) (resolve path) in
+    let rec mkdeps path = function
+      | [] -> ()
+      | f :: deps ->
+          let p = path / f in
+          mkdir ~exists_ok p perm;
+          mkdeps p deps
+    in
+    mkdeps "/" path
+
+  let rename = Unix.rename
+
+  let unlink = Unix.unlink
+
+  let rec unlink_dir path =
+    if not (exists path) then ()
+    else if Sys.is_directory path then
+      Array.iter
+        (fun file ->
+          let abspath = resolve (path / file) in
+          if Sys.is_directory abspath then unlink_dir abspath
+          else unlink abspath)
+        (Sys.readdir path)
+    else L.error "Path %s is not a directory" path
+end
+
+let input_path = "unitcon-properties"
+
+let unitcon_path =
+  let path = Filename.dirname Sys.argv.(0) in
+  if Filename.is_relative path then Filename.(Filename.cwd / path) else path
 
 let dot_to_dir_sep path =
   Str.global_replace (Str.regexp "\\.") Filename.dir_sep path

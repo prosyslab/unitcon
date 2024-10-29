@@ -1,27 +1,40 @@
-let initialize () =
-  (try Unix.mkdir !Cmdline.out_dir 0o775
-   with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
-  (try Unix.mkdir (!Cmdline.out_dir ^ "/marshal") 0o775
-   with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
-  print_endline ("Logging to " ^ !Cmdline.out_dir)
+open Utils
+module C = Cmdliner
+module Cmd = C.Cmd
+module Arg = C.Arg
+module Manpage = C.Manpage
+module Term = C.Term
+
+let build () =
+  L.info "Start building";
+  if !Cmdline.command_maker then CommandMaker.run !Cmdline.target_program
+  else if !Cmdline.class_info then ClassInfo.run !Cmdline.out_dir
+  else if !Cmdline.constant_info then ConstantInfo.run !Cmdline.out_dir
+  else (
+    CommandMaker.run !Cmdline.target_program;
+    ClassInfo.run !Cmdline.out_dir;
+    ConstantInfo.run !Cmdline.out_dir)
+
+let analyze () = failwith "not implemented"
+
+let synthesize () =
+  L.info "Start synthesizing for %s" !Cmdline.target_program;
+  if !Cmdline.test_case_ast then RunProgramAST.run !Cmdline.target_program
+  else RunProgramDUG.run !Cmdline.target_program
+
+let finalize t0 =
+  L.info "Unitcon completes: %fs" (Sys.time () -. t0);
+  L.finalize ()
 
 let main () =
-  let usage = "Usage: unitcon [options] [target_program]" in
-  Arg.parse Cmdline.options Cmdline.parse_arg usage;
-  ignore (Unix.alarm !Cmdline.time_out);
-  match !Cmdline.target_program with
-  | None -> failwith "Error: Target Program is not given"
-  | Some p when !Cmdline.class_info ->
-      initialize ();
-      ClassInfo.run p
-  | Some p when !Cmdline.constant_info ->
-      initialize ();
-      ConstantInfo.run p
-  | Some p ->
-      initialize ();
-      if !Cmdline.test_case_ast then RunProgramAST.run p
-      else RunProgramDUG.run p
+  let t0 = Sys.time () in
+  Cmdline.parse ();
+  (match !Cmdline.command with
+  | Cmdline.Build -> build ()
+  | Cmdline.Analyze -> analyze ()
+  | Cmdline.Synthesize ->
+      Sys.set_signal Sys.sigalrm RunProgram.normal_exit;
+      synthesize ());
+  finalize t0
 
-let _ =
-  Sys.set_signal Sys.sigalrm RunProgram.normal_exit;
-  main ()
+let _ = main ()
