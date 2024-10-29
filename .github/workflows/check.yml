@@ -51,7 +51,7 @@ jobs:
 
       - name: Build
         run: |
-          ./setup.sh || eval $(opam env) && make -j
+          ./setup.sh || { eval $(opam env) && make -j; }
 
       - name: Run test (regression)
         run: |
