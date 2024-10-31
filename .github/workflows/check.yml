@@ -3,9 +3,11 @@ name: check
 on: [push, pull_request]
 
 jobs:
-  check:
-    name: check
+  infer-build:
+    name: infer-build
     runs-on: ubuntu-22.04
+    outputs:
+      output1: ${{ steps.artifact-infer.outputs.artifact-id }}
     permissions:
       statuses: write
       contents: read
@@ -15,6 +17,11 @@ jobs:
         with:
           submodules: recursive
           token: ${{ secrets.ACTION_TOKEN }} 
+      
+      - name: Install required apt packages
+        run: |
+          sudo apt install libmpfr-dev libsqlite3-dev
+          sudo apt clean
 
       - name: Set up JAVA
         uses: actions/setup-java@v4
@@ -27,11 +34,52 @@ jobs:
         with:
           ocaml-compiler: ocaml-variants.4.14.0+options,ocaml-option-flambda
 
+      - name: Build Infer
+        shell: bash
+        run: |
+          eval $(opam env)
+          cd unitcon-infer
+          ./build-infer.sh --yes --user-opam-switch java
+          cd ..
+
+      - name: Tar Infer Artifact
+        run: tar -cf infer.tar unitcon-infer
+
+      - name: Upload Infer Artifact
+        uses: actions/upload-artifact@v4
+        id: artifact-infer
+        with:
+          name: infer-artifact
+          path: infer.tar
+
+  unitcon-build:
+    name: unitcon-build
+    runs-on: ubuntu-22.04
+    needs: infer-build
+    permissions:
+      statuses: write
+      contents: read
+    steps:
+      - env:
+          OUTPUT1: ${{ needs.infer-build.outputs.output1 }}
+        run: echo "Infer artifact-id is $OUTPUT1"
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.ACTION_TOKEN }} 
+
+      - name: Set up JAVA
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '8'
+
       - name: Use cached dependencies
-        id: cache-opam
+        id: cache-unitcon-opam
         uses: actions/cache@v4
         env:
-          cache-name: cache-opam
+          cache-name: cache-unitcon-opam
         with:
           path: |
             ~/.opam
@@ -41,18 +89,36 @@ jobs:
             ${{ env.cache-name }}-build-${{ hashFiles('setup.sh') }}
             ${{ env.cache-name }}-build-
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ocaml-variants.4.14.0+options,ocaml-option-flambda
+
       - name: Install ocamlformat
+        shell: bash
         run: opam install ocamlformat.0.26.1
 
       - name: Check format
+        shell: bash
         run: |
           eval $(opam env)
           make fmt
 
-      - name: Build
+      - name: Download Infer Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: infer-artifact
+          github-token: ${{ secrets.ACTION_TOKEN }} 
+
+      - name: Untar Infer Artifact
+        run: tar -xf infer.tar
+
+      - name: Build Unitcon
+        shell: bash
         run: |
-          ./setup.sh || { eval $(opam env) && make -j; }
+          ./setup.sh unitcon || { eval $(opam env) && make -j; }
 
       - name: Run test (regression)
+        shell: bash
         run: |
           eval $(opam env) && make coverage
