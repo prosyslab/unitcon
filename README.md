@@ -12,39 +12,63 @@ $ ./setup.sh
 ```
 
 ## Example
-You can run Unitcon on the `Main` program inside the `test` directory by executing the following command.
+You can run Unitcon on the `Main` program inside the `test` directory by executing the following command.  
+Suppose the target location is **11** line in **Main.java** file.
 ```sh
 ./unitcon build test/Main
-./unitcon synthesize test/Main
+./unitcon analyze test/Main --target Main.java:11
+./unitcon synthesize test/Main --target Main.java:11
 ```
 
-## Obtain the required data before synthesis
+## Running Unitcon
 If you want to make the data you need to run the Unitcon one by one, please follow it from here.
 
-```sh
-# Make a jar file with the target program compiled
-# and analyze the extra data for test case synthesis.
-$ ./unitcon build PATH/TO/TARGET/DIR
-
-# Analyze the target program.
-$ cd PATH/TO/TARGET/DIR
-$ PATH/TO/INFER capture -- [build command]
-$ PATH/TO/INFER analyze --pulse-only --show-latent --target-file-name [fname] --target-file-line [line]
-$ PATH/TO/INFER debug --procedures --procedures-summary-json > infer-out/summary.json
-```
-All data needed for synthesis must be contained in the `unitcon-properties` directory within the target directory.  
-But, `expected-bug` and `expected-bug-type` may not be contained in the `unitcon-properties` if you do not need to synthesize test case for target.
+### Requirements
+The structure of the target directory should follow the structure below.
 ```
 target_dir
-    |--with-dependency.jar
+    |--...
     └--unitcon-properties
-        |--build-command (for making with-dependency.jar)
+        |--build-command (for building and analyzing the target program)
         |--expected-bug (option)
         └--expected-bug-type (option)
 ```
 
-## Synthesize
+All data needed for synthesis must be contained in the `unitcon-properties` directory within the target directory.
+
+#### 1. build-command
+`build-command` contains a sequence of commands required to build the target program.  
+The following command is the contents of `test/Main`'s `build-command`.
+```
+ javac Main.java
+```
+Unitcon creates a single jar file by executing the build sequence of `build-command`. Therefore, Unitcon expects that all dependencies exist in the target directory.
+If the target program uses a build system such as **Maven**, the `build-command` must contain the command such as `mvn dependency:copy-dependencies`.
+
+#### 2. expected-bug & expected-bug-type
+`expected-bug` and `expected-bug-type` may not be contained in the `unitcon-properties` if you do not need to synthesize a test case for specific error-triggering.  
+If you have an expected error's trace and error's type, you can add the `expected-bug` and `expected-bug-type` files each like below.
+- expected-bug: `at Main.toString(Main.java:11)`
+- expected-bug-type: `java.lang.NullPointerException`
+
+### Build
 ```sh
-$ ./unitcon synthesize PATH/TO/TARGET/DIR
+# Make a single jar file with the target program compiled
+# and analyze the extra data for test case synthesis.
+$ ./unitcon build PATH/TO/TARGET/DIR
+```
+
+### Analyze
+```sh
+# Analyze the target program.
+$ ./unitcon analyze PATH/TO/TARGET/DIR --target [target location]
+```
+The form of target location should be `[file name]:[line number]`.
+file name is a name that contains the full path from the target directory to a file.
+
+
+### Synthesize
+```sh
+$ ./unitcon synthesize PATH/TO/TARGET/DIR --target [target location]
 ```
 If Unitcon successfully synthesizes the `error-triggering test case`, the completed test case will be located in `unitcon-out/unitcon-tests`.
