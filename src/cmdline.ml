@@ -24,7 +24,7 @@ let constant_info = ref false
 
 let command_maker = ref false
 
-(* analyze options *)
+(* analyze and synthesize options *)
 let target = ref ""
 
 (* synthesize options *)
@@ -167,9 +167,10 @@ module Analyze = struct
 end
 
 module Synthesize = struct
-  let opt _copt _basic_mode _pruning_mode _priority_mode _test_case_ast
+  let opt _copt _target _basic_mode _pruning_mode _priority_mode _test_case_ast
       _time_out _unknown_bug _mock _extension =
     command := Synthesize;
+    target := _target;
     basic_mode := _basic_mode;
     pruning_mode := _pruning_mode;
     priority_mode := _priority_mode;
@@ -186,8 +187,9 @@ module Synthesize = struct
     let info = C.Cmd.info name ~doc ~man in
     Cmd.v info
       Term.(
-        const opt $ common_opt $ _basic_mode $ _pruning_mode $ _priority_mode
-        $ _test_case_ast $ _time_out $ _unknown_bug $ _mock $ _extension)
+        const opt $ common_opt $ _target $ _basic_mode $ _pruning_mode
+        $ _priority_mode $ _test_case_ast $ _time_out $ _unknown_bug $ _mock
+        $ _extension)
 end
 
 let main_cmd =

@@ -6,18 +6,6 @@ let dep_files out_dir = Filename.(out_dir / "jar-files")
 
 let dependency_jar out_dir = Filename.(out_dir / "with-dependency.jar")
 
-let my_really_read_string in_chan =
-  let res = Buffer.create 1024 in
-  let rec loop () =
-    match input_line in_chan with
-    | line ->
-        Buffer.add_string res line;
-        Buffer.add_string res "\n";
-        loop ()
-    | exception End_of_file -> Buffer.contents res
-  in
-  loop ()
-
 let execute_command command =
   let close_channel (stdout, stdin, stderr) =
     close_out stdin;
@@ -99,12 +87,15 @@ let make_jar_with_dependencies p =
   let abspaths = collect_classpaths ~prefix:(p ^ Filename.dir_sep) p in
   write_manifest_file manifest_oc abspaths;
   write_dep_files jar_files_oc abspaths;
+  close_out manifest_oc;
+  close_out jar_files_oc;
   simple_compiler p ("jar -cmf " ^ m_file ^ " " ^ dep_jar ^ " @" ^ jar_files)
 
 let execute_build_cmd p =
   let build_cmd_file = Filename.(Filename.(p / input_path) / "build-command") in
   let ic = open_in build_cmd_file in
-  let cmds = my_really_read_string ic |> Str.split (Str.regexp "\n") in
+  let cmds = read_all_string ic |> Str.split (Str.regexp "\n") in
+  close_in ic;
   let rec execute cmds =
     match cmds with
     | c :: tl ->

@@ -15,6 +15,7 @@ test-unitcon: all
 	./run.sh
 
 coverage:
+	rsync -a unitcon-infer _build/default/
 	$(DUNE) runtest ./test
 
 clean:

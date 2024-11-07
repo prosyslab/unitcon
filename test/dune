@@ -7,7 +7,8 @@
   (progn
    (run ln -sf src/main.exe ../unitcon)
    (run ../unitcon build Main)
-   (run ../unitcon synthesize Main)
+   (run ../unitcon analyze Main --target Main.java:11)
+   (run ../unitcon synthesize Main --target Main.java:11)
    (system "[ -e unitcon-out/unitcon-tests/UnitconTest1.java ]"))))
 
 (test

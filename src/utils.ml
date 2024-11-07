@@ -7,6 +7,18 @@ module ImportSet = Set.Make (struct
   let compare = compare
 end)
 
+let read_all_string in_chan =
+  let res = Buffer.create 1024 in
+  let rec loop () =
+    match input_line in_chan with
+    | line ->
+        Buffer.add_string res line;
+        Buffer.add_string res "\n";
+        loop ()
+    | exception End_of_file -> Buffer.contents res
+  in
+  loop ()
+
 module Filename = struct
   include Filename
 
@@ -17,6 +29,18 @@ module Filename = struct
   let resolve path = if is_relative path then Unix.realpath path else path
 
   let exists = Sys.file_exists
+
+  let copy src dst =
+    let in_fd = Unix.openfile src [ Unix.O_RDONLY ] 0 in
+    let out_fd =
+      Unix.openfile dst [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ] 0o666
+    in
+    let in_chan = Unix.in_channel_of_descr in_fd in
+    let out_chan = Unix.out_channel_of_descr out_fd in
+    let data = read_all_string in_chan in
+    output_string out_chan data;
+    close_in in_chan;
+    close_out out_chan
 
   let mkdir ?(exists_ok = false) dir perm =
     if not (exists dir) then Unix.mkdir dir perm

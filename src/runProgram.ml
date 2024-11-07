@@ -41,13 +41,12 @@ type t = {
   call_prop_file : string;
   class_info_file : string;
   constant_file : string;
-  fuzz_constant_file : string;
   test_dir : string;
   multi_test_dir : string;
   expected_bug : string;
 }
 
-type run_type = Compile | Group | Fuzzer | Test
+type run_type = Compile | Group | Test
 
 let info =
   ref
@@ -58,7 +57,6 @@ let info =
       call_prop_file = "";
       class_info_file = "";
       constant_file = "";
-      fuzz_constant_file = "";
       test_dir = "";
       multi_test_dir = "";
       expected_bug = "";
@@ -106,7 +104,14 @@ let get_bug_type filename =
 
 let parse_error_summary filename =
   if not (Sys.file_exists filename) then failwith (filename ^ " not found");
-  let json = Json.from_file filename in
+  let data = Json.lineseq_from_file filename in
+  let json =
+    `List
+      (Seq.fold_left
+         (fun lst assoc -> match assoc with `Json j -> j :: lst | _ -> lst)
+         [] data
+      |> List.rev)
+  in
   ErrorSummary.from_error_summary_json json
 
 let parse_callprop filename =
@@ -181,7 +186,7 @@ let init_folders () =
   Filename.mkpath ~exists_ok:true !info.test_dir 0o755;
   Filename.mkpath ~exists_ok:true !info.multi_test_dir 0o755
 
-let init program_dir =
+let init program_dir out_dir =
   let t_dir =
     if !Cmdline.extension = "" then "unitcon-tests"
     else Utils.dot_to_dir_sep !Cmdline.extension
@@ -190,22 +195,17 @@ let init program_dir =
     if !Cmdline.extension = "" then "unitcon-multi-tests"
     else Utils.dot_to_dir_sep !Cmdline.extension
   in
+  let infer_out_dir = Filename.(out_dir / "infer-out") in
   info :=
     {
       program_dir;
-      summary_file =
-        Filename.(program_dir / Filename.(Utils.input_path / "summary.json"));
-      error_summary_file =
-        Filename.(
-          program_dir / Filename.(Utils.input_path / "error-summaries.json"));
-      call_prop_file =
-        Filename.(
-          program_dir / Filename.(Utils.input_path / "call-proposition.json"));
-      class_info_file = Filename.(!Cmdline.out_dir / "class-info.json");
-      constant_file = Filename.(!Cmdline.out_dir / "constant-info.json");
-      fuzz_constant_file = Filename.(!Cmdline.out_dir / "fuzz-constant");
-      test_dir = Filename.(!Cmdline.out_dir / t_dir);
-      multi_test_dir = Filename.(!Cmdline.out_dir / mt_dir);
+      summary_file = Filename.(infer_out_dir / "summary.json");
+      error_summary_file = Filename.(infer_out_dir / "error-summaries.json");
+      call_prop_file = Filename.(infer_out_dir / "call-proposition.json");
+      class_info_file = Filename.(out_dir / "class-info.json");
+      constant_file = Filename.(out_dir / "constant-info.json");
+      test_dir = Filename.(out_dir / t_dir);
+      multi_test_dir = Filename.(out_dir / mt_dir);
       expected_bug =
         Filename.(program_dir / Filename.(Utils.input_path / "expected-bug"));
     };
@@ -217,34 +217,6 @@ let init program_dir =
 (* ************************************** *
    run program
  * ************************************** *)
-
-let lock_read_only dir = "chattr -R +i " ^ dir
-
-let unlock_read_only dir = "chattr -R -i " ^ dir
-
-let my_really_read_string in_chan =
-  let res = Buffer.create 1024 in
-  let rec loop () =
-    match input_line in_chan with
-    | line ->
-        Buffer.add_string res line;
-        Buffer.add_string res "\n";
-        loop ()
-    | exception End_of_file -> Buffer.contents res
-  in
-  loop ()
-
-let copy_file src dst =
-  let in_fd = Unix.openfile src [ Unix.O_RDONLY ] 0 in
-  let out_fd =
-    Unix.openfile dst [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ] 0o666
-  in
-  let in_chan = Unix.in_channel_of_descr in_fd in
-  let out_chan = Unix.out_channel_of_descr out_fd in
-  let data = my_really_read_string in_chan in
-  output_string out_chan data;
-  close_in in_chan;
-  close_out out_chan
 
 let modify_execute_command command t_file_name = command ^ " " ^ t_file_name
 
@@ -270,9 +242,9 @@ let check_package_name_presence package_name error_trace =
   check_substring package_name error_trace
 
 let check_target_method_presence error_trace =
-  check_substring
-    ("java.lang.NullPointerException.*" ^ !error_method_name)
-    error_trace
+  (* if you want to target the NPE,
+     add "java.lang.NullPointerException.*" in front of the error method name *)
+  check_substring !error_method_name error_trace
 
 let check_useless_npe error_trace =
   let ignored_npes =
@@ -289,11 +261,6 @@ let run_type str =
   if Str.string_match (Str.regexp "^javac") str 0 then Compile
   else if Str.string_match (Str.regexp "^find") str 0 then Group
   else if Str.string_match (Str.regexp "^java") str 0 then Test
-  else if
-    let start_cmd = "^" ^ Filename.(Utils.unitcon_path / "deps/jazzer") in
-    Str.string_match (Str.regexp start_cmd) str 0
-  then Fuzzer
-  else if Str.string_match (Str.regexp "^chattr") str 0 then Fuzzer
   else failwith "not supported build type"
 
 let string_of_expected_bug file =
@@ -355,7 +322,7 @@ let execute_command command =
     close_channel (stdout, stdin, stderr)
   in
   match run_type command with
-  | Compile | Group | Fuzzer -> execute command
+  | Compile | Group -> execute command
   | Test -> execute ("timeout 5s " ^ command)
 
 let simple_compiler program_dir command =
@@ -410,14 +377,16 @@ let checking_error_presence data =
   | exception Not_found -> ()
   | _ -> raise Compilation_Error
 
-let checking_bug_presence error_trace expected_bug =
-  if !Cmdline.unknown_bug then
-    check_package_name_presence
-      (string_of_expected_bug expected_bug)
-      error_trace
+let checking_bug_presence error_trace expected_bug_file =
+  let expected_bug = string_of_expected_bug expected_bug_file in
+  if !Cmdline.unknown_bug || expected_bug = "" then
+    (check_package_name_presence
+       (string_of_expected_bug expected_bug)
+       error_trace
+    || expected_bug = "")
     && check_target_method_presence error_trace
     && check_useless_npe error_trace |> not
-  else compare_stack_trace (string_of_expected_bug expected_bug) error_trace
+  else compare_stack_trace expected_bug error_trace
 
 let is_empty_file file =
   if not (Sys.file_exists file) then failwith (file ^ " not found");
@@ -461,31 +430,6 @@ let need_default_enum tc_body =
 let need_default_class tc_body =
   need_default_interface tc_body;
   need_default_enum tc_body
-
-let get_const_sequence tc =
-  let consume_func t =
-    get_consume_func t |> Str.replace_first Regexp.dot "\\."
-  in
-  let identify_const_type s =
-    if check_substring (consume_func Int) s then Int
-    else if check_substring (consume_func Long) s then Long
-    else if check_substring (consume_func Short) s then Short
-    else if check_substring (consume_func Byte) s then Byte
-    else if check_substring (consume_func Float) s then Float
-    else if check_substring (consume_func Double) s then Double
-    else if check_substring (consume_func Bool) s then Bool
-    else if check_substring (consume_func Char) s then Char
-    else if check_substring (consume_func String) s then String
-    else NonType
-  in
-  let rec collect lst =
-    match lst with
-    | hd :: tl when check_substring "data\\.consume" hd ->
-        identify_const_type hd :: collect tl
-    | _ :: tl -> collect tl
-    | _ -> []
-  in
-  Str.split (Str.regexp "\n") tc |> collect
 
 let insert_test oc (file_num, tc, time) =
   let insert oc (i_set, m_bodies) =
@@ -579,7 +523,8 @@ let add_testcase test_dir file_num (tc, time) =
     open_out
       Filename.(test_dir / (test_basename ^ string_of_int file_num ^ ".java"))
   in
-  insert_test oc (file_num, tc, time)
+  insert_test oc (file_num, tc, time);
+  close_out oc
 
 let add_multi_testcase test_dir file_num (tc, loop_info, time) =
   let oc =
@@ -587,7 +532,8 @@ let add_multi_testcase test_dir file_num (tc, loop_info, time) =
       Filename.(
         test_dir / (multi_test_basename ^ string_of_int file_num ^ ".java"))
   in
-  insert_multi_test oc (file_num, tc, loop_info, time)
+  insert_multi_test oc (file_num, tc, loop_info, time);
+  close_out oc
 
 (* ************************************** *
    run test cases
@@ -616,8 +562,8 @@ let multi_test_compile_cmd info =
 let build_program info =
   let rec compile_loop () =
     let ic_out, ic_err = simple_compiler !Cmdline.out_dir (compile_cmd info) in
-    let data_out = my_really_read_string ic_out in
-    let data_err = my_really_read_string ic_err in
+    let data_out = read_all_string ic_out in
+    let data_err = read_all_string ic_err in
     close_in ic_out;
     close_in ic_err;
     if checking_init_err data_out then (
@@ -642,12 +588,6 @@ let build_multi_test info =
 let normal_exit =
   Sys.Signal_handle
     (fun _ ->
-      (* unlock files and folders because they should not be locked when the process terminates *)
-      let ic_out, ic_err =
-        unlock_read_only !info.program_dir |> simple_compiler !info.program_dir
-      in
-      close_in ic_out;
-      close_in ic_err;
       L.info "Normal End UnitCon for %s: %b(%d) (total time: %f)"
         !info.program_dir
         (if !num_of_success > 0 then true else false)
@@ -696,7 +636,7 @@ let run_testfile () =
       simple_compiler !Cmdline.out_dir
         (modify_execute_command execute_cmd t_file)
     in
-    let data = my_really_read_string ic_err in
+    let data = read_all_string ic_err in
     close_in ic_out;
     close_in ic_err;
     num_of_last_exec_tc := num_of_t_file;
@@ -726,7 +666,7 @@ let run_testfile () =
 let run_multi_testfile () =
   let compile_start = Unix.gettimeofday () in
   add_default_class !info.multi_test_dir;
-  copy_file
+  Filename.copy
     Filename.(Utils.unitcon_path / "deps/UnitconCombinator.java")
     Filename.(!info.multi_test_dir / "UnitconCombinator.java");
   L.info "Start multi-test! (# of multi-test: %d)" !num_of_multi_tc_files;
@@ -739,7 +679,7 @@ let run_multi_testfile () =
     simple_compiler !Cmdline.out_dir
       (modify_execute_command multi_test_execute_cmd mt_file)
   in
-  let data = my_really_read_string ic_err in
+  let data = read_all_string ic_err in
   close_in ic_out;
   close_in ic_err;
   let found_rep_inputs =
@@ -755,12 +695,6 @@ let run_multi_testfile () =
 let abnormal_run_test =
   Sys.Signal_handle
     (fun _ ->
-      (* unlock files and folders because they should not be locked when the test cases execute *)
-      let ic_out, ic_err =
-        unlock_read_only !info.program_dir |> simple_compiler !info.program_dir
-      in
-      close_in ic_out;
-      close_in ic_err;
       if !num_of_tc_files mod 15 <> 0 then (
         L.info "Abnormal Run Test";
         run_testfile ();
@@ -773,13 +707,13 @@ let interrupt pid =
   Unix.sleep (!Cmdline.time_out - 10);
   Unix.kill pid Sys.sigusr2
 
-let setup program_dir =
+let setup program_dir out_dir =
   (* for early stopping *)
   Sys.set_signal Sys.sigusr1 normal_exit;
   Sys.set_signal Sys.sigusr2 abnormal_run_test;
   Thread.create interrupt (Unix.getpid ()) |> ignore;
   time := Unix.gettimeofday ();
-  init program_dir;
+  init program_dir out_dir;
   let m_info = parse_method_info !info.summary_file in
   let t_info = Summary.from_method_type m_info in
   let summary = parse_summary !info.summary_file m_info in
