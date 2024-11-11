@@ -6,6 +6,11 @@ let dep_files out_dir = Filename.(out_dir / "jar-files")
 
 let dependency_jar out_dir = Filename.(out_dir / "with-dependency.jar")
 
+let flush_buffer_from ic =
+  match Unix.select [ Unix.descr_of_in_channel ic ] [] [] 1.0 with
+  | [], _, _ -> ""
+  | fd :: _, _, _ -> read_all_string (Unix.in_channel_of_descr fd)
+
 let execute_command command =
   let close_channel (stdout, stdin, stderr) =
     close_out stdin;
@@ -15,6 +20,8 @@ let execute_command command =
     let stdout, stdin, stderr =
       Unix.open_process_full command (Unix.environment ())
     in
+    flush_buffer_from stdout |> ignore;
+    flush_buffer_from stderr |> ignore;
     let pid = Unix.process_full_pid (stdout, stdin, stderr) in
     (try Unix.waitpid [ Unix.WUNTRACED ] pid |> ignore with _ -> ());
     close_channel (stdout, stdin, stderr)
