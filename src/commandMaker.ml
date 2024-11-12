@@ -6,22 +6,35 @@ let dep_files out_dir = Filename.(out_dir / "jar-files")
 
 let dependency_jar out_dir = Filename.(out_dir / "with-dependency.jar")
 
-let flush_buffer_from ic =
-  match Unix.select [ Unix.descr_of_in_channel ic ] [] [] 1.0 with
+let flush_buffer_from fd =
+  match Unix.select [ fd ] [] [] 1.0 with
   | [], _, _ -> ""
-  | fd :: _, _, _ -> read_all_string (Unix.in_channel_of_descr fd)
+  | fd :: _, _, _ ->
+      let buffer_size = 1024 in
+      let buffer = Bytes.create buffer_size in
+      let len = Unix.read fd buffer 0 buffer_size in
+      if len = 0 then "" else Bytes.sub_string buffer 0 len
+
+let rec flush_buffer_all out err =
+  let stdout = flush_buffer_from out in
+  let stderr = flush_buffer_from err in
+  if stdout = "" && stderr = "" then (stdout, stderr)
+  else flush_buffer_all out err
 
 let execute_command command =
   let close_channel (stdout, stdin, stderr) =
     close_out stdin;
-    (stdout, stderr)
+    close_in stdout;
+    close_in stderr
   in
   let execute command =
     let stdout, stdin, stderr =
       Unix.open_process_full command (Unix.environment ())
     in
-    flush_buffer_from stdout |> ignore;
-    flush_buffer_from stderr |> ignore;
+    flush_buffer_all
+      (Unix.descr_of_in_channel stdout)
+      (Unix.descr_of_in_channel stderr)
+    |> ignore;
     let pid = Unix.process_full_pid (stdout, stdin, stderr) in
     (try Unix.waitpid [ Unix.WUNTRACED ] pid |> ignore with _ -> ());
     close_channel (stdout, stdin, stderr)
@@ -31,10 +44,8 @@ let execute_command command =
 let simple_compiler program_dir command =
   let current_dir = Unix.getcwd () in
   Sys.chdir program_dir;
-  let ic_out, ic_err = execute_command command in
-  Sys.chdir current_dir;
-  close_in ic_out;
-  close_in ic_err
+  execute_command command;
+  Sys.chdir current_dir
 
 let chop_prefix prefix str =
   let prefix_len = String.length prefix in
@@ -106,6 +117,7 @@ let execute_build_cmd p =
   let rec execute cmds =
     match cmds with
     | c :: tl ->
+        Logger.info "build_cmd: %s" c;
         simple_compiler p c;
         execute tl
     | _ -> ()
