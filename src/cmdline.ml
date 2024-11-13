@@ -24,6 +24,14 @@ let constant_info = ref false
 
 let command_maker = ref false
 
+(* analyze options *)
+
+let keep_going = ref false
+
+let interproc = ref false
+
+let skip_procedures : string ref = ref ""
+
 (* analyze and synthesize options *)
 let target = ref ""
 
@@ -79,6 +87,18 @@ let _command_maker =
      dependencies of test cases"
   in
   Arg.(value & flag & info [ "command-maker" ] ~doc)
+
+let _keep_going =
+  let doc = "Keep going when the analysis encounters a failure" in
+  Arg.(value & flag & info [ "keep-going" ] ~doc)
+
+let _interproc =
+  let doc = "Make force alarm when interprocedure analyze" in
+  Arg.(value & flag & info [ "interproc" ] ~doc)
+
+let _skip_procedures =
+  let doc = "Procedures that do not want to analyze" in
+  Arg.(value & opt string "" & info [ "skip-procedures" ] ~doc)
 
 let _target =
   let doc = "Set target location in form of [file]:[line]" in
@@ -154,16 +174,22 @@ module Build = struct
 end
 
 module Analyze = struct
-  let opt _copt _target =
+  let opt _copt _target _keep_going _interproc _skip_procedures =
     command := Analyze;
-    target := _target
+    target := _target;
+    keep_going := _keep_going;
+    interproc := _interproc;
+    skip_procedures := _skip_procedures
 
   let cmd =
     let name = "analyze" in
     let doc = "Analyze the program" in
     let man = [ `S Manpage.s_description ] in
     let info = C.Cmd.info name ~doc ~man in
-    Cmd.v info Term.(const opt $ common_opt $ _target)
+    Cmd.v info
+      Term.(
+        const opt $ common_opt $ _target $ _keep_going $ _interproc
+        $ _skip_procedures)
 end
 
 module Synthesize = struct

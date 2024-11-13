@@ -43,10 +43,17 @@ let execute_command run_type command =
       let set_target_line =
         if t_line = -1 then "" else "--target-file-line " ^ string_of_int t_line
       in
+      let keep_going = if !Cmdline.keep_going then " --keep-going " else "" in
+      let interproc = if !Cmdline.interproc then " --interproc " else "" in
+      let skip_procedures =
+        if !Cmdline.skip_procedures <> "" then
+          " --pulse-skip-procedures " ^ !Cmdline.skip_procedures
+        else ""
+      in
       let command =
         infer_bin ^ " analyze " ^ set_out_dir ^ " " ^ no_pb
         ^ " --pulse-only --show-latent " ^ set_target_file ^ " "
-        ^ set_target_line
+        ^ set_target_line ^ keep_going ^ interproc ^ skip_procedures
       in
       L.info "Analyzing command: %s" command;
       execute command
