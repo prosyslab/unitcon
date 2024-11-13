@@ -6,6 +6,12 @@ type analyzer_run_type =
   | Summary of (string * string)
   | Normal
 
+let run_type_to_str = function
+  | Capture _ -> "Capture"
+  | Analyze _ -> "Analyze"
+  | Summary _ -> "Summary"
+  | Normal -> "Normal"
+
 let is_int str =
   match int_of_string_opt str with Some _ -> true | None -> false
 
@@ -18,19 +24,7 @@ let target_loc target =
     | _ -> failwith ("Invalid target location: " ^ target)
 
 let execute_command run_type command =
-  let close_channel (stdout, stdin, stderr) =
-    close_out stdin;
-    close_in stdout;
-    close_in stderr
-  in
-  let execute command =
-    let stdout, stdin, stderr =
-      Unix.open_process_full command (Unix.environment ())
-    in
-    let pid = Unix.process_full_pid (stdout, stdin, stderr) in
-    (try Unix.waitpid [ Unix.WUNTRACED ] pid |> ignore with _ -> ());
-    close_channel (stdout, stdin, stderr)
-  in
+  let execute command = Sys.command (command ^ " 2>&1 > /dev/null") in
   match run_type with
   | Capture (infer_bin, out_dir) ->
       let set_out_dir = "--results-dir " ^ out_dir in
@@ -69,8 +63,10 @@ let execute_command run_type command =
 let simple_compiler program_dir run_type command =
   let current_dir = Unix.getcwd () in
   Sys.chdir program_dir;
-  execute_command run_type command;
-  Sys.chdir current_dir
+  let ret = execute_command run_type command in
+  Sys.chdir current_dir;
+  if ret <> 0 then
+    failwith ("Failed to " ^ run_type_to_str run_type ^ " Step ...")
 
 let execute_build_cmd p infer_bin out_dir =
   let build_cmd_file = Filename.(Filename.(p / input_path) / "build-command") in
