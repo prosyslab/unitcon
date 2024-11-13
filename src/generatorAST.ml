@@ -1159,67 +1159,40 @@ let combinate (prec, p, loop_ids, obj_types) stmt_map =
   in
   return_stmts p |> sort_stmts stmt_map |> all_combinate |> List.rev
 
+(* get methods that calling error method *)
+let get_caller_methods e_method p_data =
+  let get_caller_list m_name =
+    try
+      CG.succ p_data.cg m_name
+      |> List.filter (fun x -> x <> m_name && x <> e_method)
+    with Invalid_argument _ -> []
+  in
+  let org_caller_list =
+    try CG.succ p_data.cg e_method |> List.filter (fun x -> x <> e_method)
+    with Invalid_argument _ -> []
+  in
+  let class_name = Utils.get_class_name e_method in
+  let escaped_m_name =
+    Str.global_replace Regexp.dot "\\." class_name
+    |> Str.global_replace Regexp.dollar "\\$"
+  in
+  if org_caller_list = [] then
+    (try IG.pred (snd p_data.c_info) class_name with Invalid_argument _ -> [])
+    |> List.fold_left
+         (fun acc c_name ->
+           let new_m_name =
+             Str.replace_first (Str.regexp escaped_m_name) c_name e_method
+           in
+           List.rev_append (get_caller_list new_m_name) acc)
+         org_caller_list
+  else org_caller_list
+
 (* find error entry *)
 let rec find_ee e_method e_summary p_data =
-  let propagation caller_method caller_preconds call_prop =
-    let new_value, new_mem, check_match =
-      try satisfy e_method e_summary call_prop p_data.m_info
-      with _ ->
-        Logger.info
-          "Given wrong summary of error method! So, the \"find_ee\" step \
-           progresses using a temporary summary";
-        let tmp_summary = get_first_summary e_method p_data.summary in
-        let use_summary = if tmp_summary = empty_summary then false else true in
-        (tmp_summary.value, snd tmp_summary.precond, use_summary)
-    in
-    let new_uf = mk_new_uf e_method e_summary call_prop p_data.m_info in
-    if !Cmdline.basic_mode then
-      ErrorEntrySet.union caller_preconds
-        (find_ee caller_method empty_summary p_data)
-    else if !Cmdline.pruning_mode then
-      ErrorEntrySet.union caller_preconds
-        (find_ee caller_method call_prop p_data)
-    else if check_match then
-      let new_call_prop =
-        new_value_summary new_value call_prop
-        |> new_mem_summary new_mem |> new_uf_summary new_uf
-      in
-      ErrorEntrySet.union caller_preconds
-        (find_ee caller_method new_call_prop p_data)
-    else caller_preconds
-  in
   if
     is_public e_method p_data.m_info || is_usable_default e_method p_data.m_info
   then ErrorEntrySet.add (e_method, e_summary) ErrorEntrySet.empty
   else
-    let get_caller_list m_name =
-      try
-        CG.succ p_data.cg m_name
-        |> List.filter (fun x -> x <> m_name && x <> e_method)
-      with Invalid_argument _ -> []
-    in
-    let org_caller_list =
-      try CG.succ p_data.cg e_method |> List.filter (fun x -> x <> e_method)
-      with Invalid_argument _ -> []
-    in
-    let class_name = Utils.get_class_name e_method in
-    let escaped_m_name =
-      Str.global_replace Regexp.dot "\\." class_name
-      |> Str.global_replace Regexp.dollar "\\$"
-    in
-    let caller_list =
-      if org_caller_list = [] then
-        (try IG.pred (snd p_data.c_info) class_name
-         with Invalid_argument _ -> [])
-        |> List.fold_left
-             (fun acc c_name ->
-               let new_m_name =
-                 Str.replace_first (Str.regexp escaped_m_name) c_name e_method
-               in
-               List.rev_append (get_caller_list new_m_name) acc)
-             org_caller_list
-      else org_caller_list
-    in
     List.fold_left
       (fun set caller_method ->
         (match
@@ -1237,10 +1210,40 @@ let rec find_ee e_method e_summary p_data =
                   caller_preconds
                 else (
                   explored_m := ExploredMethod.add caller_method !explored_m;
-                  propagation caller_method caller_preconds call_prop))
+                  propagation e_method e_summary caller_method caller_preconds
+                    call_prop p_data))
               ErrorEntrySet.empty prop_list)
         |> ErrorEntrySet.union set)
-      ErrorEntrySet.empty caller_list
+      ErrorEntrySet.empty
+      (get_caller_methods e_method p_data)
+
+(* propagate error condition to caller method *)
+and propagation e_method e_summary caller_method caller_preconds call_prop
+    p_data =
+  let new_value, new_mem, check_match =
+    try satisfy e_method e_summary call_prop p_data.m_info
+    with _ ->
+      Logger.info
+        "Given wrong summary of error method! So, the \"find_ee\" step \
+         progresses using a temporary summary";
+      let tmp_summary = get_first_summary e_method p_data.summary in
+      let use_summary = if tmp_summary = empty_summary then false else true in
+      (tmp_summary.value, snd tmp_summary.precond, use_summary)
+  in
+  let new_uf = mk_new_uf e_method e_summary call_prop p_data.m_info in
+  if !Cmdline.basic_mode then
+    ErrorEntrySet.union caller_preconds
+      (find_ee caller_method empty_summary p_data)
+  else if !Cmdline.pruning_mode then
+    ErrorEntrySet.union caller_preconds (find_ee caller_method call_prop p_data)
+  else if check_match then
+    let new_call_prop =
+      new_value_summary new_value call_prop
+      |> new_mem_summary new_mem |> new_uf_summary new_uf
+    in
+    ErrorEntrySet.union caller_preconds
+      (find_ee caller_method new_call_prop p_data)
+  else caller_preconds
 
 let rec imports (s : ASTIR.t) set =
   match s with

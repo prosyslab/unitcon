@@ -26,11 +26,11 @@ let synthesize () =
   else RunProgramDUG.run !Cmdline.target_program !Cmdline.out_dir
 
 let finalize t0 =
-  L.info "Unitcon completes: %fs" (Sys.time () -. t0);
+  L.info "Unitcon completes: %fs" (Unix.gettimeofday () -. t0);
   L.finalize ()
 
 let main () =
-  let t0 = Sys.time () in
+  let t0 = Unix.gettimeofday () in
   Cmdline.parse ();
   (match !Cmdline.command with
   | Cmdline.Build -> build ()

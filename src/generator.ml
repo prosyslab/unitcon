@@ -1572,7 +1572,7 @@ let check_satisfied_c id const_name t_summary init sat_lst =
       if check then
         let new_summary = get_new_summary smy in
         (is_from_error true new_summary, const_name, new_summary)
-      else if pick = (0, "", empty_summary) then (-3, const_name, empty_summary)
+      else if pick = (0, "", empty_summary) then (-3, const_name, smy)
       else pick)
     init sat_lst
 
