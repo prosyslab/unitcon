@@ -14,27 +14,17 @@ let simple_compiler program_dir command =
   Sys.chdir current_dir;
   if ret <> 0 then failwith ("Faild to execute " ^ command)
 
-let chop_prefix prefix str =
-  let prefix_len = String.length prefix in
-  let str_len = String.length str in
-  if str_len < prefix_len then str
-  else if String.sub str 0 prefix_len = prefix then
-    String.sub str prefix_len (str_len - prefix_len)
-  else str
-
-(* Relative path should be used instead of absolute path *)
-let rec collect_classpaths ?(prefix = "") dir =
+(* Absolute path should be used instead of relative path *)
+let rec collect_classpaths dir =
   if Sys.is_directory dir then
     Array.fold_left
       (fun acc file ->
         let abspath = Filename.(dir / file) |> Filename.resolve in
         if Sys.is_directory abspath then
-          List.rev_append (collect_classpaths ~prefix abspath) acc
+          List.rev_append (collect_classpaths abspath) acc
         else if
           List.mem (Filename.extension file) [ ".jar"; ".class"; ".properties" ]
-        then
-          let relpath = chop_prefix prefix abspath in
-          relpath :: acc
+        then abspath :: acc
         else acc)
       [] (Sys.readdir dir)
   else []
@@ -69,7 +59,7 @@ let make_jar_with_dependencies p =
   let dep_jar = dependency_jar !Cmdline.out_dir in
   let manifest_oc = open_out m_file in
   let jar_files_oc = open_out jar_files in
-  let abspaths = collect_classpaths ~prefix:(p ^ Filename.dir_sep) p in
+  let abspaths = collect_classpaths p in
   write_manifest_file manifest_oc abspaths;
   write_dep_files jar_files_oc abspaths;
   close_out manifest_oc;
