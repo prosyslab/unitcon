@@ -546,7 +546,7 @@ let compile_cmd info =
   ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
   ^ ":"
   ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
-  ^ " @"
+  ^ ":" ^ info.program_dir ^ " @"
   ^ Filename.(!Cmdline.out_dir / "test-files")
 
 let multi_test_compile_cmd info =
@@ -556,7 +556,7 @@ let multi_test_compile_cmd info =
   ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
   ^ ":"
   ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
-  ^ " @"
+  ^ ":" ^ info.program_dir ^ " @"
   ^ Filename.(!Cmdline.out_dir / "multi-test-files")
 
 let build_program info =
@@ -608,21 +608,21 @@ let get_test_path path base_name =
 
 (* Relative path should be used instead of absolute path
    e.g., ./unitcon-tests *)
-let execute_cmd =
+let execute_cmd info =
   "java -cp with-dependency.jar:./unitcon-tests/:"
   ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
   ^ ":"
   ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
-  ^ ":. " ^ "org.junit.runner.JUnitCore"
+  ^ ":" ^ info.program_dir ^ ":. " ^ "org.junit.runner.JUnitCore"
 
 (* Relative path should be used instead of absolute path
    e.g., ./unitcon-multi-tests *)
-let multi_test_execute_cmd =
+let multi_test_execute_cmd info =
   "java -cp with-dependency.jar:./unitcon-multi-tests/:"
   ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
   ^ ":"
   ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
-  ^ ":. " ^ "org.junit.runner.JUnitCore"
+  ^ ":" ^ info.program_dir ^ ":. " ^ "org.junit.runner.JUnitCore"
 
 let run_testfile () =
   let compile_start = Unix.gettimeofday () in
@@ -634,7 +634,7 @@ let run_testfile () =
   let execute _ test_dir expected_bug t_file num_of_t_file =
     let ic_out, ic_err =
       simple_compiler !Cmdline.out_dir
-        (modify_execute_command execute_cmd t_file)
+        (modify_execute_command (execute_cmd !info) t_file)
     in
     let data = read_all_string ic_err in
     close_in ic_out;
@@ -677,7 +677,7 @@ let run_multi_testfile () =
   in
   let ic_out, ic_err =
     simple_compiler !Cmdline.out_dir
-      (modify_execute_command multi_test_execute_cmd mt_file)
+      (modify_execute_command (multi_test_execute_cmd !info) mt_file)
   in
   let data = read_all_string ic_err in
   close_in ic_out;
