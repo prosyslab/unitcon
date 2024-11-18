@@ -24,7 +24,7 @@ let target_loc target =
     | _ -> failwith ("Invalid target location: " ^ target)
 
 let execute_command run_type command =
-  let execute command = Sys.command (command ^ " 2>&1 > /dev/null") in
+  let execute command = Sys.command (command ^ " > /dev/null 2>&1") in
   match run_type with
   | Capture (infer_bin, out_dir) ->
       let set_out_dir = "--results-dir " ^ out_dir in

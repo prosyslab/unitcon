@@ -10,7 +10,7 @@ let simple_compiler program_dir command =
   Logger.info "Run: %s" command;
   let current_dir = Unix.getcwd () in
   Sys.chdir program_dir;
-  let ret = Sys.command (command ^ " 2>&1 > /dev/null") in
+  let ret = Sys.command (command ^ " > /dev/null 2>&1") in
   Sys.chdir current_dir;
   if ret <> 0 then failwith ("Faild to execute " ^ command)
 
