@@ -101,8 +101,8 @@ let rec run_test ~is_start info queue e_method_info p_data =
       let _time = Unix.gettimeofday () -. !time in
       incr num_of_tc_files;
       add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
-      if !num_of_tc_files mod 15 = 0 || !abnormal_keep_going then
-        run_testfile ()
+      if !num_of_tc_files mod !Cmdline.batch_size = 0 || !abnormal_keep_going
+      then run_testfile ()
       else ();
       run_test ~is_start:false info tc_list e_method_info p_data)
   else if completion = Incomplete then (
@@ -113,7 +113,7 @@ let rec run_test ~is_start info queue e_method_info p_data =
     let _time = Unix.gettimeofday () -. !time in
     incr num_of_tc_files;
     add_testcase info.test_dir !num_of_tc_files (tc, _time);
-    if !num_of_tc_files mod 15 = 0 then run_testfile () else ();
+    if !num_of_tc_files mod !Cmdline.batch_size = 0 then run_testfile () else ();
     run_test ~is_start:false info tc_list e_method_info p_data
 
 let run program_dir out_dir =

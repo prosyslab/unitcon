@@ -54,6 +54,10 @@ let extension = ref ""
 
 let with_loop = ref true
 
+let batch_size = ref 15
+
+let save_temp = ref false
+
 let docs = Manpage.s_common_options
 
 let _debug =
@@ -140,6 +144,14 @@ let _extension =
   in
   Arg.(value & opt string "" & info [ "modifier-extension" ] ~doc)
 
+let _batch_size =
+  let doc = "Compile batch size (default: 15)" in
+  Arg.(value & opt int 15 & info [ "batch-size" ] ~doc)
+
+let _save_temp =
+  let doc = "Save the all files (default: false)" in
+  Arg.(value & flag & info [ "save-temp" ] ~doc)
+
 let init _debug _quiet _target_program _out_dir =
   Filename.mkdir _out_dir 0o755 ~exists_ok:true;
   Filename.mkdir Filename.(_out_dir / "marshal") 0o755 ~exists_ok:true;
@@ -194,7 +206,7 @@ end
 
 module Synthesize = struct
   let opt _copt _target _basic_mode _pruning_mode _priority_mode _test_case_ast
-      _time_out _unknown_bug _mock _extension =
+      _time_out _unknown_bug _mock _extension _batch_size _save_temp =
     command := Synthesize;
     target := _target;
     basic_mode := _basic_mode;
@@ -204,7 +216,9 @@ module Synthesize = struct
     time_out := _time_out;
     unknown_bug := _unknown_bug;
     mock := _mock;
-    extension := _extension
+    extension := _extension;
+    batch_size := _batch_size;
+    save_temp := _save_temp
 
   let cmd =
     let name = "synthesize" in
@@ -215,7 +229,7 @@ module Synthesize = struct
       Term.(
         const opt $ common_opt $ _target $ _basic_mode $ _pruning_mode
         $ _priority_mode $ _test_case_ast $ _time_out $ _unknown_bug $ _mock
-        $ _extension)
+        $ _extension $ _batch_size $ _save_temp)
 end
 
 let main_cmd =

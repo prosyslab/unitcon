@@ -596,10 +596,12 @@ let normal_exit =
       L.info "First Success Test: %s" !first_success_tc;
       L.info "Last Success Test: %s" !last_success_tc;
       (* clean up useless files and directories *)
-      remove_no_exec_files (!num_of_last_exec_tc + 1) !info.test_dir;
-      remove_file Filename.(!info.program_dir / "multi-test-files");
-      remove_all_files !info.multi_test_dir;
-      Unix.rmdir !info.multi_test_dir;
+      if !Cmdline.save_temp then ()
+      else (
+        remove_no_exec_files (!num_of_last_exec_tc + 1) !info.test_dir;
+        remove_file Filename.(!info.program_dir / "multi-test-files");
+        remove_all_files !info.multi_test_dir;
+        Unix.rmdir !info.multi_test_dir);
       Unix._exit 0)
 
 let get_test_path path base_name =
@@ -695,7 +697,7 @@ let run_multi_testfile () =
 let abnormal_run_test =
   Sys.Signal_handle
     (fun _ ->
-      if !num_of_tc_files mod 15 <> 0 then (
+      if !num_of_tc_files mod !Cmdline.batch_size <> 0 then (
         L.info "Abnormal Run Test";
         run_testfile ();
         Unix.kill (Unix.getpid ()) Sys.sigusr1)
