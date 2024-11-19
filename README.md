@@ -45,23 +45,22 @@ There are three configuration files:
 `expected-bug` and `expected-bug-type` may not be contained in the `unitcon-properties` if you do not need to synthesize a test case for specific error-triggering.  
 
 ### 2. Build
+Build the target project for Unitcon with the following command.
+The command makes a single jar file that contains all classes of the target project.
 ```sh
-# Make a single jar file with the target program compiled
-# and analyze the extra data for test case synthesis.
 $ ./unitcon build PATH/TO/TARGET/DIR
 ```
 
 ### 3. Analyze
 ```sh
 # Analyze the target program.
-$ ./unitcon analyze PATH/TO/TARGET/DIR --target [target location]
+$ ./unitcon analyze PATH/TO/TARGET/DIR --target [file name]:[line number]
 ```
-The form of target location should be `[file name]:[line number]`.
-file name is a name that contains the full path from the target directory to a file.
+Note that `file name` should contains the full path from the target directory to a file.
 
 
 ### 4. Synthesize
 ```sh
 $ ./unitcon synthesize PATH/TO/TARGET/DIR --target [target location]
 ```
-If Unitcon successfully synthesizes the `error-triggering test case`, the completed test case will be located in `unitcon-out/unitcon-tests`.
+If the unit tests have been created successfully, they will be inside the `unitcon-out/unitcon-tests` directory.
