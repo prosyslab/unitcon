@@ -42,7 +42,6 @@ There are three configuration files:
 
 * expected-stack-trace (optional): If you want to detect an exception with a specific stack trace, provide the details such as `at Main.toString(Main.java:11)`. If the file is not provided, Unitcon considers only the final function call.
 * expected-bug-type (optional): If you want to detect a specific type of exception at the target location, specify the full name of the exception such as `java.lang.NullPointerException`. If this file is not provided, Unitcon consider all exceptions at the target location.
-`expected-bug` and `expected-bug-type` may not be contained in the `unitcon-properties` if you do not need to synthesize a test case for specific error-triggering.  
 
 ### 2. Build
 Build the target project for Unitcon with the following command.
