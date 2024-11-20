@@ -68,13 +68,7 @@ let new_var = ref 0
 let explored_m = ref ExploredMethod.empty
 
 let z3ctx =
-  Z3.mk_context
-    [
-      ("model", "true");
-      ("proof", "true");
-      ("dump_models", "true");
-      ("unsat_core", "true");
-    ]
+  Z3.mk_context [ ("model", "true"); ("proof", "true"); ("unsat_core", "true") ]
 
 let solver = Z3.Solver.mk_solver z3ctx None
 
@@ -430,6 +424,10 @@ let check_eq_l_one ~is_le (eq_v : Value.const) (l_v : Value.const) =
   | Float eq, Double l
   | Double eq, Float l ->
       if float_l eq l then Some true else Some false
+  | PlusInf, PlusInf when not is_le -> Some false
+  | _, PlusInf -> Some true
+  | MinusInf, MinusInf when is_le -> Some true
+  | _, MinusInf -> Some false
   | _ -> None
 
 let check_eq_g_one ~is_ge (eq_v : Value.const) (g_v : Value.const) =
@@ -454,6 +452,10 @@ let check_eq_g_one ~is_ge (eq_v : Value.const) (g_v : Value.const) =
   | Float eq_f, Double g_f
   | Double eq_f, Float g_f ->
       if float_g eq_f g_f then Some true else Some false
+  | PlusInf, PlusInf when is_ge -> Some true
+  | _, PlusInf -> Some false
+  | MinusInf, MinusInf when not is_ge -> Some false
+  | _, MinusInf -> Some true
   | _ -> None
 
 let check_eq_btw_one (eq_v : Value.const) (btw_min : Value.const)
@@ -477,6 +479,21 @@ let check_eq_btw_one (eq_v : Value.const) (btw_min : Value.const)
   | Double eq_f, Double btw_min_f, Float btw_max_f
   | Double eq_f, Double btw_min_f, Double btw_max_f ->
       if eq_f >= btw_min_f && eq_f <= btw_max_f then Some true else Some false
+  | Int _, MinusInf, PlusInf
+  | Long _, MinusInf, PlusInf
+  | Float _, MinusInf, PlusInf
+  | Double _, MinusInf, PlusInf ->
+      Some true
+  | Int _, MinusInf, _
+  | Long _, MinusInf, _
+  | Float _, MinusInf, _
+  | Double _, MinusInf, _ ->
+      check_eq_l_one ~is_le:true eq_v btw_max
+  | Int _, _, PlusInf
+  | Long _, _, PlusInf
+  | Float _, _, PlusInf
+  | Double _, _, PlusInf ->
+      check_eq_g_one ~is_ge:true eq_v btw_min
   | _ -> None
 
 let check_eq_out_one (eq_v : Value.const) (out_min : Value.const)
@@ -500,6 +517,21 @@ let check_eq_out_one (eq_v : Value.const) (out_min : Value.const)
   | Double eq_f, Double o_min_f, Float o_max_f
   | Double eq_f, Double o_min_f, Double o_max_f ->
       if eq_f < o_min_f && eq_f > o_max_f then Some true else Some false
+  | Int _, MinusInf, PlusInf
+  | Long _, MinusInf, PlusInf
+  | Float _, MinusInf, PlusInf
+  | Double _, MinusInf, PlusInf ->
+      Some false
+  | Int _, MinusInf, _
+  | Long _, MinusInf, _
+  | Float _, MinusInf, _
+  | Double _, MinusInf, _ ->
+      check_eq_g_one ~is_ge:false eq_v out_max
+  | Int _, _, PlusInf
+  | Long _, _, PlusInf
+  | Float _, _, PlusInf
+  | Double _, _, PlusInf ->
+      check_eq_l_one ~is_le:false eq_v out_min
   | _ -> None
 
 let check_l_g_one ~is_e (l_v : Value.const) (g_v : Value.const) =
@@ -524,6 +556,10 @@ let check_l_g_one ~is_e (l_v : Value.const) (g_v : Value.const) =
   | Float l_f, Double g_f
   | Double l_f, Float g_f ->
       if float_e l_f g_f then Some true else Some false
+  | PlusInf, PlusInf when not is_e -> Some false
+  | PlusInf, _ -> Some true
+  | MinusInf, MinusInf when not is_e -> Some false
+  | _, MinusInf -> Some true
   | _ -> None
 
 let check_l_btw_one ~is_le (l_v : Value.const) (btw_min : Value.const) =
@@ -548,6 +584,10 @@ let check_l_btw_one ~is_le (l_v : Value.const) (btw_min : Value.const) =
   | Float l_f, Double btw_min_f
   | Double l_f, Float btw_min_f ->
       if float_l l_f btw_min_f then Some false else Some true
+  | MinusInf, MinusInf when not is_le -> Some false
+  | _, MinusInf -> Some true
+  | PlusInf, PlusInf when is_le -> Some true
+  | _, PlusInf -> Some false
   | _ -> None
 
 let check_g_btw_one ~is_ge (g_v : Value.const) (btw_max : Value.const) =
@@ -572,6 +612,10 @@ let check_g_btw_one ~is_ge (g_v : Value.const) (btw_max : Value.const) =
   | Float g_f, Double btw_max_f
   | Double g_f, Float btw_max_f ->
       if float_g g_f btw_max_f then Some false else Some true
+  | MinusInf, MinusInf when not is_ge -> Some false
+  | _, MinusInf -> Some true
+  | PlusInf, PlusInf when is_ge -> Some true
+  | _, PlusInf -> Some false
   | _ -> None
 
 let check_btw_btw_one (caller_min : Value.const) (caller_max : Value.const)
@@ -611,6 +655,12 @@ let check_btw_btw_one (caller_min : Value.const) (caller_max : Value.const)
   | Double r_min_f, Double r_max_f, Double e_min_f, Float e_max_f
   | Double r_min_f, Double r_max_f, Double e_min_f, Double e_max_f ->
       if r_max_f < e_min_f || e_max_f < r_min_f then Some false else Some true
+  | MinusInf, PlusInf, _, _ -> Some true
+  | _, _, MinusInf, PlusInf -> Some true
+  | MinusInf, MinusInf, _, _ -> Some false
+  | PlusInf, PlusInf, _, _ -> Some false
+  | _, _, MinusInf, MinusInf -> Some false
+  | _, _, PlusInf, PlusInf -> Some false
   | _ -> None
 
 let check_btw_out_one (btw_min : Value.const) (btw_max : Value.const)
@@ -652,6 +702,8 @@ let check_btw_out_one (btw_min : Value.const) (btw_max : Value.const)
   | Double btw_min_f, Double btw_max_f, Double o_min_f, Double o_max_f ->
       if btw_min_f <= o_min_f && btw_max_f >= o_max_f then Some false
       else Some true
+  | _, _, MinusInf, PlusInf -> Some false
+  | MinusInf, PlusInf, _, _ -> Some true
   | _ -> None
 
 let calc_z3_value value =
