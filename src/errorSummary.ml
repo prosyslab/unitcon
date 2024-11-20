@@ -80,7 +80,10 @@ let is_target_error (t_file, t_line) assoc =
   let file_name = get_file_name assoc in
   let start_line = get_start_line assoc in
   let last_line = get_last_line assoc in
-  if t_file = file_name && start_line <= t_line && t_line <= last_line then true
+  let method_name = get_method_name assoc in
+  if Utils.is_lambda_method method_name then false
+  else if t_file = file_name && start_line <= t_line && t_line <= last_line then
+    true
   else false
 
 let find_error assoc =

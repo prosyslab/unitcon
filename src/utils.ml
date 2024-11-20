@@ -194,6 +194,7 @@ let is_modeling_set fname =
 
 let is_lambda_method m_name =
   Str.string_match (Str.regexp ".*\\.lambda\\$") m_name 0
+  || Str.string_match (Str.regexp ".*\\$Lambda\\$[_0-9]+") m_name 0
 
 let filter_list =
   [
