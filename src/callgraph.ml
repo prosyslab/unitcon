@@ -1,18 +1,13 @@
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 module MethodInfo = Language.MethodInfo
+module ExtraCalleeSet = Set.Make (String)
 
 module Node = struct
   include String
 
   let hash = Hashtbl.hash
 end
-
-module ExtraCalleeSet = Set.Make (struct
-  let compare_string = String.compare
-
-  type t = string [@@deriving compare]
-end)
 
 module G = struct
   include Graph.Persistent.Digraph.ConcreteBidirectional (Node)

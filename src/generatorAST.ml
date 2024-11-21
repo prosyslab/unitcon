@@ -1,10 +1,7 @@
 open Language
 open Generator
 open Ast
-
-module TypeSet = Set.Make (struct
-  type t = string [@@deriving compare]
-end)
+module TypeSet = Set.Make (String)
 
 module VarSet = Set.Make (struct
   type t = variable [@@deriving compare]

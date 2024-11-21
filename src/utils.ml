@@ -1,11 +1,6 @@
 module F = Format
 module L = Logger
-
-module ImportSet = Set.Make (struct
-  type t = string
-
-  let compare = compare
-end)
+module ImportSet = Set.Make (String)
 
 let read_all_string in_chan =
   let res = Buffer.create 1024 in

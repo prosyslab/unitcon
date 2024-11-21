@@ -164,9 +164,7 @@ let modifier_of_json json : modifier =
   | s -> failwith ("Unknown modifier " ^ s)
 
 module MethodInfo = struct
-  module M = Map.Make (struct
-    type t = method_name [@@deriving compare, equal]
-  end)
+  module M = Map.Make (String)
 
   type info = {
     modifier : modifier;
@@ -180,25 +178,19 @@ module MethodInfo = struct
 end
 
 module ReturnType = struct
-  module M = Map.Make (struct
-    type t = class_name [@@deriving compare, equal]
-  end)
+  module M = Map.Make (String)
 
   type t = method_name list M.t
 end
 
 module MethodType = struct
-  module M = Map.Make (struct
-    type t = class_name [@@deriving compare, equal]
-  end)
+  module M = Map.Make (String)
 
   type t = method_name list M.t
 end
 
 module Relation = struct
-  module M = Map.Make (struct
-    type t = symbol [@@deriving compare, equal]
-  end)
+  module M = Map.Make (String)
 
   type t = symbol M.t [@@deriving compare, equal]
 end
@@ -231,9 +223,7 @@ module Value = struct
     | Outside of const * const
   [@@deriving compare, equal]
 
-  module M = Map.Make (struct
-    type t = symbol [@@deriving compare, equal]
-  end)
+  module M = Map.Make (String)
 
   type v = { from_error : bool; value : op } [@@deriving compare, equal]
 
@@ -312,9 +302,7 @@ let empty_summary =
   }
 
 module SummaryMap = struct
-  module M = Map.Make (struct
-    type t = method_name [@@deriving compare, equal]
-  end)
+  module M = Map.Make (String)
 
   (* list of summaries * list of fields with memory effects *)
   type t = (summary list * string list) M.t
@@ -330,9 +318,7 @@ module CallPropMap = struct
 end
 
 module ClassInfo = struct
-  module M = Map.Make (struct
-    type t = class_name [@@deriving compare, equal]
-  end)
+  module M = Map.Make (String)
 
   type info = { class_type : class_type }
 
@@ -340,9 +326,7 @@ module ClassInfo = struct
 end
 
 module SetterMap = struct
-  module M = Map.Make (struct
-    type t = class_name [@@deriving compare, equal]
-  end)
+  module M = Map.Make (String)
 
   type setter = method_name * FieldSet.t
 
@@ -350,9 +334,7 @@ module SetterMap = struct
 end
 
 module InstanceInfo = struct
-  module M = Map.Make (struct
-    type t = string [@@deriving compare, equal]
-  end)
+  module M = Map.Make (String)
 
   type const = string
 
@@ -365,10 +347,8 @@ module PrimitiveInfo = struct
     type t = typ [@@deriving compare, equal]
   end)
 
-  module ClassMap = Map.Make (struct
-    (* default class name: "" *)
-    type t = class_name [@@deriving compare, equal]
-  end)
+  (* default class name: "" *)
+  module ClassMap = Map.Make (String)
 
   type const = string
 

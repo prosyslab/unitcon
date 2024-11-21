@@ -33,9 +33,7 @@ let update_prim p_data prim_info =
   }
 
 module ObjTypeMap = struct
-  module M = Map.Make (struct
-    type t = string [@@deriving compare]
-  end)
+  module M = Map.Make (String)
 
   type t = string M.t
 end
@@ -55,9 +53,7 @@ module ErrorEntrySet = Set.Make (struct
   let compare = compare
 end)
 
-module ExploredMethod = Set.Make (struct
-  type t = string [@@deriving compare]
-end)
+module ExploredMethod = Set.Make (String)
 
 let outer = ref 0
 
