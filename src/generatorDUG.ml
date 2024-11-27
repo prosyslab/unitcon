@@ -1004,12 +1004,12 @@ let recv_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
         else applied
   | _ -> failwith "Fail: recv_in_assign_unroll"
 
-let arg_in_assign_unroll org_tc (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
-    =
+let arg_in_assign_unroll (org_s, org_tc)
+    (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
   match s with
   | Assign (num, _, (_, _, f, arg)) when DUG.arg_in_assign s ->
       let class_name = Utils.get_class_name (DUG.get_func f).method_name in
-      mk_arg_seq arg num class_name s org_tc
+      mk_arg_seq arg num class_name org_s org_tc
       |> List.fold_left
            (fun lst (args, x) ->
              ( prec,
@@ -1069,11 +1069,12 @@ let recv_in_void_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
         (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ]
   | _ -> failwith "Fail: recv_in_void_unroll"
 
-let arg_in_void_unroll org_tc (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
+let arg_in_void_unroll (org_s, org_tc)
+    (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
   match s with
   | Void (num, _, (_, f, arg)) when DUG.arg_in_void s ->
       let class_name = Utils.get_class_name (DUG.get_func f).method_name in
-      mk_arg_seq arg num class_name s org_tc
+      mk_arg_seq arg num class_name org_s org_tc
       |> List.fold_left
            (fun lst (args, x) ->
              ( prec,
@@ -1107,7 +1108,7 @@ let one_unroll (s : DUGIR.t) p obj_types p_data =
               [] p_lst
             |> List.fold_left
                  (fun acc_lst x ->
-                   arg_in_assign_unroll p.tc x |> append acc_lst)
+                   arg_in_assign_unroll (s, p.tc) x |> append acc_lst)
                  []
           in
           if
@@ -1128,13 +1129,13 @@ let one_unroll (s : DUGIR.t) p obj_types p_data =
            (fun acc_lst x -> recv_in_void_unroll x p_data |> append acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll p.tc x |> append acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll (s, p.tc) x |> append acc_lst)
            []
   | Void _ when DUG.fcall2_in_void s ->
       (* fcall2_in_void --> arg_in_void *)
       fcall_in_void_unroll s p p_data
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll p.tc x |> append acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll (s, p.tc) x |> append acc_lst)
            []
   | Void _ when DUG.recv_in_void s ->
       (* unroll error entry *)
@@ -1142,7 +1143,7 @@ let one_unroll (s : DUGIR.t) p obj_types p_data =
         (0, (s, p.tc), empty_id_map, empty_obj_type_map)
         p_data
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll p.tc x |> append acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll (s, p.tc) x |> append acc_lst)
            []
   | _ -> failwith "Fail: one_unroll"
 

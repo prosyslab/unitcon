@@ -92,6 +92,7 @@ end
 module DUG = struct
   include G
   module Topological = Graph.Topological.Make_stable (G)
+  module PathCheck = Graph.Path.Check (G)
   open DUGIR
 
   let empty_var =
@@ -367,21 +368,11 @@ module DUG = struct
          (fun n' g -> if G.out_degree g2 n' <> 0 then g else add_edge n' n g)
          g2
 
-  (* n1 is defined before n2 *)
+  (* if path of n2 ->* n1 exist, then n1 can not be defined before n2 *)
   let gt n1 n2 g =
-    Topological.fold
-      (fun node ((chk1, chk2), is_gt) ->
-        let chk1 = if n1 = node then true else chk1 in
-        let chk2 = if n2 = node then true else chk2 in
-        let is_gt =
-          if chk1 && not chk2 then true
-          else if (not chk1) && chk2 then false
-          else is_gt
-        in
-        ((chk1, chk2), is_gt))
-      g
-      ((false, false), false)
-    |> snd
+    let path_checker = PathCheck.create g in
+    let check = PathCheck.check_path path_checker n2 n1 in
+    if check then false else true
 
   let get_id n =
     match n with
