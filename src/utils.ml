@@ -14,6 +14,15 @@ let read_all_string in_chan =
   in
   loop ()
 
+let execute command =
+  L.info "Current working directory: %s" (Unix.getcwd ());
+  L.info "Running command: %s" command;
+  Sys.command command
+
+let print_and_log ?(quiet = false) =
+  if quiet then F.ifprintf F.err_formatter
+  else L.info ~to_console:true ~new_line:true
+
 module Filename = struct
   include Filename
 

@@ -559,6 +559,28 @@ let multi_test_compile_cmd info =
   ^ ":" ^ info.program_dir ^ " @"
   ^ Filename.(!Cmdline.out_dir / "multi-test-files")
 
+let get_test_path path base_name =
+  if path = "" then base_name
+  else Utils.dot_to_dir_sep path ^ Filename.dir_sep ^ base_name
+
+(* Relative path should be used instead of absolute path
+   e.g., ./unitcon-tests *)
+let execute_cmd info =
+  "java -cp with-dependency.jar:./unitcon-tests/:"
+  ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
+  ^ ":"
+  ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
+  ^ ":" ^ info.program_dir ^ ":. " ^ "org.junit.runner.JUnitCore"
+
+(* Relative path should be used instead of absolute path
+   e.g., ./unitcon-multi-tests *)
+let multi_test_execute_cmd info =
+  "java -cp with-dependency.jar:./unitcon-multi-tests/:"
+  ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
+  ^ ":"
+  ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
+  ^ ":" ^ info.program_dir ^ ":. " ^ "org.junit.runner.JUnitCore"
+
 let build_program info =
   let rec compile_loop () =
     let ic_out, ic_err = simple_compiler !Cmdline.out_dir (compile_cmd info) in
@@ -595,6 +617,16 @@ let normal_exit =
         (Unix.gettimeofday () -. !time);
       L.info "First Success Test: %s" !first_success_tc;
       L.info "Last Success Test: %s" !last_success_tc;
+      if !first_success_tc <> "" then (
+        print_and_log "======================= Result =======================";
+        print_and_log "Location of test: %s" !info.test_dir;
+        print_and_log "You can try running the test from %s" !Cmdline.out_dir;
+        print_and_log "Command: %s"
+          (modify_execute_command (execute_cmd !info) !first_success_tc))
+      else (
+        print_and_log "======================= Result =======================";
+        print_and_log "Location of test: %s" !info.test_dir;
+        print_and_log "UnitCon failed to synthesize test...");
       (* clean up useless files and directories *)
       if !Cmdline.save_temp then ()
       else (
@@ -603,28 +635,6 @@ let normal_exit =
         remove_all_files !info.multi_test_dir;
         Unix.rmdir !info.multi_test_dir);
       Unix._exit 0)
-
-let get_test_path path base_name =
-  if path = "" then base_name
-  else Utils.dot_to_dir_sep path ^ Filename.dir_sep ^ base_name
-
-(* Relative path should be used instead of absolute path
-   e.g., ./unitcon-tests *)
-let execute_cmd info =
-  "java -cp with-dependency.jar:./unitcon-tests/:"
-  ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
-  ^ ":"
-  ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
-  ^ ":" ^ info.program_dir ^ ":. " ^ "org.junit.runner.JUnitCore"
-
-(* Relative path should be used instead of absolute path
-   e.g., ./unitcon-multi-tests *)
-let multi_test_execute_cmd info =
-  "java -cp with-dependency.jar:./unitcon-multi-tests/:"
-  ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
-  ^ ":"
-  ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
-  ^ ":" ^ info.program_dir ^ ":. " ^ "org.junit.runner.JUnitCore"
 
 let run_testfile () =
   let compile_start = Unix.gettimeofday () in

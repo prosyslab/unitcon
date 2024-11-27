@@ -24,7 +24,6 @@ let target_loc target =
     | _ -> failwith ("Invalid target location: " ^ target)
 
 let execute_command run_type command =
-  let execute command = Sys.command (command ^ " > /dev/null 2>&1") in
   match run_type with
   | Capture (infer_bin, out_dir) ->
       let set_out_dir = "--results-dir " ^ out_dir in
@@ -32,7 +31,7 @@ let execute_command run_type command =
       let command =
         infer_bin ^ " capture " ^ set_out_dir ^ " " ^ no_pb ^ " -- " ^ command
       in
-      L.info "Capturing command: %s" command;
+      L.info "Capturing step!";
       execute command
   | Analyze (infer_bin, out_dir, (t_file, t_line)) ->
       let set_out_dir = "--results-dir " ^ out_dir in
@@ -55,7 +54,7 @@ let execute_command run_type command =
         ^ " --pulse-only --show-latent " ^ set_target_file ^ " "
         ^ set_target_line ^ keep_going ^ interproc ^ skip_procedures
       in
-      L.info "Analyzing command: %s" command;
+      L.info "Analyzing step!";
       execute command
   | Summary (infer_bin, out_dir) ->
       let set_out_dir = "--results-dir " ^ out_dir in
@@ -63,7 +62,7 @@ let execute_command run_type command =
         infer_bin ^ " debug " ^ set_out_dir
         ^ " --procedures --procedures-summary-json"
       in
-      L.info "Extracting summary command: %s" command;
+      L.info "Extracting step!";
       execute command
   | Normal -> execute command
 

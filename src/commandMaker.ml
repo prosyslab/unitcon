@@ -7,10 +7,9 @@ let dep_files out_dir = Filename.(out_dir / "jar-files")
 let dependency_jar out_dir = Filename.(out_dir / "with-dependency.jar")
 
 let simple_compiler program_dir command =
-  Logger.info "Run: %s" command;
   let current_dir = Unix.getcwd () in
   Sys.chdir program_dir;
-  let ret = Sys.command (command ^ " > /dev/null 2>&1") in
+  let ret = execute command in
   Sys.chdir current_dir;
   if ret <> 0 then failwith ("Faild to execute " ^ command)
 
