@@ -82,8 +82,7 @@ let execute_build_cmd p infer_bin out_dir =
   let rec execute cmds =
     match cmds with
     | c :: tl ->
-        if String.starts_with ~prefix:"mvn dependency" c then execute tl
-        else if String.starts_with ~prefix:"mvn clean" c then (
+        if String.starts_with ~prefix:"mvn clean" c then (
           simple_compiler p (Capture (infer_bin, out_dir)) c;
           execute tl)
         else if String.starts_with ~prefix:"javac" c then (
