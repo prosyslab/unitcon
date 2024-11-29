@@ -72,7 +72,8 @@ let loop_value_to_tc rep_input loop_id_map tc =
       let to_be_modified = array_id ^ "\\[" ^ index_id ^ "\\]" in
       let real_input = str_to_primitive ast_id value in
       let input_code = AST.exp_code real_input ast_id in
-      Str.replace_first (Str.regexp to_be_modified) input_code old_tc)
+      let x = Str.replace_first (Str.regexp to_be_modified) input_code old_tc in
+      Str.global_replace (Str.regexp "\\") "\\\\\\\\" x)
     tc rep_input
 
 (* return: (testcase * list(partial testcase)) *)
