@@ -936,7 +936,8 @@ module DUG = struct
         if !Cmdline.with_loop then
           let v_type, v_id = loop_id_lval_code x in
           match v_type with
-          | Int | Long | Short | Byte | Char | Float | Double | Bool | String ->
+          | Int | Long | Short | Byte | Char | Float | Double | Bool | String
+          | Object _ ->
               v_id ^ "_comb[" ^ v_id ^ "_index]"
           | _ -> "Exp"
         else "Exp"
@@ -986,6 +987,11 @@ module DUG = struct
     let rec rval id exps =
       match exps with hd :: tl -> ", " ^ exp_code hd id ^ rval id tl | _ -> ""
     in
+    let rec string_rval id exps =
+      match exps with
+      | hd :: tl -> ", \"" ^ exp_code hd id ^ "\"" ^ string_rval id tl
+      | _ -> ""
+    in
     let comb_func_name = function
       | Int -> "Int"
       | Long -> "Long"
@@ -998,11 +1004,20 @@ module DUG = struct
       | String -> "String"
       | _ -> ""
     in
-    lval ^ " = " ^ "{"
-    ^ Regexp.rm_first_rest (rval loop_id exp_list)
-    ^ "};\n" ^ lval ^ "_comb = UnitconCombinator.combine"
-    ^ comb_func_name (fst v)
-    ^ "(" ^ snd v ^ ");\n"
+    if is_primitive (fst v) then
+      lval ^ " = " ^ "{"
+      ^ Regexp.rm_first_rest (rval loop_id exp_list)
+      ^ "};\n" ^ lval ^ "_comb = UnitconCombinator.combine"
+      ^ comb_func_name (fst v)
+      ^ "(" ^ snd v ^ ");\n"
+    else
+      lval ^ "_comb = " ^ "{"
+      ^ Regexp.rm_first_rest (rval loop_id exp_list)
+      ^ "};\n"
+      ^ ("String[] " ^ snd v)
+      ^ "_string_comb = " ^ "{"
+      ^ Regexp.rm_first_rest (string_rval loop_id exp_list)
+      ^ "};\n"
 
   let topological_code g =
     Topological.fold (fun node codes -> codes ^ code node) g ""

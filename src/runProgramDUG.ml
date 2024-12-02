@@ -29,8 +29,12 @@ let insert_multi_test_log loop_id_map =
   let end_signal = "System.err.println(\"-----LogEnd-----\");\n" in
   let log lval =
     let id = snd lval in
-    "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " ^ id ^ "_comb["
-    ^ id ^ "_index" ^ "]" ^ ");\n"
+    if is_primitive (fst lval) then
+      "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " ^ id ^ "_comb["
+      ^ id ^ "_index" ^ "]" ^ ");\n"
+    else
+      "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " ^ id
+      ^ "_string_comb[" ^ id ^ "_index" ^ "]" ^ ");\n"
   in
   LoopIdMap.M.fold
     (fun id _ code -> log (DUG.loop_id_lval_code id) ^ code)
@@ -49,12 +53,15 @@ let str_to_primitive v value =
   | Bool -> DUGIR.Primitive (B (bool_of_string value))
   | Char -> DUGIR.Primitive (C value.[0])
   | String -> if value = "null" then DUGIR.Null else DUGIR.Primitive (S value)
+  | Object _ ->
+      if value = "null" then DUGIR.Null else DUGIR.GlobalConstant value
   | _ -> failwith "Fail: convert string to primitive"
 
 let get_id_to_be_modified v id =
   (* array_id, index_id *)
   match DUG.get_vinfo v |> fst with
-  | Int | Long | Short | Byte | Float | Double | Bool | Char | String ->
+  | Int | Long | Short | Byte | Float | Double | Bool | Char | String | Object _
+    ->
       (id ^ "_comb", id ^ "_index")
   | _ -> failwith "Fail: get id to be modified"
 

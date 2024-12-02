@@ -779,6 +779,38 @@ let is_object x = is_object (AST.get_vinfo x |> fst)
 
 let is_number x = is_number (AST.get_vinfo x |> fst)
 
+let comparable_const p =
+  [
+    ( 0,
+      AST.const_rule2 p (ASTIR.GlobalConstant "java.math.BigDecimal.ONE"),
+      empty_id_map,
+      ObjTypeMap.M.add "java.lang.Comparable" "java.math.BigDecimal"
+        empty_obj_type_map );
+  ]
+
+let object_const p =
+  let f =
+    ASTIR.mk_f "java.lang.Object" "java.lang.Object.<init>()" "java.lang.Object"
+      Modeling.obj_summary
+  in
+  let param = ASTIR.Param [] in
+  [
+    ( 0,
+      AST.const_rule2_2 p f param,
+      empty_id_map,
+      ObjTypeMap.M.add "java.lang.Object" "java.lang.Object" empty_obj_type_map
+    );
+  ]
+
+let number_const p =
+  [
+    ( 0,
+      AST.const_rule2 p (ASTIR.GlobalConstant "java.math.BigDecimal.ONE"),
+      empty_id_map,
+      ObjTypeMap.M.add "java.lang.Number" "java.math.BigDecimal"
+        empty_obj_type_map );
+  ]
+
 let const_unroll (p : ASTIR.t) { summary; m_info; inst_info; prim_info; _ } =
   let get_r3 x =
     List.fold_left
@@ -790,35 +822,9 @@ let const_unroll (p : ASTIR.t) { summary; m_info; inst_info; prim_info; _ } =
       [] (get_value x prim_info)
   in
   let get_r2 x =
-    if is_comparable x then
-      [
-        ( 0,
-          AST.const_rule2 p (ASTIR.GlobalConstant "java.math.BigDecimal.ONE"),
-          empty_id_map,
-          ObjTypeMap.M.add "java.lang.Comparable" "java.math.BigDecimal"
-            empty_obj_type_map );
-      ]
-    else if is_object x then
-      let f =
-        ASTIR.mk_f "java.lang.Object" "java.lang.Object.<init>()"
-          "java.lang.Object" Modeling.obj_summary
-      in
-      let param = ASTIR.Param [] in
-      [
-        ( 0,
-          AST.const_rule2_2 p f param,
-          empty_id_map,
-          ObjTypeMap.M.add "java.lang.Object" "java.lang.Object"
-            empty_obj_type_map );
-      ]
-    else if is_number x then
-      [
-        ( 0,
-          AST.const_rule2 p (ASTIR.GlobalConstant "java.math.BigDecimal.ONE"),
-          empty_id_map,
-          ObjTypeMap.M.add "java.lang.Number" "java.math.BigDecimal"
-            empty_obj_type_map );
-      ]
+    if is_comparable x then comparable_const p
+    else if is_object x then object_const p
+    else if is_number x then number_const p
     else
       List.fold_left
         (fun lst x1 ->
@@ -831,8 +837,8 @@ let const_unroll (p : ASTIR.t) { summary; m_info; inst_info; prim_info; _ } =
   in
   match p with
   | Const (x, _) ->
-      if is_primitive_from_id x then
-        if !Cmdline.with_loop then
+      if !Cmdline.with_loop then
+        if is_primitive_from_id x then
           let prec, exps =
             List.fold_left
               (fun (prec, lst) x1 ->
@@ -848,14 +854,50 @@ let const_unroll (p : ASTIR.t) { summary; m_info; inst_info; prim_info; _ } =
               empty_obj_type_map );
           ]
         else
-          List.fold_left
-            (fun lst x1 ->
-              ( fst x1,
-                AST.const_rule1 p (snd x1),
+          let gcs =
+            global_var_list
+              (AST.get_vinfo x |> fst |> get_class_name)
+              (AST.get_v x).summary summary m_info inst_info
+          in
+          let gcs =
+            if is_receiver (AST.get_vinfo x |> snd) || not_null_obj x then gcs
+            else (0, ASTIR.Null) :: gcs
+          in
+          if is_comparable x then comparable_const p
+          else if is_object x then object_const p
+          else if is_number x then number_const p
+          else if gcs = [] then raise Not_found_global_constant
+          else if List.length gcs = 1 then
+            let gc = List.hd gcs in
+            [
+              ( fst gc,
+                AST.const_rule2 p (snd gc),
                 empty_id_map,
-                empty_obj_type_map )
-              :: lst)
-            [] (get_value x prim_info)
+                empty_obj_type_map );
+            ]
+          else
+            let prec, exps =
+              List.fold_left
+                (fun (prec, lst) x1 ->
+                  let prec = if prec < fst x1 then fst x1 else prec in
+                  (prec, snd x1 :: lst))
+                (min_int, []) gcs
+            in
+            [
+              ( prec,
+                AST.const_rule_loop p,
+                LoopIdMap.M.add x exps empty_id_map,
+                empty_obj_type_map );
+            ]
+      else if is_primitive_from_id x then
+        List.fold_left
+          (fun lst x1 ->
+            ( fst x1,
+              AST.const_rule1 p (snd x1),
+              empty_id_map,
+              empty_obj_type_map )
+            :: lst)
+          [] (get_value x prim_info)
       else
         let r2 = get_r2 x in
         if is_receiver (AST.get_vinfo x |> snd) || not_null_obj x then r2
@@ -1290,6 +1332,7 @@ let rec mk_testcase p_data queue =
          with
         | exception Not_found_setter -> tl
         | exception Not_found_get_object -> tl
+        | exception Not_found_global_constant -> tl
         | x ->
             combinate (p.prec, p.tc, p.loop_ids, p.obj_types) x
             |> List.fold_left

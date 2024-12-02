@@ -7,6 +7,8 @@ exception Not_found_setter
 
 exception Not_found_get_object
 
+exception Not_found_global_constant
+
 type data = {
   cg : Callgraph.t;
   summary : SummaryMap.t;

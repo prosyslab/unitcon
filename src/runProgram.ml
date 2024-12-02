@@ -483,6 +483,7 @@ let insert_multi_test oc
       else common ^ "import " ^ bug_type ^ ";\n\n"
     in
     need_default_class m_bodies;
+    need_default_class arrays;
     get_package !Cmdline.extension |> output_string oc;
     (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
     import |> output_string oc;

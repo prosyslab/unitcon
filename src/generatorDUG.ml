@@ -832,6 +832,38 @@ let is_object x = is_object (DUG.get_vinfo x |> fst)
 
 let is_number x = is_number (DUG.get_vinfo x |> fst)
 
+let comparable_const s p =
+  [
+    ( 0,
+      DUG.const_rule2 s (DUGIR.GlobalConstant "java.math.BigDecimal.ONE") p.tc,
+      empty_id_map,
+      ObjTypeMap.M.add "java.lang.Comparable" "java.math.BigDecimal"
+        empty_obj_type_map );
+  ]
+
+let object_const s p =
+  let f =
+    DUGIR.mk_f "java.lang.Object" "java.lang.Object.<init>()" "java.lang.Object"
+      Modeling.obj_summary
+  in
+  let param = DUGIR.Param [] in
+  [
+    ( 0,
+      DUG.const_rule2_1 s f param p.tc,
+      empty_id_map,
+      ObjTypeMap.M.add "java.lang.Object" "java.lang.Object" empty_obj_type_map
+    );
+  ]
+
+let number_const s p =
+  [
+    ( 0,
+      DUG.const_rule2 s (DUGIR.GlobalConstant "java.math.BigDecimal.ONE") p.tc,
+      empty_id_map,
+      ObjTypeMap.M.add "java.lang.Number" "java.math.BigDecimal"
+        empty_obj_type_map );
+  ]
+
 let const_unroll (s : DUGIR.t) p { summary; m_info; inst_info; prim_info; _ } =
   let get_r3 x =
     List.fold_left
@@ -845,37 +877,9 @@ let const_unroll (s : DUGIR.t) p { summary; m_info; inst_info; prim_info; _ } =
       [] (get_value x prim_info)
   in
   let get_r2 x =
-    if is_comparable x then
-      [
-        ( 0,
-          DUG.const_rule2 s (DUGIR.GlobalConstant "java.math.BigDecimal.ONE")
-            p.tc,
-          empty_id_map,
-          ObjTypeMap.M.add "java.lang.Comparable" "java.math.BigDecimal"
-            empty_obj_type_map );
-      ]
-    else if is_object x then
-      let f =
-        DUGIR.mk_f "java.lang.Object" "java.lang.Object.<init>()"
-          "java.lang.Object" Modeling.obj_summary
-      in
-      let param = DUGIR.Param [] in
-      [
-        ( 0,
-          DUG.const_rule2_1 s f param p.tc,
-          empty_id_map,
-          ObjTypeMap.M.add "java.lang.Object" "java.lang.Object"
-            empty_obj_type_map );
-      ]
-    else if is_number x then
-      [
-        ( 0,
-          DUG.const_rule2 s (DUGIR.GlobalConstant "java.math.BigDecimal.ONE")
-            p.tc,
-          empty_id_map,
-          ObjTypeMap.M.add "java.lang.Number" "java.math.BigDecimal"
-            empty_obj_type_map );
-      ]
+    if is_comparable x then comparable_const s p
+    else if is_object x then object_const s p
+    else if is_number x then number_const s p
     else
       List.fold_left
         (fun lst x1 ->
@@ -891,8 +895,8 @@ let const_unroll (s : DUGIR.t) p { summary; m_info; inst_info; prim_info; _ } =
   in
   match s with
   | Const (_, _, (x, _)) ->
-      if is_primitive_from_id x then
-        if !Cmdline.with_loop then
+      if !Cmdline.with_loop then
+        if is_primitive_from_id x then
           let prec, exps =
             List.fold_left
               (fun (prec, lst) x1 ->
@@ -908,14 +912,51 @@ let const_unroll (s : DUGIR.t) p { summary; m_info; inst_info; prim_info; _ } =
               empty_obj_type_map );
           ]
         else
-          List.fold_left
-            (fun lst x1 ->
-              ( fst x1,
-                DUG.const_rule1 s (snd x1) p.tc,
+          let gcs =
+            global_var_list
+              (DUG.get_vinfo x |> fst |> get_class_name)
+              (DUG.get_v x).summary summary m_info inst_info
+          in
+          let gcs =
+            if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then gcs
+            else (0, DUGIR.Null) :: gcs
+          in
+          if is_comparable x then comparable_const s p
+          else if is_object x then object_const s p
+          else if is_number x then number_const s p
+          else if gcs = [] then raise Not_found_global_constant
+          else if List.length gcs = 1 then
+            (* if number of global constant is one, then do not using loop. (optimize) *)
+            let gc = List.hd gcs in
+            [
+              ( fst gc,
+                DUG.const_rule2 s (snd gc) p.tc,
                 empty_id_map,
-                empty_obj_type_map )
-              :: lst)
-            [] (get_value x prim_info)
+                empty_obj_type_map );
+            ]
+          else
+            let prec, exps =
+              List.fold_left
+                (fun (prec, lst) x1 ->
+                  let prec = if prec < fst x1 then fst x1 else prec in
+                  (prec, snd x1 :: lst))
+                (min_int, []) gcs
+            in
+            [
+              ( prec,
+                DUG.const_rule_loop s p.tc,
+                LoopIdMap.M.add x exps empty_id_map,
+                empty_obj_type_map );
+            ]
+      else if is_primitive_from_id x then
+        List.fold_left
+          (fun lst x1 ->
+            ( fst x1,
+              DUG.const_rule1 s (snd x1) p.tc,
+              empty_id_map,
+              empty_obj_type_map )
+            :: lst)
+          [] (get_value x prim_info)
       else
         let r2 = get_r2 x in
         if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then r2
@@ -1361,6 +1402,7 @@ let rec mk_testcase p_data queue =
          with
         | exception Not_found_setter -> tl
         | exception Not_found_get_object -> tl
+        | exception Not_found_global_constant -> tl
         | x ->
             combinate p x
             |> List.fold_left
