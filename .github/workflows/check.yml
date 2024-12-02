@@ -51,6 +51,7 @@ jobs:
         with:
           name: infer-artifact
           path: infer.tar
+          retention-days: 1
 
   unitcon-build:
     name: unitcon-build
