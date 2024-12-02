@@ -76,6 +76,10 @@ module Filename = struct
           else unlink abspath)
         (Sys.readdir path)
     else L.error "Path %s is not a directory" path
+
+  let remove_file f =
+    if Sys.file_exists f then
+      try Unix.unlink f with _ -> L.info "Fail delete %s" f
 end
 
 let input_path = "unitcon-properties"

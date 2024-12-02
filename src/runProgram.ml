@@ -150,10 +150,6 @@ let parse_primitive_info filename =
    init program
  * ************************************** *)
 
-let remove_file fname =
-  if Sys.file_exists fname then
-    try Unix.unlink fname with _ -> L.info "Fail delete %s" fname
-
 let remove_files dir (pattern : Str.regexp) =
   let remove_file file =
     if Str.string_match pattern file 0 then Unix.unlink Filename.(dir / file)
@@ -348,20 +344,22 @@ let get_compilation_error_files data =
 let remove_last_file test_dir =
   decr num_of_tc_files;
   let last_file = "UnitconTest" ^ string_of_int !num_of_tc_files ^ ".java" in
-  remove_file Filename.(test_dir / last_file)
+  Filename.remove_file Filename.(test_dir / last_file)
 
 let rec remove_no_exec_files curr_num test_dir =
   if curr_num > !num_of_tc_files then ()
   else
     let curr_tc = "UnitconTest" ^ string_of_int curr_num ^ ".java" in
     let curr_class = "UnitconTest" ^ string_of_int curr_num ^ ".class" in
-    remove_file Filename.(test_dir / curr_tc);
-    remove_file Filename.(test_dir / curr_class);
+    Filename.remove_file Filename.(test_dir / curr_tc);
+    Filename.remove_file Filename.(test_dir / curr_class);
     remove_no_exec_files (curr_num + 1) test_dir
 
 let modify_files test_dir data =
   let error_files = get_compilation_error_files data in
-  List.iter (fun file -> remove_file Filename.(test_dir / file)) error_files
+  List.iter
+    (fun file -> Filename.remove_file Filename.(test_dir / file))
+    error_files
 
 let checking_init_err data =
   match
@@ -631,7 +629,7 @@ let normal_exit =
       if !Cmdline.save_temp then ()
       else (
         remove_no_exec_files (!num_of_last_exec_tc + 1) !info.test_dir;
-        remove_file Filename.(!info.program_dir / "multi-test-files");
+        Filename.remove_file Filename.(!info.program_dir / "multi-test-files");
         remove_all_files !info.multi_test_dir;
         Unix.rmdir !info.multi_test_dir);
       Unix._exit 0)
@@ -661,8 +659,8 @@ let run_testfile () =
     else if not (Sys.file_exists Filename.(test_dir / (t_file ^ ".java"))) then
       ()
     else (
-      remove_file Filename.(test_dir / (t_file ^ ".java"));
-      remove_file Filename.(test_dir / (t_file ^ ".class")))
+      Filename.remove_file Filename.(test_dir / (t_file ^ ".java"));
+      Filename.remove_file Filename.(test_dir / (t_file ^ ".class")))
   in
   let rec execute_test current_f_num program_dir test_dir expected_bug =
     if current_f_num <= !num_of_tc_files then (
