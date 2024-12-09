@@ -917,37 +917,38 @@ let const_unroll (s : DUGIR.t) p { summary; m_info; inst_info; prim_info; _ } =
               (DUG.get_vinfo x |> fst |> get_class_name)
               (DUG.get_v x).summary summary m_info inst_info
           in
-          let gcs =
-            if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then gcs
-            else (0, DUGIR.Null) :: gcs
+          let statements =
+            if is_comparable x then comparable_const s p
+            else if is_object x then object_const s p
+            else if is_number x then number_const s p
+            else if gcs = [] then raise Not_found_global_constant
+            else if List.length gcs = 1 then
+              (* if number of global constant is one, then do not using loop. (optimize) *)
+              let gc = List.hd gcs in
+              [
+                ( fst gc,
+                  DUG.const_rule2 s (snd gc) p.tc,
+                  empty_id_map,
+                  empty_obj_type_map );
+              ]
+            else
+              let prec, exps =
+                List.fold_left
+                  (fun (prec, lst) x1 ->
+                    let prec = if prec < fst x1 then fst x1 else prec in
+                    (prec, snd x1 :: lst))
+                  (min_int, []) gcs
+              in
+              [
+                ( prec,
+                  DUG.const_rule_loop s p.tc,
+                  LoopIdMap.M.add x exps empty_id_map,
+                  empty_obj_type_map );
+              ]
           in
-          if is_comparable x then comparable_const s p
-          else if is_object x then object_const s p
-          else if is_number x then number_const s p
-          else if gcs = [] then raise Not_found_global_constant
-          else if List.length gcs = 1 then
-            (* if number of global constant is one, then do not using loop. (optimize) *)
-            let gc = List.hd gcs in
-            [
-              ( fst gc,
-                DUG.const_rule2 s (snd gc) p.tc,
-                empty_id_map,
-                empty_obj_type_map );
-            ]
-          else
-            let prec, exps =
-              List.fold_left
-                (fun (prec, lst) x1 ->
-                  let prec = if prec < fst x1 then fst x1 else prec in
-                  (prec, snd x1 :: lst))
-                (min_int, []) gcs
-            in
-            [
-              ( prec,
-                DUG.const_rule_loop s p.tc,
-                LoopIdMap.M.add x exps empty_id_map,
-                empty_obj_type_map );
-            ]
+          if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then
+            statements
+          else List.rev_append (get_r3 x) statements
       else if is_primitive_from_id x then
         List.fold_left
           (fun lst x1 ->

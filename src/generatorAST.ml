@@ -859,36 +859,38 @@ let const_unroll (p : ASTIR.t) { summary; m_info; inst_info; prim_info; _ } =
               (AST.get_vinfo x |> fst |> get_class_name)
               (AST.get_v x).summary summary m_info inst_info
           in
-          let gcs =
-            if is_receiver (AST.get_vinfo x |> snd) || not_null_obj x then gcs
-            else (0, ASTIR.Null) :: gcs
+
+          let statements =
+            if is_comparable x then comparable_const p
+            else if is_object x then object_const p
+            else if is_number x then number_const p
+            else if gcs = [] then raise Not_found_global_constant
+            else if List.length gcs = 1 then
+              let gc = List.hd gcs in
+              [
+                ( fst gc,
+                  AST.const_rule2 p (snd gc),
+                  empty_id_map,
+                  empty_obj_type_map );
+              ]
+            else
+              let prec, exps =
+                List.fold_left
+                  (fun (prec, lst) x1 ->
+                    let prec = if prec < fst x1 then fst x1 else prec in
+                    (prec, snd x1 :: lst))
+                  (min_int, []) gcs
+              in
+              [
+                ( prec,
+                  AST.const_rule_loop p,
+                  LoopIdMap.M.add x exps empty_id_map,
+                  empty_obj_type_map );
+              ]
           in
-          if is_comparable x then comparable_const p
-          else if is_object x then object_const p
-          else if is_number x then number_const p
-          else if gcs = [] then raise Not_found_global_constant
-          else if List.length gcs = 1 then
-            let gc = List.hd gcs in
-            [
-              ( fst gc,
-                AST.const_rule2 p (snd gc),
-                empty_id_map,
-                empty_obj_type_map );
-            ]
-          else
-            let prec, exps =
-              List.fold_left
-                (fun (prec, lst) x1 ->
-                  let prec = if prec < fst x1 then fst x1 else prec in
-                  (prec, snd x1 :: lst))
-                (min_int, []) gcs
-            in
-            [
-              ( prec,
-                AST.const_rule_loop p,
-                LoopIdMap.M.add x exps empty_id_map,
-                empty_obj_type_map );
-            ]
+          if is_receiver (AST.get_vinfo x |> snd) || not_null_obj x then
+            statements
+          else List.rev_append (get_r3 x) statements
       else if is_primitive_from_id x then
         List.fold_left
           (fun lst x1 ->
