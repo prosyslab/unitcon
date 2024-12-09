@@ -864,104 +864,88 @@ let number_const s p =
         empty_obj_type_map );
   ]
 
-let const_unroll (s : DUGIR.t) p { summary; m_info; inst_info; prim_info; _ } =
-  let get_r3 x =
+let apply_rule1 s p x =
+  (fst x, DUG.const_rule1 s (snd x) p.tc, empty_id_map, empty_obj_type_map)
+
+let apply_rule2 s p x =
+  (fst x, DUG.const_rule2 s (snd x) p.tc, empty_id_map, empty_obj_type_map)
+
+let apply_rule3 s p x =
+  (fst x, DUG.const_rule3 s p.tc, empty_id_map, empty_obj_type_map)
+
+let apply_loop s p x exps prec =
+  ( prec,
+    DUG.const_rule_loop s p.tc,
+    LoopIdMap.M.add x exps empty_id_map,
+    empty_obj_type_map )
+
+let get_loop_appl s p x values =
+  let prec, exps =
     List.fold_left
-      (fun lst x1 ->
-        match snd x1 with
-        | DUGIR.Primitive _ -> lst
-        | _ ->
-            [
-              (fst x1, DUG.const_rule3 s p.tc, empty_id_map, empty_obj_type_map);
-            ])
-      [] (get_value x prim_info)
+      (fun (prec, lst) x1 ->
+        let prec = if prec < fst x1 then fst x1 else prec in
+        (prec, snd x1 :: lst))
+      (min_int, []) values
   in
-  let get_r2 x =
-    if is_comparable x then comparable_const s p
-    else if is_object x then object_const s p
-    else if is_number x then number_const s p
-    else
-      List.fold_left
-        (fun lst x1 ->
-          ( fst x1,
-            DUG.const_rule2 s (snd x1) p.tc,
-            empty_id_map,
-            empty_obj_type_map )
-          :: lst)
-        []
-        (global_var_list
-           (DUG.get_vinfo x |> fst |> get_class_name)
-           (DUG.get_v x).summary summary m_info inst_info)
+  [ apply_loop s p x exps prec ]
+
+let get_r3 s p prim_info x =
+  List.fold_left
+    (fun lst x1 ->
+      match snd x1 with DUGIR.Primitive _ -> lst | _ -> [ apply_rule3 s p x1 ])
+    [] (get_value x prim_info)
+
+let get_r2 s p { summary; m_info; inst_info; _ } x =
+  if is_comparable x then comparable_const s p
+  else if is_object x then object_const s p
+  else if is_number x then number_const s p
+  else
+    List.fold_left
+      (fun lst x1 -> apply_rule2 s p x1 :: lst)
+      []
+      (global_var_list
+         (DUG.get_vinfo x |> fst |> get_class_name)
+         (DUG.get_v x).summary summary m_info inst_info)
+
+let get_r2_with_loop s p { summary; m_info; inst_info; _ } x =
+  let gcs =
+    global_var_list
+      (DUG.get_vinfo x |> fst |> get_class_name)
+      (DUG.get_v x).summary summary m_info inst_info
   in
+  if is_comparable x then comparable_const s p
+  else if is_object x then object_const s p
+  else if is_number x then number_const s p
+  else if gcs = [] then raise Not_found_global_constant
+  else if List.length gcs = 1 then
+    (* if number of global constant is one, then do not using loop. (optimize) *)
+    [ apply_rule2 s p (List.hd gcs) ]
+  else get_loop_appl s p x gcs
+
+let const_unroll_with_loop (s : DUGIR.t) p ({ prim_info; _ } as info) =
   match s with
   | Const (_, _, (x, _)) ->
-      if !Cmdline.with_loop then
-        if is_primitive_from_id x then
-          let prec, exps =
-            List.fold_left
-              (fun (prec, lst) x1 ->
-                let prec = if prec < fst x1 then fst x1 else prec in
-                (prec, snd x1 :: lst))
-              (min_int, [])
-              (get_value x prim_info |> sort_const)
-          in
-          [
-            ( prec,
-              DUG.const_rule_loop s p.tc,
-              LoopIdMap.M.add x exps empty_id_map,
-              empty_obj_type_map );
-          ]
-        else
-          let gcs =
-            global_var_list
-              (DUG.get_vinfo x |> fst |> get_class_name)
-              (DUG.get_v x).summary summary m_info inst_info
-          in
-          let statements =
-            if is_comparable x then comparable_const s p
-            else if is_object x then object_const s p
-            else if is_number x then number_const s p
-            else if gcs = [] then raise Not_found_global_constant
-            else if List.length gcs = 1 then
-              (* if number of global constant is one, then do not using loop. (optimize) *)
-              let gc = List.hd gcs in
-              [
-                ( fst gc,
-                  DUG.const_rule2 s (snd gc) p.tc,
-                  empty_id_map,
-                  empty_obj_type_map );
-              ]
-            else
-              let prec, exps =
-                List.fold_left
-                  (fun (prec, lst) x1 ->
-                    let prec = if prec < fst x1 then fst x1 else prec in
-                    (prec, snd x1 :: lst))
-                  (min_int, []) gcs
-              in
-              [
-                ( prec,
-                  DUG.const_rule_loop s p.tc,
-                  LoopIdMap.M.add x exps empty_id_map,
-                  empty_obj_type_map );
-              ]
-          in
-          if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then
-            statements
-          else List.rev_append (get_r3 x) statements
+      if is_primitive_from_id x then
+        get_loop_appl s p x (get_value x prim_info |> sort_const)
+      else
+        let r2_with_loop = get_r2_with_loop s p info x in
+        if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then
+          r2_with_loop
+        else List.rev_append (get_r3 s p prim_info x) r2_with_loop
+  | _ -> failwith "Fail: const_unroll_with_loop"
+
+let const_unroll (s : DUGIR.t) p ({ prim_info; _ } as info) =
+  match s with
+  | Const (_, _, (x, _)) ->
+      if !Cmdline.with_loop then const_unroll_with_loop s p info
       else if is_primitive_from_id x then
         List.fold_left
-          (fun lst x1 ->
-            ( fst x1,
-              DUG.const_rule1 s (snd x1) p.tc,
-              empty_id_map,
-              empty_obj_type_map )
-            :: lst)
+          (fun lst x1 -> apply_rule1 s p x1 :: lst)
           [] (get_value x prim_info)
       else
-        let r2 = get_r2 x in
+        let r2 = get_r2 s p info x in
         if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then r2
-        else List.rev_append (get_r3 x) r2
+        else List.rev_append (get_r3 s p prim_info x) r2
   | _ -> failwith "Fail: const_unroll"
 
 let fcall_in_assign_unroll (s : DUGIR.t) p obj_types

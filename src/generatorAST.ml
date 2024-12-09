@@ -811,99 +811,90 @@ let number_const p =
         empty_obj_type_map );
   ]
 
-let const_unroll (p : ASTIR.t) { summary; m_info; inst_info; prim_info; _ } =
-  let get_r3 x =
+let apply_rule1 p x =
+  (fst x, AST.const_rule1 p (snd x), empty_id_map, empty_obj_type_map)
+
+let apply_rule2 p x =
+  (fst x, AST.const_rule2 p (snd x), empty_id_map, empty_obj_type_map)
+
+let apply_rule3 p x =
+  (fst x, AST.const_rule3 p, empty_id_map, empty_obj_type_map)
+
+let apply_loop p x exps prec =
+  ( prec,
+    AST.const_rule_loop p,
+    LoopIdMap.M.add x exps empty_id_map,
+    empty_obj_type_map )
+
+let get_loop_appl p x values =
+  let prec, exps =
     List.fold_left
-      (fun lst x1 ->
-        match snd x1 with
-        | ASTIR.Primitive _ -> lst
-        | _ ->
-            (fst x1, AST.const_rule3 p, empty_id_map, empty_obj_type_map) :: lst)
-      [] (get_value x prim_info)
+      (fun (prec, lst) x1 ->
+        let prec = if prec < fst x1 then fst x1 else prec in
+        (prec, snd x1 :: lst))
+      (min_int, []) values
   in
-  let get_r2 x =
-    if is_comparable x then comparable_const p
-    else if is_object x then object_const p
-    else if is_number x then number_const p
-    else
-      List.fold_left
-        (fun lst x1 ->
-          (fst x1, AST.const_rule2 p (snd x1), empty_id_map, empty_obj_type_map)
-          :: lst)
-        []
-        (global_var_list
-           (AST.get_vinfo x |> fst |> get_class_name)
-           (AST.get_v x).summary summary m_info inst_info)
+  [ apply_loop p x exps prec ]
+
+let get_r3 p prim_info x =
+  List.fold_left
+    (fun lst x1 ->
+      match snd x1 with
+      | ASTIR.Primitive _ -> lst
+      | _ -> apply_rule3 p x1 :: lst)
+    [] (get_value x prim_info)
+
+let get_r2 p { summary; m_info; inst_info; _ } x =
+  if is_comparable x then comparable_const p
+  else if is_object x then object_const p
+  else if is_number x then number_const p
+  else
+    List.fold_left
+      (fun lst x1 -> apply_rule2 p x1 :: lst)
+      []
+      (global_var_list
+         (AST.get_vinfo x |> fst |> get_class_name)
+         (AST.get_v x).summary summary m_info inst_info)
+
+let get_r2_with_loop p { summary; m_info; inst_info; _ } x =
+  let gcs =
+    global_var_list
+      (AST.get_vinfo x |> fst |> get_class_name)
+      (AST.get_v x).summary summary m_info inst_info
   in
+  if is_comparable x then comparable_const p
+  else if is_object x then object_const p
+  else if is_number x then number_const p
+  else if gcs = [] then raise Not_found_global_constant
+  else if List.length gcs = 1 then
+    (* if number of global constant is one, then do not using loop. (optimize) *)
+    [ apply_rule2 p (List.hd gcs) ]
+  else get_loop_appl p x gcs
+
+let const_unroll_with_loop (p : ASTIR.t) ({ prim_info; _ } as info) =
   match p with
   | Const (x, _) ->
-      if !Cmdline.with_loop then
-        if is_primitive_from_id x then
-          let prec, exps =
-            List.fold_left
-              (fun (prec, lst) x1 ->
-                let prec = if prec < fst x1 then fst x1 else prec in
-                (prec, snd x1 :: lst))
-              (min_int, [])
-              (get_value x prim_info |> sort_const)
-          in
-          [
-            ( prec,
-              AST.const_rule_loop p,
-              LoopIdMap.M.add x exps empty_id_map,
-              empty_obj_type_map );
-          ]
-        else
-          let gcs =
-            global_var_list
-              (AST.get_vinfo x |> fst |> get_class_name)
-              (AST.get_v x).summary summary m_info inst_info
-          in
+      if is_primitive_from_id x then
+        get_loop_appl p x (get_value x prim_info |> sort_const)
+      else
+        let r2_with_loop = get_r2_with_loop p info x in
+        if is_receiver (AST.get_vinfo x |> snd) || not_null_obj x then
+          r2_with_loop
+        else List.rev_append (get_r3 p prim_info x) r2_with_loop
+  | _ -> failwith "Fail: const_unroll_with_loop"
 
-          let statements =
-            if is_comparable x then comparable_const p
-            else if is_object x then object_const p
-            else if is_number x then number_const p
-            else if gcs = [] then raise Not_found_global_constant
-            else if List.length gcs = 1 then
-              let gc = List.hd gcs in
-              [
-                ( fst gc,
-                  AST.const_rule2 p (snd gc),
-                  empty_id_map,
-                  empty_obj_type_map );
-              ]
-            else
-              let prec, exps =
-                List.fold_left
-                  (fun (prec, lst) x1 ->
-                    let prec = if prec < fst x1 then fst x1 else prec in
-                    (prec, snd x1 :: lst))
-                  (min_int, []) gcs
-              in
-              [
-                ( prec,
-                  AST.const_rule_loop p,
-                  LoopIdMap.M.add x exps empty_id_map,
-                  empty_obj_type_map );
-              ]
-          in
-          if is_receiver (AST.get_vinfo x |> snd) || not_null_obj x then
-            statements
-          else List.rev_append (get_r3 x) statements
+let const_unroll (p : ASTIR.t) ({ prim_info; _ } as info) =
+  match p with
+  | Const (x, _) ->
+      if !Cmdline.with_loop then const_unroll_with_loop p info
       else if is_primitive_from_id x then
         List.fold_left
-          (fun lst x1 ->
-            ( fst x1,
-              AST.const_rule1 p (snd x1),
-              empty_id_map,
-              empty_obj_type_map )
-            :: lst)
+          (fun lst x1 -> apply_rule1 p x1 :: lst)
           [] (get_value x prim_info)
       else
-        let r2 = get_r2 x in
+        let r2 = get_r2 p info x in
         if is_receiver (AST.get_vinfo x |> snd) || not_null_obj x then r2
-        else List.rev_append (get_r3 x) r2
+        else List.rev_append (get_r3 p prim_info x) r2
   | _ -> failwith "Fail: const_unroll"
 
 let fcall_in_assign_unroll (p : ASTIR.t) obj_types
