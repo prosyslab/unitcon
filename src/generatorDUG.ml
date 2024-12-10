@@ -950,6 +950,18 @@ let const_unroll (s : DUGIR.t) p ({ prim_info; _ } as info) =
 
 let fcall_in_assign_unroll (s : DUGIR.t) p obj_types
     { summary; m_info; t_info; c_info; setter_map; _ } =
+  let apply_rule f arg field_set obj_map prec =
+    ( prec,
+      DUG.fcall_in_assign_rule s field_set f arg p.tc,
+      empty_id_map,
+      obj_map )
+  in
+  let set_object_type class_name child_name obj_types =
+    match ObjTypeMap.M.find_opt class_name obj_types with
+    | Some child when child = child_name -> Some obj_types
+    | Some _ -> None
+    | None -> Some (ObjTypeMap.M.add class_name child_name obj_types)
+  in
   match s with
   | Assign (_, _, (x0, _, _, _)) ->
       let field_set = get_field_set x0 setter_map in
@@ -970,20 +982,9 @@ let fcall_in_assign_unroll (s : DUGIR.t) p obj_types
                let child_name =
                  Utils.get_class_name (DUG.get_func f).method_name
                in
-               match ObjTypeMap.M.find_opt class_name obj_types with
-               | Some child when child = child_name ->
-                   ( prec,
-                     DUG.fcall_in_assign_rule s field_set f arg p.tc,
-                     empty_id_map,
-                     empty_obj_type_map )
-                   :: lst
-               | Some _ -> lst
-               | None ->
-                   ( prec,
-                     DUG.fcall_in_assign_rule s field_set f arg p.tc,
-                     empty_id_map,
-                     ObjTypeMap.M.add class_name child_name obj_types )
-                   :: lst)
+               match set_object_type class_name child_name obj_types with
+               | Some obj -> apply_rule f arg field_set obj prec :: lst
+               | None -> lst)
              []
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
@@ -1032,51 +1033,52 @@ let recv_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
 
 let arg_in_assign_unroll (org_s, org_tc)
     (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
+  let apply_rule x args =
+    ( prec,
+      DUG.arg_in_assign_rule s x
+        (Param (List.map (fun x -> DUG.get_v x) args))
+        tc,
+      loop_ids,
+      obj_types )
+  in
   match s with
   | Assign (num, _, (_, _, f, arg)) when DUG.arg_in_assign s ->
       let class_name = Utils.get_class_name (DUG.get_func f).method_name in
       mk_arg_seq arg num class_name org_s org_tc
-      |> List.fold_left
-           (fun lst (args, x) ->
-             ( prec,
-               DUG.arg_in_assign_rule s x
-                 (Param (List.map (fun x -> DUG.get_v x) args))
-                 tc,
-               loop_ids,
-               obj_types )
-             :: lst)
-           []
+      |> List.fold_left (fun lst (args, x) -> apply_rule x args :: lst) []
   | _ -> failwith "Fail: arg_in_assign_unroll"
 
 let void_unroll (s : DUGIR.t) p =
+  let void_rule2 var =
+    List.fold_left
+      (fun lst prev ->
+        if DUG.check_assign var prev then
+          let s', g' = DUG.void_rule2 prev s p.tc in
+          if s' = s then lst
+          else (0, (s', g'), empty_id_map, empty_obj_type_map) :: lst
+        else lst)
+      [] (DUG.pred s p.tc)
+  in
   match s with
   | Stmt (_, var) ->
-      let void_rule2 =
-        List.fold_left
-          (fun lst prev ->
-            if DUG.check_assign var prev then
-              let s', g' = DUG.void_rule2 prev s p.tc in
-              if s' = s then lst
-              else (0, (s', g'), empty_id_map, empty_obj_type_map) :: lst
-            else lst)
-          [] (DUG.pred s p.tc)
-      in
-      (0, DUG.void_rule1 s p.tc, empty_id_map, empty_obj_type_map) :: void_rule2
+      (0, DUG.void_rule1 s p.tc, empty_id_map, empty_obj_type_map)
+      :: void_rule2 var
   | _ -> failwith "Fail: void_unroll"
 
 let fcall_in_void_unroll (s : DUGIR.t) p p_data =
+  let apply_rule f arg prec =
+    ( prec,
+      DUG.fcall_in_void_rule s f (Arg arg) p.tc,
+      empty_id_map,
+      empty_obj_type_map )
+  in
   match s with
   | Void (_, _, (x, _, _)) ->
       let lst = get_void_func x p_data in
       if lst = [] then raise Not_found_setter
       else
         List.fold_left
-          (fun lst (prec, f, arg) ->
-            ( prec,
-              DUG.fcall_in_void_rule s f (Arg arg) p.tc,
-              empty_id_map,
-              empty_obj_type_map )
-            :: lst)
+          (fun lst (prec, f, arg) -> apply_rule f arg prec :: lst)
           [] lst
   | _ -> failwith "Fail: fcall_in_void_unroll"
 
@@ -1097,20 +1099,17 @@ let recv_in_void_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
 
 let arg_in_void_unroll (org_s, org_tc)
     (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
+  let apply_rule x args =
+    ( prec,
+      DUG.arg_in_void_rule s x (Param (List.map (fun x -> DUG.get_v x) args)) tc,
+      loop_ids,
+      obj_types )
+  in
   match s with
   | Void (num, _, (_, f, arg)) when DUG.arg_in_void s ->
       let class_name = Utils.get_class_name (DUG.get_func f).method_name in
       mk_arg_seq arg num class_name org_s org_tc
-      |> List.fold_left
-           (fun lst (args, x) ->
-             ( prec,
-               DUG.arg_in_void_rule s x
-                 (Param (List.map (fun x -> DUG.get_v x) args))
-                 tc,
-               loop_ids,
-               obj_types )
-             :: lst)
-           []
+      |> List.fold_left (fun lst (args, x) -> apply_rule x args :: lst) []
   | _ -> failwith "Fail: arg_in_void_unroll"
 
 let one_unroll (s : DUGIR.t) p obj_types p_data =

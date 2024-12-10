@@ -899,6 +899,15 @@ let const_unroll (p : ASTIR.t) ({ prim_info; _ } as info) =
 
 let fcall_in_assign_unroll (p : ASTIR.t) obj_types
     { summary; m_info; t_info; c_info; setter_map; _ } =
+  let apply_rule f arg field_set obj_map prec =
+    (prec, AST.fcall_in_assign_rule p field_set f arg, empty_id_map, obj_map)
+  in
+  let set_object_type class_name child_name obj_types =
+    match ObjTypeMap.M.find_opt class_name obj_types with
+    | Some child when child = child_name -> Some obj_types
+    | Some _ -> None
+    | None -> Some (ObjTypeMap.M.add class_name child_name obj_types)
+  in
   match p with
   | Assign (x0, _, _, _) ->
       let field_set = get_field_set x0 setter_map in
@@ -919,20 +928,9 @@ let fcall_in_assign_unroll (p : ASTIR.t) obj_types
                let child_name =
                  Utils.get_class_name (AST.get_func f).method_name
                in
-               match ObjTypeMap.M.find_opt class_name obj_types with
-               | Some child when child = child_name ->
-                   ( prec,
-                     AST.fcall_in_assign_rule p field_set f arg,
-                     empty_id_map,
-                     empty_obj_type_map )
-                   :: lst
-               | Some _ -> lst
-               | None ->
-                   ( prec,
-                     AST.fcall_in_assign_rule p field_set f arg,
-                     empty_id_map,
-                     ObjTypeMap.M.add class_name child_name obj_types )
-                   :: lst)
+               match set_object_type class_name child_name obj_types with
+               | Some obj -> apply_rule f arg field_set obj prec :: lst
+               | None -> lst)
              []
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
@@ -967,18 +965,17 @@ let recv_in_assign_unroll (prec, (p : ASTIR.t), loop_ids, obj_types)
   | _ -> failwith "Fail: recv_in_assign_unroll"
 
 let rec arg_in_assign_unroll (prec, (p : ASTIR.t), loop_ids, obj_types) =
+  let apply_rule x arg =
+    ( prec,
+      AST.arg_in_assign_rule p x (Param (AST.get_arg arg)),
+      loop_ids,
+      obj_types )
+  in
   match p with
   | Assign (_, _, f, arg) when AST.arg_in_assign p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
       mk_arg_seq arg class_name
-      |> List.fold_left
-           (fun lst x ->
-             ( prec,
-               AST.arg_in_assign_rule p x (Param (AST.get_arg arg)),
-               loop_ids,
-               obj_types )
-             :: lst)
-           []
+      |> List.fold_left (fun lst x -> apply_rule x arg :: lst) []
   | Seq (s1, s2) when AST.arg_in_assign s2 ->
       arg_in_assign_unroll (prec, s2, loop_ids, obj_types)
       |> List.fold_left
@@ -998,18 +995,19 @@ let void_unroll p =
        [] (AST.void_rule2 p)
 
 let fcall_in_void_unroll (p : ASTIR.t) p_data =
+  let apply_rule f arg prec =
+    ( prec,
+      AST.fcall_in_void_rule p f (ASTIR.Arg arg),
+      empty_id_map,
+      empty_obj_type_map )
+  in
   match p with
   | Void (x, _, _) ->
       let lst = get_void_func x p_data in
       if lst = [] then raise Not_found_setter
       else
         List.fold_left
-          (fun lst (prec, f, arg) ->
-            ( prec,
-              AST.fcall_in_void_rule p f (ASTIR.Arg arg),
-              empty_id_map,
-              empty_obj_type_map )
-            :: lst)
+          (fun lst (prec, f, arg) -> apply_rule f arg prec :: lst)
           [] lst
   | _ -> failwith "Fail: fcall_in_void_unroll"
 
@@ -1027,18 +1025,17 @@ let recv_in_void_unroll (prec, (p : ASTIR.t), loop_ids, obj_types)
   | _ -> failwith "Fail: recv_in_void_unroll"
 
 let rec arg_in_void_unroll (prec, (p : ASTIR.t), loop_ids, obj_types) =
+  let apply_rule x arg =
+    ( prec,
+      AST.arg_in_void_rule p x (Param (AST.get_arg arg)),
+      loop_ids,
+      obj_types )
+  in
   match p with
   | Void (_, f, arg) when AST.arg_in_void p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
       mk_arg_seq arg class_name
-      |> List.fold_left
-           (fun lst x ->
-             ( prec,
-               AST.arg_in_void_rule p x (Param (AST.get_arg arg)),
-               loop_ids,
-               obj_types )
-             :: lst)
-           []
+      |> List.fold_left (fun lst x -> apply_rule x arg :: lst) []
   | Seq (s1, s2) when AST.arg_in_void s2 ->
       arg_in_void_unroll (prec, s2, loop_ids, obj_types)
       |> List.fold_left
