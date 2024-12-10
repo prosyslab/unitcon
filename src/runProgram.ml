@@ -10,6 +10,10 @@ exception Normal_Exit
 
 exception Early_Stop
 
+let normal_exit_flag = ref false
+
+let early_stop_flag = ref false
+
 let test_basename = "UnitconTest"
 
 let multi_test_basename = "UnitconMultiTest"
@@ -708,10 +712,15 @@ let early_run_test curr_time =
 let early_stop =
   Sys.Signal_handle
     (fun _ ->
-      if !num_of_tc_files mod !Cmdline.batch_size <> 0 || !early_stop_keep_going
-      then (
+      if !early_stop_keep_going then (
+        L.info "Unitcon Stop After Running Remaining Tests! (time: %f)"
+          (Unix.gettimeofday () -. !time);
+        normal_exit_flag := true;
+        raise Normal_Exit)
+      else if !num_of_tc_files mod !Cmdline.batch_size <> 0 then (
         L.info "Unitcon Early Stop After Running Remaining Tests! (time: %f)"
           (Unix.gettimeofday () -. !time);
+        early_stop_flag := true;
         raise Early_Stop)
       else (
         L.info "Keep Going (time: %f)" (Unix.gettimeofday () -. !time);
@@ -722,6 +731,7 @@ let early_stop =
         else (
           L.info "No Remaining Time ... (time: %f)"
             (Unix.gettimeofday () -. !time);
+          normal_exit_flag := true;
           raise Normal_Exit)))
 
 let setup program_dir out_dir =
