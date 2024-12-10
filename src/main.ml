@@ -36,10 +36,10 @@ let main () =
   | Cmdline.Build -> build ()
   | Cmdline.Analyze -> analyze ()
   | Cmdline.Synthesize ->
-      ignore (Unix.alarm !Cmdline.time_out);
+      ignore (Unix.alarm (!Cmdline.time_out - !Cmdline.margin));
       synthesize ());
   finalize t0
 
 let _ =
-  Sys.set_signal Sys.sigalrm RunProgram.normal_exit;
+  Sys.set_signal Sys.sigalrm RunProgram.early_stop;
   main ()

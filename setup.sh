@@ -36,7 +36,7 @@ build_unitcon () {
 
   eval $(SHELL=bash opam env --switch=$UNITCON_OPAM_SWITCH)
   opam pin add git+https://github.com/prosyslab/logger.git
-  opam install -j $NCPU dune ocamlgraph ppx_compare z3 core logger ounit bisect_ppx sawja
+  opam install -j $NCPU dune ocamlgraph ppx_compare z3 core logger ounit bisect_ppx sawja landmarks landmarks-ppx
   opam install yojson.2.2.2
   opam install ocamlformat.0.26.1
   opam upgrade dune

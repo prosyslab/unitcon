@@ -44,7 +44,9 @@ let priority_mode = ref false
 
 let test_case_ast = ref false
 
-let time_out = ref (10 * 60) (* totla synthesis running time *)
+let time_out = ref (10 * 60) (* total synthesis running time *)
+
+let margin = ref 10 (* margin for not yet running test cases *)
 
 let unknown_bug = ref false
 
@@ -214,6 +216,7 @@ module Synthesize = struct
     priority_mode := _priority_mode;
     test_case_ast := _test_case_ast;
     time_out := _time_out;
+    margin := if _time_out / 60 >= 10 then 10 else _time_out / 60;
     unknown_bug := _unknown_bug;
     mock := _mock;
     extension := _extension;

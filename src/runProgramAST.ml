@@ -109,14 +109,14 @@ let rec run_test ~is_start info queue e_method_info p_data =
       let _time = Unix.gettimeofday () -. !time in
       incr num_of_tc_files;
       add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
-      if !num_of_tc_files mod !Cmdline.batch_size = 0 || !abnormal_keep_going
+      if !num_of_tc_files mod !Cmdline.batch_size = 0 || !early_stop_keep_going
       then run_testfile ()
       else ();
       run_test ~is_start:false info tc_list e_method_info p_data)
   else if completion = Incomplete then (
     (* early stopping *)
     if !num_of_last_exec_tc < !num_of_tc_files then run_testfile () else ();
-    Unix.kill (Unix.getpid ()) Sys.sigusr1)
+    raise Normal_Exit)
   else
     let _time = Unix.gettimeofday () -. !time in
     incr num_of_tc_files;
@@ -125,5 +125,13 @@ let rec run_test ~is_start info queue e_method_info p_data =
     run_test ~is_start:false info tc_list e_method_info p_data
 
 let run program_dir out_dir =
-  let error_method_info, p_data = setup program_dir out_dir in
-  run_test ~is_start:true !info [] error_method_info p_data
+  try
+    let error_method_info, p_data = setup program_dir out_dir in
+    run_test ~is_start:true !info [] error_method_info p_data
+  with
+  | Normal_Exit ->
+      Logger.info "Catch Normal Exit exception in RunProgramAST";
+      normal_exit (Unix.gettimeofday ())
+  | Early_Stop ->
+      Logger.info "Catch Early Stop exception in RunProgramAST";
+      early_run_test (Unix.gettimeofday ())

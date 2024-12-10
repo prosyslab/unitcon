@@ -6,6 +6,10 @@ module ImportSet = Utils.ImportSet
 
 exception Compilation_Error
 
+exception Normal_Exit
+
+exception Early_Stop
+
 let test_basename = "UnitconTest"
 
 let multi_test_basename = "UnitconMultiTest"
@@ -24,7 +28,7 @@ let first_success_tc = ref ""
 
 let last_success_tc = ref ""
 
-let abnormal_keep_going = ref false
+let early_stop_keep_going = ref false
 
 let require_enum_class = ref false
 
@@ -606,35 +610,6 @@ let build_multi_test info =
   close_in ic_out;
   close_in ic_err
 
-let normal_exit =
-  Sys.Signal_handle
-    (fun _ ->
-      L.info "Normal End UnitCon for %s: %b(%d) (total time: %f)"
-        !info.program_dir
-        (if !num_of_success > 0 then true else false)
-        !num_of_success
-        (Unix.gettimeofday () -. !time);
-      L.info "First Success Test: %s" !first_success_tc;
-      L.info "Last Success Test: %s" !last_success_tc;
-      if !first_success_tc <> "" then (
-        print_and_log "======================= Result =======================";
-        print_and_log "Location of test: %s" !info.test_dir;
-        print_and_log "You can try running the test from %s" !Cmdline.out_dir;
-        print_and_log "Command: %s"
-          (modify_execute_command (execute_cmd !info) !first_success_tc))
-      else (
-        print_and_log "======================= Result =======================";
-        print_and_log "Location of test: %s" !info.test_dir;
-        print_and_log "UnitCon failed to synthesize test...");
-      (* clean up useless files and directories *)
-      if !Cmdline.save_temp then ()
-      else (
-        remove_no_exec_files (!num_of_last_exec_tc + 1) !info.test_dir;
-        Filename.remove_file Filename.(!info.program_dir / "multi-test-files");
-        remove_all_files !info.multi_test_dir;
-        Unix.rmdir !info.multi_test_dir);
-      Unix._exit 0)
-
 let run_testfile () =
   let compile_start = Unix.gettimeofday () in
   add_default_class !info.test_dir;
@@ -656,7 +631,7 @@ let run_testfile () =
       last_success_tc := t_file;
       incr num_of_success;
       L.info "Success Test: %s" t_file;
-      Unix.kill (Unix.getpid ()) Sys.sigusr1)
+      raise Normal_Exit)
     else if not (Sys.file_exists Filename.(test_dir / (t_file ^ ".java"))) then
       ()
     else (
@@ -702,27 +677,54 @@ let run_multi_testfile () =
   L.info "End multi-test! (duration: %f)" (Unix.gettimeofday () -. compile_start);
   found_rep_inputs
 
+let normal_exit curr_time =
+  L.info "End UnitCon for %s: %b(%d) (total time: %f)" !info.program_dir
+    (if !num_of_success > 0 then true else false)
+    !num_of_success (curr_time -. !time);
+  L.info "First Success Test: %s" !first_success_tc;
+  L.info "Last Success Test: %s" !last_success_tc;
+  print_and_log "======================= Result =======================";
+  print_and_log "Location of test: %s" !info.test_dir;
+  if !first_success_tc <> "" then (
+    print_and_log "You can try running the test from %s" !Cmdline.out_dir;
+    print_and_log "Command: %s"
+      (modify_execute_command (execute_cmd !info) !first_success_tc))
+  else print_and_log "UnitCon failed to synthesize test...";
+  (* clean up useless files and directories *)
+  if !Cmdline.save_temp then ()
+  else (
+    remove_no_exec_files (!num_of_last_exec_tc + 1) !info.test_dir;
+    Filename.remove_file Filename.(!info.program_dir / "multi-test-files");
+    remove_all_files !info.multi_test_dir;
+    Filename.unlink_dir !info.multi_test_dir)
+
 (* force stop if generated test cases are not executed and only synthesis is long *)
-let abnormal_run_test =
+let early_run_test curr_time =
+  L.info "Early Stop Synthesis (time: %f)" (curr_time -. !time);
+  L.info "Early Run Test";
+  run_testfile ();
+  normal_exit (Unix.gettimeofday ())
+
+let early_stop =
   Sys.Signal_handle
     (fun _ ->
-      if !num_of_tc_files mod !Cmdline.batch_size <> 0 then (
-        L.info "Abnormal Run Test";
-        run_testfile ();
-        Unix.kill (Unix.getpid ()) Sys.sigusr1)
+      if !num_of_tc_files mod !Cmdline.batch_size <> 0 || !early_stop_keep_going
+      then (
+        L.info "Unitcon Early Stop After Running Remaining Tests! (time: %f)"
+          (Unix.gettimeofday () -. !time);
+        raise Early_Stop)
       else (
-        L.info "Keep Going";
-        abnormal_keep_going := true))
-
-let interrupt pid =
-  Unix.sleep (!Cmdline.time_out - 10);
-  Unix.kill pid Sys.sigusr2
+        L.info "Keep Going (time: %f)" (Unix.gettimeofday () -. !time);
+        if !Cmdline.margin <> 0 then (
+          L.info "Remaining Time for Synthesis: %d" !Cmdline.margin;
+          ignore (Unix.alarm !Cmdline.margin);
+          early_stop_keep_going := true)
+        else (
+          L.info "No Remaining Time ... (time: %f)"
+            (Unix.gettimeofday () -. !time);
+          raise Normal_Exit)))
 
 let setup program_dir out_dir =
-  (* for early stopping *)
-  Sys.set_signal Sys.sigusr1 normal_exit;
-  Sys.set_signal Sys.sigusr2 abnormal_run_test;
-  Thread.create interrupt (Unix.getpid ()) |> ignore;
   time := Unix.gettimeofday ();
   init program_dir out_dir;
   let m_info = parse_method_info !info.summary_file in

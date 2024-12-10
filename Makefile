@@ -14,6 +14,10 @@ fmt:
 test-unitcon: all
 	./run.sh
 
+profile:
+	$(DUNE) build --instrument-with landmarks src/main.exe
+	$(LN) _build/default/src/main.exe $(EXE)
+
 coverage:
 	rsync -a unitcon-infer _build/default/
 	$(DUNE) runtest ./test

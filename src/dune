@@ -3,5 +3,7 @@
  (libraries ocamlgraph unix yojson str core z3 logger sawja cmdliner)
  (instrumentation
   (backend bisect_ppx))
+ (instrumentation
+  (backend landmarks --auto))
  (preprocess
   (pps ppx_compare)))
