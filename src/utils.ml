@@ -241,6 +241,8 @@ let filter_list =
     "java.io.PushbackReader.<init>(java.io.Reader,int)";
     "java.io.PipedReader.<init>()";
     "java.io.PipedReader.<init>(int)";
+    "java.io.PipedReader.<init>(java.io.PipedWriter)";
+    "java.io.PipedReader.<init>(java.io.PipedWriter,int)";
     "java.io.PipedWriter.<init>()";
     "java.io.PipedWriter.<init>(java.io.PipedReader)";
     "java.io.BufferedWriter.<init>(java.io.Writer)";
@@ -260,4 +262,5 @@ let filter_list =
     "java.io.FileWriter.<init>(java.lang.String,boolean)";
     "java.io.File.<init>(java.net.URI)";
     "java.io.File.<init>(java.io.File,java.lang.String)";
+    "java.io.File.<init>(java.lang.String,java.lang.String)";
   ]
