@@ -82,21 +82,16 @@ let input name =
 
 let parse_method_info filename =
   if not (Sys.file_exists filename) then failwith (filename ^ " not found");
-  let json = input filename in
-  Summary.from_method_json json
+  input filename |> Summary.from_method_json
 
 let parse_summary filename minfo =
-  let json = input filename in
-  Summary.from_summary_json minfo json
+  input filename |> Summary.from_summary_json minfo
 
-let parse_callgraph filename =
-  let data = input filename in
-  Callgraph.of_json data
+let parse_callgraph filename = input filename |> Callgraph.of_json
 
 let parse_extra_callgraph filename cg =
   if not (Sys.file_exists filename) then failwith (filename ^ " not found");
-  let json = Json.from_file filename in
-  Callgraph.of_extra_json cg json
+  Json.from_file filename |> Callgraph.of_extra_json cg
 
 let get_setter summary m_info = Setter.from_summary_map summary m_info
 
@@ -113,37 +108,32 @@ let get_bug_type filename =
 let parse_error_summary filename =
   if not (Sys.file_exists filename) then failwith (filename ^ " not found");
   let data = Json.lineseq_from_file filename in
-  let json =
-    `List
-      (Seq.fold_left
-         (fun lst assoc -> match assoc with `Json j -> j :: lst | _ -> lst)
-         [] data
-      |> List.rev)
-  in
-  ErrorSummary.from_error_summary_json json
+  `List
+    (Seq.fold_left
+       (fun lst assoc -> match assoc with `Json j -> j :: lst | _ -> lst)
+       [] data
+    |> List.rev)
+  |> ErrorSummary.from_error_summary_json
 
 let parse_callprop filename =
   if not (Sys.file_exists filename) then failwith (filename ^ " not found");
   let data = Json.lineseq_from_file filename in
-  let json =
-    `List
-      (Seq.fold_left
-         (fun lst assoc -> match assoc with `Json j -> j :: lst | _ -> lst)
-         [] data)
-  in
-  CallProposition.from_callprop_json json
+  `List
+    (Seq.fold_left
+       (fun lst assoc -> match assoc with `Json j -> j :: lst | _ -> lst)
+       [] data)
+  |> CallProposition.from_callprop_json
 
 let parse_class_info filename summary_map method_map =
   if not (Sys.file_exists filename) then failwith (filename ^ " not found");
-  let json = Json.from_file filename in
-  Inheritance.of_json summary_map method_map json
+  Json.from_file filename |> Inheritance.of_json summary_map method_map
 
 let parse_stdlib_info (ct_info, i_info) smap mmap =
   let stdlib_file = Filename.(Utils.unitcon_path / "deps/class-info.json") in
   if not (Sys.file_exists stdlib_file) then ((ct_info, i_info), smap, mmap)
   else
-    let json = Json.from_file stdlib_file in
-    Inheritance.of_stdlib_json ct_info i_info smap mmap json
+    Json.from_file stdlib_file
+    |> Inheritance.of_stdlib_json ct_info i_info smap mmap
 
 let parse_gconstant_info filename =
   if not (Sys.file_exists filename) then InstanceInfo.M.empty
@@ -232,14 +222,14 @@ let check_substring substr str =
 let missing_trace = [ "at java.lang.System.arraycopy(Native Method)[ \t\r\n]+" ]
 
 let compare_stack_trace target_trace error_trace =
+  let check_stack_trace missing_trace =
+    check_substring
+      (!bug_type ^ ".*" ^ "[ \t\r\n]+[^a]*" ^ missing_trace ^ target_trace)
+      error_trace
+  in
   List.fold_left
     (fun check missing_trace ->
-      let curr_check =
-        check_substring
-          (!bug_type ^ ".*" ^ "[ \t\r\n]+[^a]*" ^ missing_trace ^ target_trace)
-          error_trace
-      in
-      if curr_check then true else check)
+      if check_stack_trace missing_trace then true else check)
     false ("" :: missing_trace)
 
 let check_package_name_presence package_name error_trace =
@@ -281,6 +271,12 @@ let get_index_of_substring substr str start =
   | exception Not_found -> None
   | i -> Some i
 
+let get_log_input input =
+  let name_value =
+    Str.replace_first (Str.regexp "Log=") "" input |> Str.split (Str.regexp "=")
+  in
+  (name_value |> List.hd, try name_value |> List.tl |> List.hd with _ -> "")
+
 let get_rep_input error_trace expected_bug =
   let expect = string_of_expected_bug expected_bug in
   let target = !bug_type ^ ".*" ^ "[ \t\r\n]+[^a]*" ^ expect in
@@ -299,14 +295,7 @@ let get_rep_input error_trace expected_bug =
   let rec get_input lst =
     match lst with
     | hd :: tl ->
-        if check_substring "Log=" hd then
-          let name_value =
-            Str.replace_first (Str.regexp "Log=") "" hd
-            |> Str.split (Str.regexp "=")
-          in
-          ( name_value |> List.hd,
-            try name_value |> List.tl |> List.hd with _ -> "" )
-          :: get_input tl
+        if check_substring "Log=" hd then get_log_input hd :: get_input tl
         else get_input tl
     | _ -> []
   in
@@ -621,7 +610,7 @@ let run_testfile () =
   build_program !info;
   L.info "End compilation! (duration: %f)"
     (Unix.gettimeofday () -. compile_start);
-  let execute _ test_dir expected_bug t_file num_of_t_file =
+  let execute test_dir expected_bug t_file num_of_t_file =
     let ic_out, ic_err =
       simple_compiler !Cmdline.out_dir
         (modify_execute_command (execute_cmd !info) t_file)
@@ -644,7 +633,7 @@ let run_testfile () =
   in
   let rec execute_test current_f_num program_dir test_dir expected_bug =
     if current_f_num <= !num_of_tc_files then (
-      execute program_dir test_dir expected_bug
+      execute test_dir expected_bug
         (get_test_path !Cmdline.extension test_basename
         ^ string_of_int current_f_num)
         current_f_num;
@@ -709,30 +698,27 @@ let early_run_test curr_time =
   run_testfile ();
   normal_exit (Unix.gettimeofday ())
 
-let early_stop =
-  Sys.Signal_handle
-    (fun _ ->
-      if !early_stop_keep_going then (
-        L.info "Unitcon Stop After Running Remaining Tests! (time: %f)"
-          (Unix.gettimeofday () -. !time);
-        normal_exit_flag := true;
-        raise Normal_Exit)
-      else if !num_of_tc_files mod !Cmdline.batch_size <> 0 then (
-        L.info "Unitcon Early Stop After Running Remaining Tests! (time: %f)"
-          (Unix.gettimeofday () -. !time);
-        early_stop_flag := true;
-        raise Early_Stop)
-      else (
-        L.info "Keep Going (time: %f)" (Unix.gettimeofday () -. !time);
-        if !Cmdline.margin <> 0 then (
-          L.info "Remaining Time for Synthesis: %d" !Cmdline.margin;
-          ignore (Unix.alarm !Cmdline.margin);
-          early_stop_keep_going := true)
-        else (
-          L.info "No Remaining Time ... (time: %f)"
-            (Unix.gettimeofday () -. !time);
-          normal_exit_flag := true;
-          raise Normal_Exit)))
+let early_stop _ =
+  if !early_stop_keep_going then (
+    L.info "Unitcon Stop After Running Remaining Tests! (time: %f)"
+      (Unix.gettimeofday () -. !time);
+    normal_exit_flag := true;
+    raise Normal_Exit)
+  else if !num_of_tc_files mod !Cmdline.batch_size <> 0 then (
+    L.info "Unitcon Early Stop After Running Remaining Tests! (time: %f)"
+      (Unix.gettimeofday () -. !time);
+    early_stop_flag := true;
+    raise Early_Stop)
+  else (
+    L.info "Keep Going (time: %f)" (Unix.gettimeofday () -. !time);
+    if !Cmdline.margin <> 0 then (
+      L.info "Remaining Time for Synthesis: %d" !Cmdline.margin;
+      ignore (Unix.alarm !Cmdline.margin);
+      early_stop_keep_going := true)
+    else (
+      L.info "No Remaining Time ... (time: %f)" (Unix.gettimeofday () -. !time);
+      normal_exit_flag := true;
+      raise Normal_Exit))
 
 let setup program_dir out_dir =
   time := Unix.gettimeofday ();

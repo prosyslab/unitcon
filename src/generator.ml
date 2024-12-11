@@ -879,23 +879,23 @@ let n_forward n start start_map =
   in
   forwards 1 (find_key start start_map)
 
+let exist_field_value field value vmap memory =
+  match
+    Value.M.find_opt (get_field_symbol field value memory |> get_rh_name) vmap
+  with
+  | Some _ -> true
+  | _ -> false
+
+let exist_any_field_value mem vmap memory =
+  Condition.M.fold
+    (fun field value check ->
+      let chk = exist_field_value field value vmap memory in
+      if chk then true else check)
+    mem false
+
 let check_new_value symbol vmap memory =
-  let exist_field_value field value =
-    match
-      Value.M.find_opt (get_field_symbol field value memory |> get_rh_name) vmap
-    with
-    | Some _ -> true
-    | _ -> false
-  in
-  let checker mem =
-    Condition.M.fold
-      (fun field value check ->
-        let chk = exist_field_value field value in
-        if chk then true else check)
-      mem false
-  in
   match Condition.M.find_opt symbol memory with
-  | Some x -> checker x
+  | Some x -> exist_any_field_value x vmap memory
   | _ -> false
 
 let check_intersect_one caller_sym callee_sym caller_prop callee_summary =
@@ -1373,15 +1373,22 @@ let is_usable_getter c_name m_name classes m_info c_info ig =
   && is_abstract m_name classes m_info (c_info, ig) |> not
   && Utils.is_init_method m_name |> not
 
+let get_usable_types c_name (c_info, ig) =
+  if
+    is_public_class c_name c_info |> not
+    && is_usable_default_class c_name c_info |> not
+  then get_subtypes c_name ig
+  else [ c_name ]
+
+let all_equal std op =
+  Condition.M.fold
+    (fun k v eq ->
+      match Condition.M.find_opt k op with
+      | Some v2 when v = v2 -> eq
+      | _ -> false)
+    std true
+
 let is_same_summary s1 s2 =
-  let all_equal std op =
-    Condition.M.fold
-      (fun k v eq ->
-        match Condition.M.find_opt k op with
-        | Some v2 when v = v2 -> eq
-        | _ -> false)
-      std true
-  in
   let equal v1 v2 = all_equal v1 v2 && all_equal v2 v1 in
   if Condition.M.equal equal (snd s1.postcond) (snd s2.postcond) then true
   else false
@@ -1493,30 +1500,30 @@ let get_setter_list summary s_lst =
     [] s_lst
   |> List.rev |> prune_dup_summary_setter
 
+let is_null symbol summary =
+  match Value.M.find_opt symbol summary.value with
+  | Some x when x.Value.value = Eq Null -> true
+  | _ -> false
+
+let is_new_loc x summary =
+  match x with
+  | Condition.RH_Symbol _
+    when is_null (get_rh_name x) summary |> not
+         && contains_symbol x (snd summary.precond) |> not ->
+      true
+  | _ -> false
+
+let is_new_loc_mem m summary =
+  Condition.M.fold
+    (fun _ x check -> if check || is_new_loc x summary then true else check)
+    m false
+
 let is_new_loc_field field summary =
-  let is_null symbol =
-    match Value.M.find_opt symbol summary.value with
-    | Some x when x.Value.value = Eq Null -> true
-    | _ -> false
-  in
-  let is_new_loc x =
-    match x with
-    | Condition.RH_Symbol _
-      when is_null (get_rh_name x) |> not
-           && contains_symbol x (snd summary.precond) |> not ->
-        true
-    | _ -> false
-  in
-  let is_new_loc_mem m =
-    Condition.M.fold
-      (fun _ x check -> if check || is_new_loc x then true else check)
-      m false
-  in
   let post_var, post_mem = summary.postcond in
   let field_var = get_id_symbol post_var field in
   match Condition.M.find_opt field_var post_mem with
   | None -> false
-  | Some m -> is_new_loc_mem m
+  | Some m -> is_new_loc_mem m summary
 
 let ret_fld_name_of summary =
   let get_field field symbol mem acc =

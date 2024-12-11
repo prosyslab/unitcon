@@ -537,13 +537,7 @@ let error_entry_func ee es m_info c_info =
   let param = get_formal_params ee m_info in
   let f_arg_list = mk_arg ~is_s:(is_static ee m_info) param es c_info in
   let c_name = Utils.get_class_name ee in
-  let typ_list =
-    if
-      is_public_class c_name (fst c_info) |> not
-      && is_usable_default_class c_name (fst c_info) |> not
-    then get_subtypes c_name (snd c_info)
-    else [ c_name ]
-  in
+  let typ_list = get_usable_types c_name c_info in
   List.fold_left
     (fun lst typ ->
       let f = ASTIR.F { typ; method_name = ee; import = typ; summary = es } in
@@ -558,22 +552,22 @@ let mk_void_func (var : ASTIR.var) id class_name m_info c_info s_lst =
       (get_formal_params s m_info)
       var.summary c_info
   in
+  let typ =
+    if Utils.is_array class_name then
+      AST.get_vinfo id |> fst |> get_array_class_name
+    else class_name
+  in
   let get_f s =
-    let typ =
-      if Utils.is_array class_name then
-        AST.get_vinfo id |> fst |> get_array_class_name
-      else class_name
-    in
     ASTIR.F { typ; method_name = s; import = var.import; summary = var.summary }
+  in
+  let get_prec s fields =
+    if contains_used_in_error var.field fields || Utils.is_modeling_set s then 0
+    else -2
   in
   List.fold_left
     (fun lst (s, fields, _) ->
       let f_arg_list = get_arg_list s in
-      let prec =
-        if contains_used_in_error var.field fields || Utils.is_modeling_set s
-        then 0
-        else -2
-      in
+      let prec = get_prec s fields in
       let f = get_f s in
       if VarListSet.is_empty f_arg_list then (prec, f, []) :: lst
       else
@@ -719,19 +713,20 @@ let get_cname f = ASTIR.ClassName (AST.get_func f).ASTIR.typ
 
 let get_arg_seq (args : ASTIR.id list) =
   let already_arg = ref [] in
+  let apply_const_rule s arg =
+    List.fold_left (fun lst x -> AST.mk_const_arg x arg :: lst) [] s
+  in
+  let apply_assign_rule s arg =
+    List.fold_left (fun lst x -> AST.mk_assign_arg x arg :: lst) [] s
+  in
   List.fold_left
     (fun s arg ->
       if List.mem arg !already_arg then s
       else (
         already_arg := arg :: !already_arg;
-        let x =
-          List.fold_left (fun lst x -> AST.mk_const_arg x arg :: lst) [] s
-        in
-        if is_primitive_from_id arg then x
-        else
-          List.rev_append
-            (List.fold_left (fun lst x -> AST.mk_assign_arg x arg :: lst) [] s)
-            x))
+        let const_arg = apply_const_rule s arg in
+        if is_primitive_from_id arg then const_arg
+        else List.rev_append (apply_assign_rule s arg) const_arg))
     [ ASTIR.Skip ] args
 
 let mk_arg_seq arg class_name =
@@ -908,6 +903,15 @@ let fcall_in_assign_unroll (p : ASTIR.t) obj_types
     | Some _ -> None
     | None -> Some (ObjTypeMap.M.add class_name child_name obj_types)
   in
+  let apply_rule_for_all class_name field_set c_list =
+    List.fold_left
+      (fun lst (prec, (f, arg)) ->
+        let child_name = Utils.get_class_name (AST.get_func f).method_name in
+        match set_object_type class_name child_name obj_types with
+        | Some obj -> apply_rule f arg field_set obj prec :: lst
+        | None -> lst)
+      [] c_list
+  in
   match p with
   | Assign (x0, _, _, _) ->
       let field_set = get_field_set x0 setter_map in
@@ -923,15 +927,7 @@ let fcall_in_assign_unroll (p : ASTIR.t) obj_types
         List.rev_append
           (get_c x0 c_lst summary m_info c_info)
           (get_ret_c x0 ret_c_lst summary m_info t_info c_info setter_map)
-        |> List.fold_left
-             (fun lst (prec, (f, arg)) ->
-               let child_name =
-                 Utils.get_class_name (AST.get_func f).method_name
-               in
-               match set_object_type class_name child_name obj_types with
-               | Some obj -> apply_rule f arg field_set obj prec :: lst
-               | None -> lst)
-             []
+        |> apply_rule_for_all class_name field_set
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
 let recv_in_assign_unroll (prec, (p : ASTIR.t), loop_ids, obj_types)
@@ -1044,6 +1040,26 @@ let rec arg_in_void_unroll (prec, (p : ASTIR.t), loop_ids, obj_types) =
            []
   | _ -> failwith "Fail: arg_in_void_unroll"
 
+let apply_mock_rule p =
+  (0, AST.mk_mock_statement p, empty_id_map, empty_obj_type_map)
+
+let apply_recv_in_assign_rule_for_all p_data p_list =
+  List.fold_left
+    (fun acc_lst x -> recv_in_assign_unroll x p_data |> append acc_lst)
+    [] p_list
+
+let apply_arg_in_assign_rule_for_all p_list =
+  List.fold_left
+    (fun acc_lst x -> arg_in_assign_unroll x |> append acc_lst)
+    [] p_list
+
+let is_having_receiver p_list =
+  (* at least receiver *)
+  let filtered =
+    List.filter (fun (_, x, _, _) -> AST.count_params x < 2) p_list
+  in
+  if filtered = [] then true else false
+
 let one_unroll (p : ASTIR.t) obj_types p_data =
   match p with
   | Seq _ when AST.void p -> void_unroll p
@@ -1052,29 +1068,15 @@ let one_unroll (p : ASTIR.t) obj_types p_data =
       (* fcall_in_assign --> recv_in_assign --> arg_in_assign *)
       match fcall_in_assign_unroll p obj_types p_data with
       | exception Not_found_get_object ->
-          if !Cmdline.mock then
-            [ (0, AST.mk_mock_statement p, empty_id_map, empty_obj_type_map) ]
+          if !Cmdline.mock then [ apply_mock_rule p ]
           else raise Not_found_get_object
       | p_lst ->
           let lst =
-            List.fold_left
-              (fun acc_lst x ->
-                recv_in_assign_unroll x p_data |> append acc_lst)
-              [] p_lst
-            |> List.fold_left
-                 (fun acc_lst x -> arg_in_assign_unroll x |> append acc_lst)
-                 []
+            apply_recv_in_assign_rule_for_all p_data p_lst
+            |> apply_arg_in_assign_rule_for_all
           in
-          if
-            !Cmdline.mock
-            && List.filter
-                 (fun (_, x, _, _) ->
-                   AST.count_params x < 2 (* at least receiver *))
-                 p_lst
-               = []
-          then
-            (0, AST.mk_mock_statement p, empty_id_map, empty_obj_type_map)
-            :: lst
+          if !Cmdline.mock && is_having_receiver p_lst then
+            apply_mock_rule p :: lst
           else lst)
   | Void _ when AST.fcall1_in_void p ->
       (* fcall1_in_void --> recv_in_void --> arg_in_void *)
@@ -1157,22 +1159,22 @@ let sort_stmts map stmts =
       | None, None -> 0)
     stmts
 
-let combinate (prec, p, loop_ids, obj_types) stmt_map =
-  let combinate_stmt (p', s', loop_ids', obj_types') s new_s_list =
-    List.fold_left
-      (fun lst (new_p, new_s, new_loop, new_type) ->
-        ( p' + new_p,
-          change_stmt s' s new_s,
-          loop_id_merge loop_ids' new_loop,
-          obj_type_merge obj_types' new_type )
-        :: lst)
-      [] new_s_list
-  in
-  let combinate_stmts s new_s_lst partial_lst =
-    List.fold_left
-      (fun l _p -> combinate_stmt _p s new_s_lst |> append l)
-      [] partial_lst
-  in
+let combinate_stmt (p', s', loop_ids', obj_types') s new_s_list =
+  List.fold_left
+    (fun lst (new_p, new_s, new_loop, new_type) ->
+      ( p' + new_p,
+        change_stmt s' s new_s,
+        loop_id_merge loop_ids' new_loop,
+        obj_type_merge obj_types' new_type )
+      :: lst)
+    [] new_s_list
+
+let combinate_stmts s new_s_lst partial_lst =
+  List.fold_left
+    (fun l _p -> combinate_stmt _p s new_s_lst |> append l)
+    [] partial_lst
+
+let combinate { prec; tc; loop_ids; obj_types; _ } stmt_map =
   (* stmts is all fragments of statements in partial tc *)
   let all_combinate stmts =
     List.fold_left
@@ -1183,38 +1185,41 @@ let combinate (prec, p, loop_ids, obj_types) stmt_map =
             []
         | Some new_s_list -> combinate_stmts s new_s_list lst
         | _ -> lst)
-      [ (prec, p, loop_ids, obj_types) ]
+      [ (prec, tc, loop_ids, obj_types) ]
       stmts
   in
-  return_stmts p |> sort_stmts stmt_map |> all_combinate |> List.rev
+  return_stmts tc |> sort_stmts stmt_map |> all_combinate |> List.rev
 
 (* get methods that calling error method *)
-let get_caller_methods e_method p_data =
+let rec get_caller_methods e_method p_data =
+  let org_caller_list =
+    try CG.succ p_data.cg e_method |> List.filter (fun x -> x <> e_method)
+    with Invalid_argument _ -> []
+  in
+  let class_name = Utils.get_class_name e_method in
+  if org_caller_list = [] then
+    (try IG.pred (snd p_data.c_info) class_name with Invalid_argument _ -> [])
+    |> get_parent_caller_method e_method class_name p_data
+  else org_caller_list
+
+and get_parent_caller_method e_method class_name p_data parent_types =
   let get_caller_list m_name =
     try
       CG.succ p_data.cg m_name
       |> List.filter (fun x -> x <> m_name && x <> e_method)
     with Invalid_argument _ -> []
   in
-  let org_caller_list =
-    try CG.succ p_data.cg e_method |> List.filter (fun x -> x <> e_method)
-    with Invalid_argument _ -> []
-  in
-  let class_name = Utils.get_class_name e_method in
   let escaped_m_name =
     Str.global_replace Regexp.dot "\\." class_name
     |> Str.global_replace Regexp.dollar "\\$"
   in
-  if org_caller_list = [] then
-    (try IG.pred (snd p_data.c_info) class_name with Invalid_argument _ -> [])
-    |> List.fold_left
-         (fun acc c_name ->
-           let new_m_name =
-             Str.replace_first (Str.regexp escaped_m_name) c_name e_method
-           in
-           List.rev_append (get_caller_list new_m_name) acc)
-         org_caller_list
-  else org_caller_list
+  let new_m_name c_name =
+    Str.replace_first (Str.regexp escaped_m_name) c_name e_method
+  in
+  List.fold_left
+    (fun acc c_name ->
+      List.rev_append (get_caller_list (new_m_name c_name)) acc)
+    [] parent_types
 
 (* find error entry *)
 let rec find_ee e_method e_summary p_data =
@@ -1231,20 +1236,24 @@ let rec find_ee e_method e_summary p_data =
             (* It is possible without any specific conditions *)
             find_ee caller_method empty_summary p_data
         | Some prop_list ->
-            List.fold_left
-              (fun caller_preconds call_prop ->
-                if ExploredMethod.mem caller_method !explored_m then
-                  (* if the caller method is included in the error entry set,
-                       avoiding duplicate calculation *)
-                  caller_preconds
-                else (
-                  explored_m := ExploredMethod.add caller_method !explored_m;
-                  propagation e_method e_summary caller_method caller_preconds
-                    call_prop p_data))
-              ErrorEntrySet.empty prop_list)
+            traverse_all_prop_list e_method e_summary caller_method prop_list
+              p_data)
         |> ErrorEntrySet.union set)
       ErrorEntrySet.empty
       (get_caller_methods e_method p_data)
+
+and traverse_all_prop_list e_method e_summary caller_method prop_list p_data =
+  List.fold_left
+    (fun caller_preconds call_prop ->
+      if ExploredMethod.mem caller_method !explored_m then
+        (* if the caller method is included in the error entry set,
+             avoiding duplicate calculation *)
+        caller_preconds
+      else (
+        explored_m := ExploredMethod.add caller_method !explored_m;
+        propagation e_method e_summary caller_method caller_preconds call_prop
+          p_data))
+    ErrorEntrySet.empty prop_list
 
 (* propagate error condition to caller method *)
 and propagation e_method e_summary caller_method caller_preconds call_prop
@@ -1324,35 +1333,35 @@ let rec mk_testcase p_data queue =
         | exception Not_found_get_object -> tl
         | exception Not_found_global_constant -> tl
         | x ->
-            combinate (p.prec, p.tc, p.loop_ids, p.obj_types) x
-            |> List.fold_left
-                 (fun lst (new_p, new_s, new_loop, new_type) ->
-                   mk_cost p new_s new_loop new_type new_p :: lst)
-                 []
+            List.fold_left
+              (fun lst (new_p, new_s, new_loop, new_type) ->
+                mk_cost p new_s new_loop new_type new_p :: lst)
+              [] (combinate p x)
             |> List.rev_append (List.rev tl))
         |> mk_testcase p_data
   | [] -> []
 
+let apply_init_rule list =
+  List.fold_left
+    (fun lst (_, f, arg) ->
+      AST.fcall_in_void_rule (ASTIR.Void (Id, Func, Arg [])) f (ASTIR.Arg arg)
+      :: lst)
+    [] list
+
+let init_cost tcs =
+  List.fold_left
+    (fun lst new_tc ->
+      mk_cost empty_p new_tc empty_id_map empty_obj_type_map 0 :: lst)
+    [] tcs
+
 let mk_testcases ~is_start queue (e_method, error_summary) p_data =
-  let apply_rule list =
-    List.fold_left
-      (fun lst (_, f, arg) ->
-        AST.fcall_in_void_rule (ASTIR.Void (Id, Func, Arg [])) f (ASTIR.Arg arg)
-        :: lst)
-      [] list
-  in
   let p_info, init =
     if is_start then
       ErrorEntrySet.fold
         (fun (ee, ee_s) (p_info_init, init_list) ->
           ( Constant.expand_string_value ee p_info_init,
-            apply_rule (get_void_func ASTIR.Id ~ee ~es:ee_s p_data)
-            |> List.fold_left
-                 (fun lst new_tc ->
-                   mk_cost empty_p new_tc empty_id_map empty_obj_type_map 0
-                   :: lst)
-                 []
-            |> List.rev_append init_list ))
+            apply_init_rule (get_void_func ASTIR.Id ~ee ~es:ee_s p_data)
+            |> init_cost |> List.rev_append init_list ))
         (find_ee e_method error_summary p_data)
         (p_data.prim_info, [])
     else (p_data.prim_info, queue)

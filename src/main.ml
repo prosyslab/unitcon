@@ -41,5 +41,5 @@ let main () =
   finalize t0
 
 let _ =
-  Sys.set_signal Sys.sigalrm RunProgram.early_stop;
+  Sys.set_signal Sys.sigalrm (Sys.Signal_handle RunProgram.early_stop);
   main ()
