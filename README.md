@@ -5,14 +5,13 @@ Unitcon is a targeted unit test generator for Java.
 
 ## Dependencies
 - Java 8
-- Python 3
 
 ## Build Unitcon
 ```
 $ ./setup.sh
 ```
 
-## Runnin Unitcon on a Example Program
+## Running Unitcon on a Example Program
 You can run Unitcon on the `Main` program inside the `test` directory by executing the following command.  
 Suppose the target location is line **11** in [Main.java](test/Main/Main.java#L11).
 ```sh
@@ -22,7 +21,7 @@ Suppose the target location is line **11** in [Main.java](test/Main/Main.java#L1
 ```
 
 ## Running Unitcon on Your Project
-If you want to run Unitcon on a new project, follow the instructions below.
+If you want to run Unitcon on your project, follow the instructions below.
 
 ### 1. Configuration
 Create a directory named `unitcon-properties` under your project directory `target-dir`
