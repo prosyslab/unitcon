@@ -191,9 +191,6 @@ let add_missing_methods ?(is_stdlib = false) class_name info summary_map
   match JsonUtil.member "methods" info with
   | `Null -> (summary_map, method_map)
   | methods ->
-      let filtered_m_name =
-        if is_stdlib then filter_method_info methods else JsonUtil.keys methods
-      in
       List.fold_left
         (fun (s_map, m_map) m_name ->
           let m_info = JsonUtil.member m_name methods in
@@ -210,7 +207,7 @@ let add_missing_methods ?(is_stdlib = false) class_name info summary_map
               MethodInfo.M.add m_name
                 (get_method_info class_name m_name args arg_ids m_info)
                 m_map ))
-        (summary_map, method_map) filtered_m_name
+        (summary_map, method_map) (JsonUtil.keys methods)
 
 let transitive_closure vertex graph =
   let get_children v = try G.succ graph v with Invalid_argument _ -> [] in
