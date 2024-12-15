@@ -905,7 +905,7 @@ let get_r2_with_loop s p { summary; m_info; inst_info; _ } x =
   if is_comparable x then comparable_const s p
   else if is_object x then object_const s p
   else if is_number x then number_const s p
-  else if gcs = [] then raise Not_found_global_constant
+  else if gcs = [] then []
   else if List.length gcs = 1 then
     (* if number of global constant is one, then do not using loop. (optimize) *)
     [ apply_rule2 s p (List.hd gcs) ]
@@ -913,28 +913,38 @@ let get_r2_with_loop s p { summary; m_info; inst_info; _ } x =
 
 let const_unroll_with_loop (s : DUGIR.t) p ({ prim_info; _ } as info) =
   match s with
-  | Const (_, _, (x, _)) ->
+  | Const (_, _, (x, _)) -> (
       if is_primitive_from_id x then
         get_loop_appl s p x (get_value x prim_info |> sort_const)
       else
-        let r2_with_loop = get_r2_with_loop s p info x in
-        if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then
-          r2_with_loop
-        else List.rev_append (get_r3 s p prim_info x) r2_with_loop
+        match get_r2_with_loop s p info x with
+        | [] ->
+            if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then
+              raise Not_found_global_constant
+            else get_r3 s p prim_info x
+        | r2_with_loop ->
+            if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then
+              r2_with_loop
+            else List.rev_append (get_r3 s p prim_info x) r2_with_loop)
   | _ -> failwith "Fail: const_unroll_with_loop"
 
 let const_unroll (s : DUGIR.t) p ({ prim_info; _ } as info) =
   match s with
-  | Const (_, _, (x, _)) ->
+  | Const (_, _, (x, _)) -> (
       if !Cmdline.with_loop then const_unroll_with_loop s p info
       else if is_primitive_from_id x then
         List.fold_left
           (fun lst x1 -> apply_rule1 s p x1 :: lst)
           [] (get_value x prim_info)
       else
-        let r2 = get_r2 s p info x in
-        if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then r2
-        else List.rev_append (get_r3 s p prim_info x) r2
+        match get_r2 s p info x with
+        | [] ->
+            if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then
+              raise Not_found_global_constant
+            else get_r3 s p prim_info x
+        | r2 ->
+            if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then r2
+            else List.rev_append (get_r3 s p prim_info x) r2)
   | _ -> failwith "Fail: const_unroll"
 
 let fcall_in_assign_unroll (s : DUGIR.t) p obj_types
@@ -1373,6 +1383,7 @@ let rec mk_testcase p_data queue =
     if !Cmdline.basic_mode || !Cmdline.pruning_mode then queue
     else priority_q queue
   in
+  if !Cmdline.debug then Logger.info "# of test cases: %d" (List.length queue);
   match queue with
   | p :: tl ->
       if !Cmdline.with_loop && DUG.ground p.tc && DUG.with_withloop p.tc then
@@ -1384,9 +1395,21 @@ let rec mk_testcase p_data queue =
            all_unroll ~assign_ground:(DUG.assign_ground p.tc) p p.obj_types
              p_data StmtMap.M.empty
          with
-        | exception Not_found_setter -> tl
-        | exception Not_found_get_object -> tl
-        | exception Not_found_global_constant -> tl
+        | exception Not_found_setter ->
+            if !Cmdline.debug then
+              Logger.info "Exception: not found setter in %s"
+                (pretty_format p.tc |> snd);
+            tl
+        | exception Not_found_get_object ->
+            if !Cmdline.debug then
+              Logger.info "Exception: not found get object in %s"
+                (pretty_format p.tc |> snd);
+            tl
+        | exception Not_found_global_constant ->
+            if !Cmdline.debug then
+              Logger.info "Exception: not found global constant in %s"
+                (pretty_format p.tc |> snd);
+            tl
         | x ->
             List.fold_left
               (fun lst (new_p, new_tc, new_loop, new_type) ->
@@ -1415,6 +1438,7 @@ let mk_testcases ~is_start queue (e_method, error_summary) p_data =
     if is_start then
       ErrorEntrySet.fold
         (fun (ee, ee_s) (p_info_init, init_list) ->
+          if !Cmdline.debug then Logger.info "error entry method: %s" ee;
           ( Constant.expand_string_value ee p_info_init,
             apply_init_rule (get_void_func DUGIR.Id ~ee ~es:ee_s p_data)
             |> init_cost |> List.rev_append init_list ))
