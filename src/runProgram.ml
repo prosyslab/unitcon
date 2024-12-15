@@ -695,7 +695,7 @@ let normal_exit curr_time =
 let early_run_test curr_time =
   L.info "Early Stop Synthesis (time: %f)" (curr_time -. !time);
   L.info "Early Run Test";
-  run_testfile ();
+  (try run_testfile () with Normal_Exit -> ());
   normal_exit (Unix.gettimeofday ())
 
 let early_stop _ =
