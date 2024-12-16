@@ -220,8 +220,8 @@ let transitive_closure vertex graph =
   in
   iter
     (get_children vertex
-    |> List.fold_left (fun lst v -> get_children v :: lst) []
-    |> List.rev |> List.flatten)
+    |> List.fold_left (fun lst v -> List.rev_append (get_children v) lst) []
+    |> List.rev)
     graph
 
 let mapping_inheritance_info class_name info graph =
@@ -237,10 +237,10 @@ let mapping_inheritance_info class_name info graph =
            graph
   | _, `Null -> G.add_edge graph (JsonUtil.to_string super_class) class_name
   | _, _ ->
-      JsonUtil.to_list interfaces
+      super_class :: JsonUtil.to_list interfaces
       |> List.fold_left
            (fun g i -> G.add_edge g (JsonUtil.to_string i) class_name)
-           (G.add_edge graph (JsonUtil.to_string super_class) class_name)
+           graph
 
 let make_type ?(is_static = false) assoc =
   let access = JsonUtil.member "access" assoc |> JsonUtil.to_string in
@@ -315,10 +315,14 @@ let of_stdlib_json ctinfo iinfo smap mmap json =
   let ctinfo, iinfo, (smap, mmap) =
     List.fold_left
       (fun (ct_info, i_info, (s_map, m_map)) class_name ->
-        let info = JsonUtil.member class_name json in
-        ( mapping_class_type_info class_name json ct_info,
-          mapping_inheritance_info class_name info i_info,
-          add_missing_methods ~is_stdlib:true class_name info s_map m_map ))
+        (* early filter out unnecessary classes *)
+        if filter_class_name ~is_stdlib:true class_name then
+          (ct_info, i_info, (s_map, m_map))
+        else
+          let info = JsonUtil.member class_name json in
+          ( mapping_class_type_info class_name json ct_info,
+            mapping_inheritance_info class_name info i_info,
+            add_missing_methods ~is_stdlib:true class_name info s_map m_map ))
       (ctinfo, iinfo, (smap, mmap))
       (JsonUtil.keys json)
   in
