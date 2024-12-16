@@ -723,22 +723,58 @@ let early_stop _ =
 let setup program_dir out_dir =
   time := Unix.gettimeofday ();
   init program_dir out_dir;
+  if !Cmdline.debug then
+    L.info "End initialization for synthesis (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let m_info = parse_method_info !info.summary_file in
+  if !Cmdline.debug then
+    L.info "End parsing the methods' information (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let t_info = Summary.from_method_type m_info in
+  if !Cmdline.debug then
+    L.info "End extracting the methods' type (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let summary = parse_summary !info.summary_file m_info in
+  if !Cmdline.debug then
+    L.info "End parsing the methods' summaries (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let cg =
     parse_callgraph !info.summary_file
     |> parse_extra_callgraph !info.class_info_file
   in
+  if !Cmdline.debug then
+    L.info "End parsing the call-graph (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let setter_map = get_setter summary m_info in
+  if !Cmdline.debug then
+    L.info "End extracting the list of setter methods (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let c_info, summary, m_info =
     parse_class_info !info.class_info_file summary m_info
   in
+  if !Cmdline.debug then
+    L.info "End parsing the classes' information (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let c_info, summary, m_info = parse_stdlib_info c_info summary m_info in
+  if !Cmdline.debug then
+    L.info "End parsing the standard library methods' information (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let inst_info = parse_gconstant_info !info.constant_file in
+  if !Cmdline.debug then
+    L.info "End extracting the global constants (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let prim_info = parse_primitive_info !info.constant_file in
+  if !Cmdline.debug then
+    L.info "End extracting the constants with primitive type (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let cp_map = parse_callprop !info.call_prop_file in
+  if !Cmdline.debug then
+    L.info "End parsing call propositions (time: %f)"
+      (Unix.gettimeofday () -. !time);
   let error_method_info = parse_error_summary !info.error_summary_file in
+  if !Cmdline.debug then
+    L.info "End parsing error summaries (time: %f)"
+      (Unix.gettimeofday () -. !time);
   (* for unknown bug detection *)
   error_method_name :=
     Regexp.first_rm (Str.regexp "(.*)") (fst error_method_info)
