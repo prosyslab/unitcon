@@ -382,7 +382,7 @@ let image_create_info =
       modifier = Public;
       is_static = false;
       formal_params = [ this ];
-      return = "Graphics2D";
+      return = "java.awt.Graphics2D";
       filename = "";
     }
 

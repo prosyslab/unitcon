@@ -179,11 +179,13 @@ let mapping_summary method_summaries minfo mmap =
   if MethodInfo.M.mem method_name minfo |> not then mmap
   else SummaryMap.M.add method_name summaries mmap
 
+(* reason to add modeling: array constructor and setter (e.g., new Long[], add(index,value) ) *)
 let from_method_json json =
   let json = JsonUtil.to_list json in
   List.fold_left
     (fun mmap method_info -> mapping_method_info method_info mmap)
     MethodInfo.M.empty json
+  |> Modeling.add_java_package_method
 
 let from_method_type minfo =
   MethodInfo.M.fold
@@ -207,8 +209,10 @@ let from_method_type minfo =
     minfo
     (ReturnType.M.empty, MethodType.M.empty)
 
+(* reason to add modeling: array constructor and setter (e.g., new Long[], add(index,value) ) *)
 let from_summary_json minfo json =
   let json = JsonUtil.to_list json in
   List.fold_left
     (fun mmap method_summaries -> mapping_summary method_summaries minfo mmap)
     SummaryMap.M.empty json
+  |> Modeling.add_java_package_summary
