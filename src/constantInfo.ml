@@ -57,7 +57,7 @@ let rec string_of_value_type = function
   | TObject ot -> string_of_object_type ot
 
 and string_of_basic_type = function
-  | `Bool -> "bool"
+  | `Bool -> "boolean"
   | `Byte -> "byte"
   | `Char -> "char"
   | `Short -> "short"
@@ -72,7 +72,7 @@ and string_of_object_type = function
 
 let basic_types =
   [
-    "bool";
+    "boolean";
     "byte";
     "char";
     "short";
