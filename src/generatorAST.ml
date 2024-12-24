@@ -359,7 +359,7 @@ let find_class_file =
 
 let mk_gvar c_name var = (0, ASTIR.GlobalConstant (c_name ^ "." ^ var))
 
-let find_enum_var_list c_name i_info =
+let find_all_global_var_list c_name i_info =
   match InstanceInfo.M.find_opt c_name i_info with
   | None -> []
   | Some info ->
@@ -367,63 +367,42 @@ let find_enum_var_list c_name i_info =
         (fun lst const -> (0, ASTIR.GlobalConstant const) :: lst)
         [] info
 
-let all_global_var c_name s_trace =
-  Condition.M.fold
-    (fun head _ lst ->
-      match head with
-      | Condition.RH_Var var ->
-          mk_gvar (AST.get_short_class_name c_name) var :: lst
-      | _ -> lst)
-    s_trace []
-
 let compare_global_var c_name t_var s_trace =
   Condition.M.fold
     (fun head _ gvar ->
       match head with
-      | Condition.RH_Var var when var = t_var ->
-          AST.get_short_class_name c_name ^ "." ^ var |> mk_some
+      | Condition.RH_Var var when var = t_var -> c_name ^ "." ^ var |> mk_some
       | _ -> gvar)
     s_trace None
 
-let find_global_var_list c_name t_var mem summary m_info =
-  let get_compared_global_var v init_summary var_lst =
-    let new_gvar gv =
-      (is_from_error false (List.hd init_summary), ASTIR.GlobalConstant gv)
-    in
-    (Condition.M.fold (fun _ s_trace list ->
+(* If a global constant is revealed in the summary, it only finds this global constant. *)
+let find_target_global_var c_name t_var mem summary commons_gvs =
+  let mk_gvar gv summaries =
+    (is_from_error false (List.hd summaries), ASTIR.GlobalConstant gv)
+  in
+  let get_compared_global_var v init_summary =
+    (Condition.M.fold (fun _ s_trace found_gv ->
          match compare_global_var c_name v s_trace with
-         | Some gv -> new_gvar gv :: list
-         | None -> list))
-      mem var_lst
+         | Some gv ->
+             if List.mem (0, ASTIR.GlobalConstant gv) commons_gvs then
+               Some (mk_gvar gv init_summary)
+             else found_gv
+         | None -> found_gv))
+      mem None
   in
-  let get_all_gvar_list mem =
-    (Condition.M.fold (fun _ s_trace list ->
-         List.rev_append (all_global_var c_name s_trace) list))
-      mem []
+  let get_target_global_var var =
+    match SummaryMap.M.find_opt (c_name ^ ".<clinit>()") summary with
+    | Some (init_summary, _) -> get_compared_global_var var init_summary
+    | None -> None
   in
-  let get_target_gvar_list t_var summary =
-    match t_var with
-    | Some v -> get_compared_global_var v summary []
-    | None -> []
-  in
-  SummaryMap.M.fold
-    (fun init_name (init_summary, _) list ->
-      let _, init_mem = (List.hd init_summary).precond in
-      if
-        Str.string_match (c_name ^ "\\.<clinit>" |> Str.regexp) init_name 0
-        && (is_public init_name m_info || is_usable_default init_name m_info)
-      then
-        let common_gv_lst = List.rev_append (get_all_gvar_list init_mem) list in
-        let target_gv_lst = get_target_gvar_list t_var init_summary in
-        List.rev_append target_gv_lst common_gv_lst
-      else list)
-    summary []
+  match t_var with Some v -> get_target_global_var v | None -> None
 
-let global_var_list class_name t_summary summary m_info i_info =
+let global_var_list class_name t_summary summary i_info =
   let get_gv_symbol var symbol found =
+    (* e.g., var: c.Class, class_name: a.b.c.Class *)
     match var with
     | Condition.RH_Var var
-      when Str.string_match (".*\\." ^ class_name |> Str.regexp) var 0 ->
+      when Str.string_match (".*\\." ^ var |> Str.regexp) class_name 0 ->
         get_rh_name symbol |> mk_some
     | _ -> found
   in
@@ -435,11 +414,15 @@ let global_var_list class_name t_summary summary m_info i_info =
   in
   match t_var with
   | None when class_name = "java.lang.Class" -> find_class_file
-  | None ->
-      let gvlist = find_global_var_list class_name None mem summary m_info in
-      if gvlist = [] then find_enum_var_list class_name i_info else gvlist
-  | Some x ->
-      find_global_var_list class_name (get_target_var x mem) mem summary m_info
+  | None -> find_all_global_var_list class_name i_info
+  | Some x -> (
+      let common = find_all_global_var_list class_name i_info in
+      match
+        find_target_global_var class_name (get_target_var x mem) mem summary
+          common
+      with
+      | Some gv -> gv :: common
+      | None -> common)
 
 let get_param v summary =
   let get_field id =
@@ -839,7 +822,7 @@ let get_r3 p prim_info x =
       | _ -> apply_rule3 p x1 :: lst)
     [] (get_value x prim_info)
 
-let get_r2 p { summary; m_info; inst_info; _ } x =
+let get_r2 p { summary; inst_info; _ } x =
   if is_comparable x then comparable_const p
   else if is_object x then object_const p
   else if is_number x then number_const p
@@ -849,13 +832,13 @@ let get_r2 p { summary; m_info; inst_info; _ } x =
       []
       (global_var_list
          (AST.get_vinfo x |> fst |> get_class_name)
-         (AST.get_v x).summary summary m_info inst_info)
+         (AST.get_v x).summary summary inst_info)
 
-let get_r2_with_loop p { summary; m_info; inst_info; _ } x =
+let get_r2_with_loop p { summary; inst_info; _ } x =
   let gcs =
     global_var_list
       (AST.get_vinfo x |> fst |> get_class_name)
-      (AST.get_v x).summary summary m_info inst_info
+      (AST.get_v x).summary summary inst_info
   in
   if is_comparable x then comparable_const p
   else if is_object x then object_const p
