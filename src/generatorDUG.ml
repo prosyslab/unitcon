@@ -83,11 +83,13 @@ let get_m_lst x0 m_info (c_info, ig) =
   let c_to_find = get_subtypes c_name ig in
   MethodInfo.M.fold
     (fun m_name _ method_list ->
-      List.fold_left
-        (fun lst_tuple c_name_to_find ->
-          get_m_lst_from_one_c c_name m_name m_info c_info ig c_to_find
-            lst_tuple c_name_to_find)
-        method_list c_to_find)
+      if !Cmdline.debug && List.mem m_name !Cmdline.ignore then method_list
+      else
+        List.fold_left
+          (fun lst_tuple c_name_to_find ->
+            get_m_lst_from_one_c c_name m_name m_info c_info ig c_to_find
+              lst_tuple c_name_to_find)
+          method_list c_to_find)
     m_info ([], [], [])
 
 let collect_recv m_info (ret_type, m_type) c_info s_map subtypes =
@@ -575,7 +577,9 @@ let get_void_func id ?(ee = "") ?(es = empty_summary)
     if class_name = "" || class_name = "String" then []
     else
       get_setters class_name setter_map
-      |> List.filter (fun (s, _) -> is_available_method s m_info)
+      |> List.filter (fun (s, _) ->
+             (not (!Cmdline.debug && List.mem s !Cmdline.ignore))
+             && is_available_method s m_info)
       |> get_setter_list summary
       |> mk_void_func var id class_name m_info c_info
 
