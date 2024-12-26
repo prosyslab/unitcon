@@ -65,6 +65,8 @@ let new_var = ref 0
 
 let explored_m = ref ExploredMethod.empty
 
+let ignored_methods = ref []
+
 let z3ctx =
   Z3.mk_context [ ("model", "true"); ("proof", "true"); ("unsat_core", "true") ]
 
@@ -1670,3 +1672,85 @@ let add_import import set =
      ImportSet.add (Str.replace_first (Str.regexp "\\$.*$") "" import) set
    else set)
   |> ImportSet.add import
+
+let is_constant = function
+  | Value.Null | Int _ | Long _ | Short _ | Byte _ | Float _ | Double _ | Bool _
+  | Char _ | String _ ->
+      true
+  | _ -> false
+
+let is_op_constant op =
+  match op with Value.Eq const -> is_constant const | _ -> false
+
+let is_arg_constant symbol value =
+  match Value.M.find_opt symbol value with
+  | Some op -> is_op_constant op.Value.value
+  | None -> false
+
+let is_arg_not_found symbol (_, premem) =
+  match Condition.M.find_opt symbol premem with Some _ -> false | None -> true
+
+let is_arg_passing symbol (_, premem) =
+  match Condition.M.find_opt symbol premem with
+  | Some value -> Condition.M.is_empty value
+  | None -> false
+
+(* if arg is constant then arg should not be found in precondition,
+   else precondition of arg is empty (e.g., v3 -> {}) *)
+let check_all_args { value; precond; args; _ } =
+  List.fold_left
+    (fun (check, exist_const) arg ->
+      let const_check = is_arg_constant arg value in
+      ( check && (is_arg_passing (mk_symbol arg) precond || const_check),
+        exist_const || (const_check && is_arg_not_found (mk_symbol arg) precond)
+      ))
+    (true, false) args
+
+let check_prop ({ args; _ } as prop) =
+  if List.length args < 2 then false
+  else
+    let pass_check, const_check = check_all_args prop in
+    pass_check && const_check
+
+let are_duplicated_props props =
+  List.fold_left (fun check prop -> check && check_prop prop) true props
+
+let get_overriding_method caller callee =
+  let caller_class = Utils.get_class_name caller in
+  let callee_class = Utils.get_class_name callee in
+  if caller_class = callee_class then ""
+  else
+    let callee_class_for_regexp =
+      Str.global_replace Regexp.dollar "\\$" callee_class
+    in
+    Str.replace_first (Str.regexp callee_class_for_regexp) caller_class callee
+
+let is_eligible_for_check caller callee m_info c_info =
+  let overriding_method = get_overriding_method caller callee in
+  if overriding_method = "" then
+    is_usable_method caller m_info c_info
+    && is_usable_method callee m_info c_info
+  else
+    is_usable_method caller m_info c_info
+    && (is_usable_method callee m_info c_info
+       || is_usable_method overriding_method m_info c_info)
+
+let get_methods_to_do_not_ignore m_info c_info cp_map =
+  CallPropMap.M.fold
+    (fun ((caller : string), callee) props methods ->
+      if
+        List.mem caller methods
+        || is_eligible_for_check caller callee m_info c_info
+           && are_duplicated_props props
+      then methods
+      else caller :: methods)
+    cp_map []
+
+let set_methods_to_ignore m_info (c_info, _) cp_map =
+  let not_ignore = get_methods_to_do_not_ignore m_info c_info cp_map in
+  CallPropMap.M.iter
+    (fun ((caller : string), _) _ ->
+      if not (List.mem caller not_ignore) then (
+        if !Cmdline.debug then Logger.info "Ignore method: %s" caller;
+        ignored_methods := caller :: !ignored_methods))
+    cp_map

@@ -77,7 +77,8 @@ let get_m_lst x0 m_info (c_info, ig) =
   let c_to_find = get_subtypes c_name ig in
   MethodInfo.M.fold
     (fun m_name _ method_list ->
-      if !Cmdline.debug && List.mem m_name !Cmdline.ignore then method_list
+      if List.mem m_name !ignored_methods then method_list
+      else if !Cmdline.debug && List.mem m_name !Cmdline.ignore then method_list
       else
         List.fold_left
           (fun lst_tuple c_name_to_find ->
@@ -572,7 +573,8 @@ let get_void_func id ?(ee = "") ?(es = empty_summary)
     else
       get_setters class_name setter_map
       |> List.filter (fun (s, _) ->
-             (not (!Cmdline.debug && List.mem s !Cmdline.ignore))
+             (not (List.mem s !ignored_methods))
+             && (not (!Cmdline.debug && List.mem s !Cmdline.ignore))
              && is_available_method s m_info)
       |> get_setter_list summary
       |> mk_void_func var id class_name m_info c_info
@@ -1366,7 +1368,8 @@ let init_cost tcs =
 
 let mk_testcases ~is_start queue (e_method, error_summary) p_data =
   let p_info, init =
-    if is_start then
+    if is_start then (
+      set_methods_to_ignore p_data.m_info p_data.c_info p_data.cp_map;
       ErrorEntrySet.fold
         (fun (ee, ee_s) (p_info_init, init_list) ->
           if !Cmdline.debug then Logger.info "error entry method: %s" ee;
@@ -1374,7 +1377,7 @@ let mk_testcases ~is_start queue (e_method, error_summary) p_data =
             apply_init_rule (get_void_func ASTIR.Id ~ee ~es:ee_s p_data)
             |> init_cost |> List.rev_append init_list ))
         (find_ee e_method error_summary p_data)
-        (p_data.prim_info, [])
+        (p_data.prim_info, []))
     else (p_data.prim_info, queue)
   in
   let result = mk_testcase (update_prim p_data p_info) init in
