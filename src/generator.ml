@@ -1715,25 +1715,33 @@ let check_prop ({ args; _ } as prop) =
 let are_duplicated_props props =
   List.fold_left (fun check prop -> check && check_prop prop) true props
 
-let get_overriding_method caller callee =
-  let caller_class = Utils.get_class_name caller in
-  let callee_class = Utils.get_class_name callee in
-  if caller_class = callee_class then ""
+let get_overriding_method caller callee (_, ig) =
+  let child_class = Utils.get_class_name caller in
+  let parent_class = Utils.get_class_name callee in
+  let subtypes = get_subtypes parent_class ig in
+  if List.mem child_class subtypes |> not || child_class = parent_class then ""
   else
-    let callee_class_for_regexp =
-      Str.global_replace Regexp.dollar "\\$" callee_class
+    let parent_class_for_reg =
+      Str.global_replace Regexp.dollar "\\$" parent_class
     in
-    Str.replace_first (Str.regexp callee_class_for_regexp) caller_class callee
+    Str.replace_first (Str.regexp parent_class_for_reg) child_class callee
+
+let is_usable_method_for_check m_name m_info (c_info, ig) =
+  let class_name = Utils.get_class_name m_name in
+  if Utils.is_init_method m_name then
+    is_usable_method m_name m_info c_info
+    && is_abstract_class class_name (c_info, ig) |> not
+  else is_usable_method m_name m_info c_info
 
 let is_eligible_for_check caller callee m_info c_info =
-  let overriding_method = get_overriding_method caller callee in
+  let overriding_method = get_overriding_method caller callee c_info in
   if overriding_method = "" then
-    is_usable_method caller m_info c_info
-    && is_usable_method callee m_info c_info
+    is_usable_method_for_check caller m_info c_info
+    && is_usable_method_for_check callee m_info c_info
   else
-    is_usable_method caller m_info c_info
-    && (is_usable_method callee m_info c_info
-       || is_usable_method overriding_method m_info c_info)
+    is_usable_method_for_check caller m_info c_info
+    && (is_usable_method_for_check callee m_info c_info
+       || is_usable_method_for_check overriding_method m_info c_info)
 
 let get_methods_to_do_not_ignore m_info c_info cp_map =
   CallPropMap.M.fold
@@ -1746,7 +1754,7 @@ let get_methods_to_do_not_ignore m_info c_info cp_map =
       else caller :: methods)
     cp_map []
 
-let set_methods_to_ignore m_info (c_info, _) cp_map =
+let set_methods_to_ignore m_info c_info cp_map =
   let not_ignore = get_methods_to_do_not_ignore m_info c_info cp_map in
   CallPropMap.M.iter
     (fun ((caller : string), _) _ ->
