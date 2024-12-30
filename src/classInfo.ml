@@ -4,6 +4,10 @@ let is_file f =
   try (Unix.stat f).Unix.st_kind = Unix.S_REG
   with Unix.Unix_error (Unix.ENOENT, _, _) -> false
 
+let is_test_file f_name =
+  Str.string_match (Str.regexp "Test.*") f_name 0
+  || Str.string_match (Str.regexp ".*Test.java") f_name 0
+
 let make_dir_absolute dir =
   if Filename.is_relative dir then Filename.concat (Unix.getcwd ()) dir else dir
 
@@ -307,9 +311,13 @@ let handle_class c =
   (cname, `Assoc item)
 
 let fold_class acc ioc : (string * Yojson.Safe.t) list =
-  match ioc with
-  | Javalib.JInterface i -> handle_interface i :: acc
-  | Javalib.JClass c -> handle_class c :: acc
+  match Javalib.get_sourcefile ioc with
+  | None -> acc
+  | Some file when is_test_file file -> acc
+  | Some _ -> (
+      match ioc with
+      | Javalib.JInterface i -> handle_interface i :: acc
+      | Javalib.JClass c -> handle_class c :: acc)
 
 let run p =
   let (x : (string * Yojson.Safe.t) list) =
