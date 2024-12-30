@@ -32,6 +32,8 @@ module StmtMap = struct
   type t = (DUGIR.t * DUG.t) list M.t
 end
 
+let reusable_arg = ref []
+
 type partial_tc = {
   unroll : int;
   nt_cost : int;
@@ -725,15 +727,32 @@ let get_reusable_arg s prev_num stmt tc arg =
       (fun lst (ids, x) ->
         let found_node = DUG.find_node stmt node_to_find tc in
         let found_id = DUG.get_id found_node in
-        if is_matched_variable found_id arg then
+        if is_matched_variable found_id arg then (
+          reusable_arg := (arg, found_id) :: !reusable_arg;
           (found_id :: ids, DUG.mk_already_arg found_node var_to_find tc x)
-          :: lst
+          :: lst)
         else lst)
       [] s
   else []
 
+let get_already_reusable_arg arg_graph arg arg_list reusable_args lst =
+  List.fold_left
+    (fun acc (target_arg, replace_arg) ->
+      if arg = target_arg && List.mem replace_arg arg_list then
+        (replace_arg :: arg_list, arg_graph) :: acc
+      else acc)
+    lst reusable_args
+
+let get_already_arg s arg reusable_args =
+  List.fold_left
+    (fun lst (arg_list, s) ->
+      if List.mem arg arg_list then (arg :: arg_list, s) :: lst
+      else get_already_reusable_arg s arg arg_list reusable_args lst)
+    [] s
+
 let get_arg_seq prev_num stmt tc (args : DUGIR.id list) =
   let already_arg = ref [] in
+  reusable_arg := [];
   let apply_const_rule s arg =
     List.fold_left
       (fun lst (ids, x) ->
@@ -748,10 +767,7 @@ let get_arg_seq prev_num stmt tc (args : DUGIR.id list) =
   in
   List.fold_left
     (fun s arg ->
-      if List.mem arg !already_arg then
-        List.fold_left
-          (fun lst (arg_list, s) -> (arg :: arg_list, s) :: lst)
-          [] s
+      if List.mem arg !already_arg then get_already_arg s arg !reusable_arg
       else (
         already_arg := arg :: !already_arg;
         let reuse_arg = get_reusable_arg s prev_num stmt tc arg in
@@ -1375,6 +1391,8 @@ let rec mk_testcase p_data queue =
   if !Cmdline.debug then Logger.info "# of test cases: %d" (List.length queue);
   match queue with
   | p :: tl ->
+      if !Cmdline.debug then
+        Logger.info "current tc:\n%s" (pretty_format p.tc |> snd);
       if !Cmdline.with_loop && DUG.ground p.tc && DUG.with_withloop p.tc then
         [ (Need_Loop, pretty_format p.tc, p.loop_ids, tl) ]
       else if DUG.ground p.tc then
