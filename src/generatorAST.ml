@@ -10,21 +10,17 @@ end)
 (* Set of VarSet *)
 module VarSets = Set.Make (VarSet)
 
-module VarListSet = Set.Make (struct
-  type t = ASTIR.var list
-
-  let compare = compare
-end)
-
 module StmtMap = struct
   module M = Map.Make (struct
-    type t = ASTIR.t
-
-    let compare = compare
+    type t = ASTIR.t [@@deriving compare]
   end)
 
   type t = ASTIR.t list M.t
 end
+
+module ArgSet = Set.Make (struct
+  type t = ASTIR.id [@@deriving compare]
+end)
 
 type partial_tc = {
   unroll : int;
@@ -77,7 +73,7 @@ let get_m_lst x0 m_info (c_info, ig) =
   let c_to_find = get_subtypes c_name ig in
   MethodInfo.M.fold
     (fun m_name _ method_list ->
-      if List.mem m_name !ignored_methods then method_list
+      if IgnoredMethods.mem m_name !ignored_methods then method_list
       else if !Cmdline.debug && List.mem m_name !Cmdline.ignore then method_list
       else
         List.fold_left
@@ -309,49 +305,29 @@ let get_value v p_info =
   in
   found_value
 
-let get_same_type_param params (_, _) =
+let mk_new_set summary params p =
   let get_type p = match p with Var (t, _) -> t | _ -> NonType in
-  let mk_new_set p =
-    let t1 = get_type p in
+  let is_same_precond p op_p =
+    let p_val = get_p_value p summary in
+    let op_p_val = get_p_value op_p summary in
+    p_val = op_p_val
+  in
+  let t1 = get_type p in
+  if t1 = NonType then VarSet.empty
+  else
     List.fold_left
       (fun set op_p ->
         let t2 = get_type op_p in
-        if t1 = t2 && t1 <> NonType then VarSet.add op_p set else set)
+        if t1 = t2 && is_same_precond p op_p then VarSet.add op_p set else set)
       (VarSet.add p VarSet.empty)
       params
-  in
+
+let get_same_params_set summary params =
   List.fold_left
-    (fun sets p -> VarSets.add (mk_new_set p) sets)
+    (fun sets p ->
+      let new_set = mk_new_set summary params p in
+      if VarSet.cardinal new_set < 2 then sets else VarSets.add new_set sets)
     VarSets.empty params
-
-let filter_singleton set = if VarSet.cardinal set < 2 then VarSet.empty else set
-
-let get_same_precond_param summary param_sets =
-  let add_same_param v op_p set =
-    if v = get_p_value op_p summary then VarSet.add op_p set else set
-  in
-  let get_same_one_param_set p set =
-    let v = get_p_value p summary in
-    VarSet.fold
-      (fun op_p new_set -> add_same_param v op_p new_set)
-      set
-      (VarSet.add p VarSet.empty)
-  in
-  let get_same_params_set p_set =
-    VarSet.fold
-      (fun p set' -> get_same_one_param_set p p_set |> VarSet.union set')
-      p_set VarSet.empty
-  in
-  VarSets.fold
-    (fun set sets ->
-      let new_set = get_same_params_set set |> filter_singleton in
-      VarSets.add new_set sets)
-    param_sets VarSets.empty
-  |> VarSets.filter (fun x -> VarSet.is_empty x |> not)
-
-let get_same_params_set summary params c_info =
-  let new_p = List.fold_left (fun p v -> v :: p) [] params |> List.rev in
-  get_same_type_param new_p c_info |> get_same_precond_param summary
 
 let find_class_file =
   List.fold_left
@@ -456,31 +432,29 @@ let get_org_params_list summary org_param =
     [] org_param
   |> List.rev
 
+(* variable -> variable * unique int id *)
 let find_org_param org_params_list p =
   List.fold_left
     (fun param real_arg ->
       if p = fst real_arg.ASTIR.variable then real_arg else param)
     AST.empty_var org_params_list
 
+(* return representative parameter of the set containing the target parameter.
+   Set.choose is deterministic at same set. *)
 let get_same_param target p_set =
   let t = fst target.ASTIR.variable in
   VarSets.fold
-    (fun set find ->
-      let fst_p = VarSet.elements set |> List.hd in
-      VarSet.fold (fun p f -> if t = p then fst_p else f) set find)
+    (fun set find -> if VarSet.mem t set then VarSet.choose set else find)
     p_set t
 
 let get_param_list param std_param curr_param_list =
   if curr_param_list = [] then [ [ param ] ]
   else if param = std_param then
     (* not found the same parameter *)
-    List.fold_left
-      (fun acc list -> List.cons (param :: list) acc)
-      [] curr_param_list
+    List.fold_left (fun acc list -> (param :: list) :: acc) [] curr_param_list
   else
     List.fold_left
-      (fun acc list ->
-        List.cons (std_param :: list) acc |> List.cons (param :: list))
+      (fun acc list -> (param :: list) :: (std_param :: list) :: acc)
       [] curr_param_list
 
 let mk_params_list summary p_set org_param =
@@ -496,13 +470,11 @@ let mk_params_list summary p_set org_param =
   in
   mk_params org_param_list []
 
-let mk_arg ~is_s param s c_info =
+let mk_arg ~is_s param s =
   let param = if is_s then param else List.tl param in
-  let same_params_set = get_same_params_set s param c_info in
+  let same_params_set = get_same_params_set s param in
   mk_params_list s same_params_set param
-  |> List.fold_left
-       (fun arg_set lst -> VarListSet.add (List.rev lst) arg_set)
-       VarListSet.empty
+  |> List.fold_left (fun args lst -> List.rev lst :: args) []
 
 let get_field_set ret s_map =
   let c_name = AST.get_vinfo ret |> fst |> get_class_name in
@@ -521,22 +493,19 @@ let get_field_set ret s_map =
 
 let error_entry_func ee es m_info c_info =
   let param = get_formal_params ee m_info in
-  let f_arg_list = mk_arg ~is_s:(is_static ee m_info) param es c_info in
+  let f_arg_list = mk_arg ~is_s:(is_static ee m_info) param es in
   let c_name = Utils.get_class_name ee in
   let typ_list = get_usable_types c_name c_info in
   List.fold_left
     (fun lst typ ->
       let f = ASTIR.F { typ; method_name = ee; import = typ; summary = es } in
-      if VarListSet.is_empty f_arg_list then (0, f, []) :: lst
-      else
-        VarListSet.fold (fun f_arg acc -> (0, f, f_arg) :: acc) f_arg_list lst)
+      if f_arg_list = [] then (0, f, []) :: lst
+      else List.fold_left (fun acc f_arg -> (0, f, f_arg) :: acc) lst f_arg_list)
     [] typ_list
 
-let mk_void_func (var : ASTIR.var) id class_name m_info c_info s_lst =
+let mk_void_func (var : ASTIR.var) id class_name m_info s_lst =
   let get_arg_list s =
-    mk_arg ~is_s:(is_static s m_info)
-      (get_formal_params s m_info)
-      var.summary c_info
+    mk_arg ~is_s:(is_static s m_info) (get_formal_params s m_info) var.summary
   in
   let typ =
     if Utils.is_array class_name then
@@ -555,11 +524,9 @@ let mk_void_func (var : ASTIR.var) id class_name m_info c_info s_lst =
       let f_arg_list = get_arg_list s in
       let prec = get_prec s fields in
       let f = get_f s in
-      if VarListSet.is_empty f_arg_list then (prec, f, []) :: lst
+      if f_arg_list = [] then (prec, f, []) :: lst
       else
-        VarListSet.fold
-          (fun f_arg acc -> (prec, f, f_arg) :: acc)
-          f_arg_list lst)
+        List.fold_left (fun acc f_arg -> (prec, f, f_arg) :: acc) lst f_arg_list)
     [] s_lst
 
 (* id is receiver variable *)
@@ -573,13 +540,13 @@ let get_void_func id ?(ee = "") ?(es = empty_summary)
     else
       get_setters class_name setter_map
       |> List.filter (fun (s, _) ->
-             (not (List.mem s !ignored_methods))
+             (not (IgnoredMethods.mem s !ignored_methods))
              && (not (!Cmdline.debug && List.mem s !Cmdline.ignore))
              && is_available_method s m_info)
       |> get_setter_list summary
-      |> mk_void_func var id class_name m_info c_info
+      |> mk_void_func var id class_name m_info
 
-let get_cfunc id constructor m_info c_info =
+let get_cfunc id constructor m_info =
   let cost, c, s = constructor in
   let t = Utils.get_class_name c in
   let t =
@@ -588,33 +555,31 @@ let get_cfunc id constructor m_info c_info =
   in
   let func = ASTIR.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
-    mk_arg ~is_s:(is_static c m_info) (get_formal_params c m_info) s c_info
+    mk_arg ~is_s:(is_static c m_info) (get_formal_params c m_info) s
   in
-  if VarListSet.is_empty arg_list then [ (cost, (func, ASTIR.Arg [])) ]
+  if arg_list = [] then [ (cost, (func, ASTIR.Arg [])) ]
   else
-    VarListSet.fold
-      (fun arg cfuncs -> (cost, (func, ASTIR.Arg arg)) :: cfuncs)
-      arg_list []
+    List.fold_left
+      (fun cfuncs arg -> (cost, (func, ASTIR.Arg arg)) :: cfuncs)
+      [] arg_list
 
-let get_cfuncs id list m_info c_info =
+let get_cfuncs id list m_info =
   List.fold_left
     (fun lst (cost, c, s) ->
-      List.rev_append (get_cfunc id (cost, c, s) m_info c_info) lst)
+      List.rev_append (get_cfunc id (cost, c, s) m_info) lst)
     [] list
 
-let get_c ret c_lst summary m_info c_info =
+let get_c ret c_lst summary m_info =
   let class_name = AST.get_vinfo ret |> fst |> get_class_name in
   if class_name = "" then []
   else
     let id = AST.get_vinfo ret |> snd in
     let s_list =
       satisfied_c_list id (AST.get_v ret).summary summary c_lst
-      |> List.filter (fun (_, c, _) ->
-             is_abstract_class (c |> Utils.get_class_name) c_info |> not)
       |> summary_filtering class_name m_info
       |> prune_dup_summary m_info
     in
-    get_cfuncs ret s_list m_info c_info
+    get_cfuncs ret s_list m_info
 
 let get_recv_type c_info summary_lst =
   List.fold_left
@@ -661,7 +626,7 @@ let get_ret_c ret ret_obj_lst summary m_info type_info c_info s_map =
       |> prune_dup_summary m_info
       |> memory_effect_filtering summary m_info type_info c_info s_map
     in
-    get_cfuncs ret s_list m_info c_info
+    get_cfuncs ret s_list m_info
 
 let get_inner_func f arg =
   let fname =
@@ -701,7 +666,7 @@ let cname_condition m_name m_info c_info =
 let get_cname f = ASTIR.ClassName (AST.get_func f).ASTIR.typ
 
 let get_arg_seq (args : ASTIR.id list) =
-  let already_arg = ref [] in
+  let already_arg = ref ArgSet.empty in
   let apply_const_rule s arg =
     List.fold_left (fun lst x -> AST.mk_const_arg x arg :: lst) [] s
   in
@@ -710,9 +675,9 @@ let get_arg_seq (args : ASTIR.id list) =
   in
   List.fold_left
     (fun s arg ->
-      if List.mem arg !already_arg then s
+      if ArgSet.mem arg !already_arg then s
       else (
-        already_arg := arg :: !already_arg;
+        already_arg := ArgSet.add arg !already_arg;
         let const_arg = apply_const_rule s arg in
         if is_primitive_from_id arg then const_arg
         else List.rev_append (apply_assign_rule s arg) const_arg))
@@ -924,7 +889,7 @@ let fcall_in_assign_unroll (p : ASTIR.t) obj_types
       if c_lst = [] && ret_c_lst = [] then raise Not_found_get_object
       else
         List.rev_append
-          (get_c x0 c_lst summary m_info c_info)
+          (get_c x0 c_lst summary m_info)
           (get_ret_c x0 ret_c_lst summary m_info t_info c_info setter_map)
         |> apply_rule_for_all class_name field_set
   | _ -> failwith "Fail: fcall_in_assign_unroll"

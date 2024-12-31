@@ -8,6 +8,7 @@ module ASTIR = struct
     field : FieldSet.t;
     summary : summary;
   }
+  [@@deriving compare, equal]
 
   type f = {
     typ : string;
@@ -15,14 +16,17 @@ module ASTIR = struct
     import : import;
     summary : summary;
   }
+  [@@deriving compare, equal]
 
-  type arg = Param of var list | Arg of var list
+  type arg = Param of var list | Arg of var list [@@deriving compare, equal]
 
-  type func = F of f | Func
+  type func = F of f | Func [@@deriving compare, equal]
 
   type id = Variable of var | ClassName of string | Id
+  [@@deriving compare, equal]
 
   type primitive = Z of int | R of float | B of bool | C of char | S of string
+  [@@deriving compare, equal]
 
   type exp =
     | Primitive of primitive
@@ -30,6 +34,7 @@ module ASTIR = struct
     | Null
     | WithLoop
     | Exp
+  [@@deriving compare, equal]
 
   type t =
     | Const of (id * exp)
@@ -38,6 +43,7 @@ module ASTIR = struct
     | Seq of (t * t)
     | Skip
     | Stmt
+  [@@deriving compare, equal]
 
   let mk_var import variable field summary =
     { import; variable; field; summary }

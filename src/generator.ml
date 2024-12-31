@@ -56,6 +56,15 @@ module ErrorEntrySet = Set.Make (struct
 end)
 
 module ExploredMethod = Set.Make (String)
+module IgnoredMethods = Set.Make (String)
+
+module DuplicatedSummaries = Set.Make (struct
+  type t = int * method_name * summary [@@deriving compare]
+end)
+
+module DuplicatedSetter = Set.Make (struct
+  type t = method_name * FieldSet.t * summary [@@deriving compare]
+end)
 
 let outer = ref 0
 
@@ -65,7 +74,7 @@ let new_var = ref 0
 
 let explored_m = ref ExploredMethod.empty
 
-let ignored_methods = ref []
+let ignored_methods = ref IgnoredMethods.empty
 
 let z3ctx =
   Z3.mk_context [ ("model", "true"); ("proof", "true"); ("unsat_core", "true") ]
@@ -1417,32 +1426,40 @@ let is_same_param_type c1 c2 m_info =
 let rec collect_dup_setter lst =
   match lst with
   | (_, _, h) :: t ->
-      List.filter (fun (_, _, x) -> is_same_summary h x) t
-      |> List.rev_append (collect_dup_setter t)
-  | _ -> []
+      List.fold_left
+        (fun set (name, fx, x) ->
+          if is_same_summary h x then DuplicatedSetter.add (name, fx, x) set
+          else set)
+        DuplicatedSetter.empty t
+      |> DuplicatedSetter.union (collect_dup_setter t)
+  | _ -> DuplicatedSetter.empty
 
 let prune_dup_summary_setter lst =
   if !Cmdline.basic_mode || !Cmdline.priority_mode then List.rev lst
   else
+    let dup_set = collect_dup_setter lst in
     List.fold_left
-      (fun l s -> if collect_dup_setter lst |> List.mem s then l else s :: l)
+      (fun l s -> if DuplicatedSetter.mem s dup_set then l else s :: l)
       [] lst
 
 let rec collect_dup m_info lst =
   match lst with
   | (_, ch, h) :: t ->
-      List.filter
-        (fun (_, cx, x) ->
-          is_same_summary h x && is_same_param_type ch cx m_info)
-        t
-      |> List.rev_append (collect_dup m_info t)
-  | _ -> []
+      List.fold_left
+        (fun set (cost, cx, x) ->
+          if is_same_param_type ch cx m_info && is_same_summary h x then
+            DuplicatedSummaries.add (cost, cx, x) set
+          else set)
+        DuplicatedSummaries.empty t
+      |> DuplicatedSummaries.union (collect_dup m_info t)
+  | _ -> DuplicatedSummaries.empty
 
 let prune_dup_summary m_info lst =
   if !Cmdline.basic_mode || !Cmdline.priority_mode then List.rev lst
   else
+    let dup_set = collect_dup m_info lst in
     List.fold_left
-      (fun l s -> if collect_dup m_info lst |> List.mem s then l else s :: l)
+      (fun l s -> if DuplicatedSummaries.mem s dup_set then l else s :: l)
       [] lst
 
 let get_package_from_v v =
@@ -1491,10 +1508,7 @@ let get_m_lst_from_one_c c_name m_name m_info c_info ig tgt_c_lst
   else (org_c_lst, c_lst, ret_c_lst)
 
 let summary_filtering name m_info list =
-  List.filter
-    (fun (_, c, _) -> is_public c m_info || is_usable_default c m_info)
-    list
-  |> List.filter (fun (_, c, _) -> is_recursive_param name c m_info |> not)
+  List.filter (fun (_, c, _) -> is_recursive_param name c m_info |> not) list
 
 let get_setter_list summary s_lst =
   List.fold_left
@@ -1760,5 +1774,5 @@ let set_methods_to_ignore m_info c_info cp_map =
     (fun ((caller : string), _) _ ->
       if not (List.mem caller not_ignore) then (
         if !Cmdline.debug then Logger.info "Ignore method: %s" caller;
-        ignored_methods := caller :: !ignored_methods))
+        ignored_methods := IgnoredMethods.add caller !ignored_methods))
     cp_map

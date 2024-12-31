@@ -101,15 +101,23 @@ let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 
 let is_init_method m_name = Str.string_match (Str.regexp ".*\\.<init>") m_name 0
 
+let is_lambda_class name =
+  match Str.search_forward (Str.regexp "\\$Lambda\\$[_0-9]+") name 0 with
+  | exception Not_found -> false
+  | _ -> true
+
+let is_lambda name =
+  match Str.search_forward (Str.regexp "\\.lambda\\$") name 0 with
+  | exception Not_found -> false
+  | _ -> true
+
 let is_anonymous m_name =
   let check_int name =
-    match int_of_string_opt name with Some _ -> true | _ -> false
+    match Str.search_forward (Str.regexp "\\$[0-9]+") name 0 with
+    | exception Not_found -> false
+    | _ -> true
   in
-  let rec check lst =
-    match lst with hd :: tl -> check_int hd || check tl | _ -> false
-  in
-  Str.string_match (Str.regexp ".*\\$Lambda\\$_[0-9]+.*") m_name 0
-  || get_class_name m_name |> String.split_on_char '$' |> check
+  is_lambda_class m_name || check_int (get_class_name m_name)
 
 let get_array_class_name name =
   let arr = [ "Int"; "Long"; "Byte"; "Float"; "Double"; "Bool"; "Char" ] in
@@ -200,9 +208,7 @@ let is_modeling_set fname =
   is_array_set fname
   || Str.string_match (Str.regexp "java.util.Map.put") fname 0
 
-let is_lambda_method m_name =
-  Str.string_match (Str.regexp ".*\\.lambda\\$") m_name 0
-  || Str.string_match (Str.regexp ".*\\$Lambda\\$[_0-9]+") m_name 0
+let is_lambda_method m_name = is_lambda m_name || is_lambda_class m_name
 
 let filter_list =
   [
