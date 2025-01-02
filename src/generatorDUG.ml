@@ -313,10 +313,13 @@ let get_value v p_info =
 
 let mk_new_set summary params p =
   let get_type p = match p with Var (t, _) -> t | _ -> NonType in
+  let equal_value (v1 : Value.v) (v2 : Value.v) =
+    if not_found_value v1 || not_found_value v2 then true else v1 = v2
+  in
   let is_same_precond p op_p =
     let p_val = get_p_value p summary in
     let op_p_val = get_p_value op_p summary in
-    p_val = op_p_val
+    equal_value p_val op_p_val
   in
   let t1 = get_type p in
   if t1 = NonType then VarSet.empty

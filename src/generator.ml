@@ -1423,41 +1423,41 @@ let is_same_param_type c1 c2 m_info =
   let c2_info = MethodInfo.M.find c2 m_info in
   check_param c1_info.MethodInfo.formal_params c2_info.MethodInfo.formal_params
 
-let rec collect_dup_setter lst =
+let rec collect_dup_setter lst set =
   match lst with
   | (_, _, h) :: t ->
       List.fold_left
-        (fun set (name, fx, x) ->
-          if is_same_summary h x then DuplicatedSetter.add (name, fx, x) set
-          else set)
-        DuplicatedSetter.empty t
-      |> DuplicatedSetter.union (collect_dup_setter t)
-  | _ -> DuplicatedSetter.empty
+        (fun acc_set (name, fx, x) ->
+          if is_same_summary h x then DuplicatedSetter.add (name, fx, x) acc_set
+          else acc_set)
+        set t
+      |> collect_dup_setter t
+  | _ -> set
 
 let prune_dup_summary_setter lst =
   if !Cmdline.basic_mode || !Cmdline.priority_mode then List.rev lst
   else
-    let dup_set = collect_dup_setter lst in
+    let dup_set = collect_dup_setter lst DuplicatedSetter.empty in
     List.fold_left
       (fun l s -> if DuplicatedSetter.mem s dup_set then l else s :: l)
       [] lst
 
-let rec collect_dup m_info lst =
+let rec collect_dup m_info lst set =
   match lst with
   | (_, ch, h) :: t ->
       List.fold_left
-        (fun set (cost, cx, x) ->
+        (fun acc_set (cost, cx, x) ->
           if is_same_param_type ch cx m_info && is_same_summary h x then
-            DuplicatedSummaries.add (cost, cx, x) set
-          else set)
-        DuplicatedSummaries.empty t
-      |> DuplicatedSummaries.union (collect_dup m_info t)
-  | _ -> DuplicatedSummaries.empty
+            DuplicatedSummaries.add (cost, cx, x) acc_set
+          else acc_set)
+        set t
+      |> collect_dup m_info t
+  | _ -> set
 
 let prune_dup_summary m_info lst =
   if !Cmdline.basic_mode || !Cmdline.priority_mode then List.rev lst
   else
-    let dup_set = collect_dup m_info lst in
+    let dup_set = collect_dup m_info lst DuplicatedSummaries.empty in
     List.fold_left
       (fun l s -> if DuplicatedSummaries.mem s dup_set then l else s :: l)
       [] lst
