@@ -1,16 +1,34 @@
 open! Javalib_pack
 open Utils
+module UsedClasses = Set.Make (String)
+
+let used_classes = ref UsedClasses.empty
 
 let is_file f =
   try (Unix.stat f).Unix.st_kind = Unix.S_REG
   with Unix.Unix_error (Unix.ENOENT, _, _) -> false
 
-let is_test_file f_name =
-  Str.string_match (Str.regexp "Test.*") f_name 0
-  || Str.string_match (Str.regexp ".*Test.java") f_name 0
+let is_test_class name =
+  Str.string_match (Str.regexp "Test.*") name 0
+  || Str.string_match (Str.regexp ".*Test$") name 0
+
+let is_lambda_class name =
+  match Str.search_forward (Str.regexp "\\$Lambda\\$[_0-9]+") name 0 with
+  | exception Not_found -> false
+  | _ -> true
+
+let is_anonymous name =
+  let check_int name =
+    match Str.search_forward (Str.regexp "\\$[0-9]+") name 0 with
+    | exception Not_found -> false
+    | _ -> true
+  in
+  is_lambda_class name || check_int name
+
+let is_ignore_class name = is_test_class name || is_anonymous name
 
 let make_dir_absolute dir =
-  if Filename.is_relative dir then Filename.concat (Unix.getcwd ()) dir else dir
+  if Filename.is_relative dir then Filename.(Unix.getcwd () / dir) else dir
 
 (* copyed and modified from https://github.com/javalib-team/javalib/blob/ae04c6b3c2331b01876dcf7a0dade45e51c9574b/src/jFile.ml#L361 *)
 let fold f acc filename =
@@ -212,19 +230,23 @@ let handle_class c =
   List.rev_append const g_const
 
 let fold_class acc ioc : (string * Yojson.Safe.t) list =
-  match Javalib.get_sourcefile ioc with
-  | None -> acc
-  | Some file when is_test_file file -> acc
-  | Some _ -> (
-      match ioc with
-      | Javalib.JInterface _ -> acc
-      | Javalib.JClass c -> List.rev_append (handle_class c) acc)
+  let name = Javalib.get_name ioc in
+  let simple_name = JBasics.cn_simple_name name in
+  let full_name = JBasics.cn_name name in
+  if is_ignore_class simple_name || UsedClasses.mem full_name !used_classes then (
+    if !Cmdline.debug then Logger.info "ignore class: %s" full_name;
+    acc)
+  else (
+    used_classes := UsedClasses.add full_name !used_classes;
+    match ioc with
+    | Javalib.JInterface _ -> acc
+    | Javalib.JClass c -> List.rev_append (handle_class c) acc)
 
 let run p =
   let (x : (string * Yojson.Safe.t) list) =
     fold (fun acc ioc -> fold_class acc ioc) [] p
   in
   let r = `Assoc x in
-  let oc = Filename.concat !Cmdline.out_dir "constant-info.json" |> open_out in
+  let oc = Filename.(!Cmdline.out_dir / "constant-info.json") |> open_out in
   Yojson.Safe.pretty_to_channel oc r;
   close_out oc
