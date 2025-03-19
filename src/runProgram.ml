@@ -355,7 +355,8 @@ let modify_files test_dir data =
   let error_files = get_compilation_error_files data in
   List.iter
     (fun file -> Filename.remove_file Filename.(test_dir / file))
-    error_files
+    error_files;
+  List.length error_files
 
 let checking_init_err data =
   match Str.search_forward Regexp.init_err_msg data 0 with
@@ -601,8 +602,12 @@ let build_program info =
     else
       match checking_error_presence data_err with
       | exception Compilation_Error ->
-          modify_files info.test_dir data_err;
-          compile_loop ()
+          let num_of_removed = modify_files info.test_dir data_err in
+          L.info "Compilation Error! Removed %d files" num_of_removed;
+          if num_of_removed < 1 then
+            L.info
+              "Compilation fail for other reason. We don't handle this error."
+          else compile_loop ()
       | _ -> ()
   in
   compile_loop ()
