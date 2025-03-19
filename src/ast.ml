@@ -2,6 +2,7 @@ open Language
 
 module ASTIR = struct
   type var = {
+    of_error_method : bool;
     import : import;
         (* if var is primitive type then import is class of method *)
     variable : variable * int option;
@@ -45,8 +46,8 @@ module ASTIR = struct
     | Stmt
   [@@deriving compare, equal]
 
-  let mk_var import variable field summary =
-    { import; variable; field; summary }
+  let mk_var of_error_method import variable field summary =
+    { of_error_method; import; variable; field; summary }
 
   let mk_variable var = Variable var
 
@@ -77,6 +78,7 @@ module AST = struct
 
   let empty_var =
     {
+      of_error_method = false;
       import = "";
       variable = (This NonType, None);
       field = FieldSet.empty;
@@ -295,7 +297,9 @@ module AST = struct
         let x1 = ClassName "Mockito" in
         let f = mk_f "" "mock" "" empty_summary in
         let variable = (Var (NonType, class_name), None) in
-        let arg = Param [ mk_var "" variable FieldSet.empty empty_summary ] in
+        let arg =
+          Param [ mk_var false "" variable FieldSet.empty empty_summary ]
+        in
         Assign (x0, x1, f, arg)
     | _ -> s
 
@@ -330,7 +334,9 @@ module AST = struct
         let x1_var = (Var (Object typ, id), Some idx) in
         let x1_field = get_field_from_func func in
         let x1_summary = get_summary_from_func func in
-        let x1 = mk_var import x1_var x1_field x1_summary |> mk_variable in
+        let x1 =
+          mk_var false import x1_var x1_field x1_summary |> mk_variable
+        in
         Seq (Const (x1, Exp), Assign (x0, x1, func, arg))
     | _ -> s
 
@@ -342,7 +348,9 @@ module AST = struct
         let x1_var = (Var (Object typ, id), Some idx) in
         let x1_field = get_field_from_func func in
         let x1_summary = get_summary_from_func func in
-        let x1 = mk_var import x1_var x1_field x1_summary |> mk_variable in
+        let x1 =
+          mk_var false import x1_var x1_field x1_summary |> mk_variable
+        in
         Seq
           (Seq (Assign (x1, Id, Func, Arg []), Stmt), Assign (x0, x1, func, arg))
     | _ -> s
@@ -427,7 +435,7 @@ module AST = struct
   let recv_in_void_rule1 s c =
     match s with Void (_, func, arg) -> Void (c, func, arg) | _ -> s
 
-  let recv_in_void_rule2 s id idx =
+  let recv_in_void_rule2 ~is_error_entry s id idx =
     match s with
     | Void (_, func, arg) ->
         let typ = get_type_from_func func in
@@ -435,11 +443,13 @@ module AST = struct
         let x_var = (Var (Object typ, id), Some idx) in
         let x_field = get_field_from_func func in
         let x_summary = get_summary_from_func func in
-        let x = mk_var import x_var x_field x_summary |> mk_variable in
+        let x =
+          mk_var is_error_entry import x_var x_field x_summary |> mk_variable
+        in
         Seq (Const (x, Exp), Void (x, func, arg))
     | _ -> s
 
-  let recv_in_void_rule3 s id idx =
+  let recv_in_void_rule3 ~is_error_entry s id idx =
     match s with
     | Void (_, func, arg) ->
         let typ = get_type_from_func func in
@@ -447,7 +457,9 @@ module AST = struct
         let x_var = (Var (Object typ, id), Some idx) in
         let x_field = get_field_from_func func in
         let x_summary = get_summary_from_func func in
-        let x = mk_var import x_var x_field x_summary |> mk_variable in
+        let x =
+          mk_var is_error_entry import x_var x_field x_summary |> mk_variable
+        in
         Seq (Seq (Assign (x, Id, Func, Arg []), Stmt), Void (x, func, arg))
     | _ -> s
 

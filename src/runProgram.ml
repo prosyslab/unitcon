@@ -627,6 +627,7 @@ let run_testfile () =
         (modify_execute_command (execute_cmd !info) t_file)
     in
     let data = read_all_string ic_err in
+    if !Cmdline.debug then L.info "Single Execution error log: %s" data;
     close_in ic_out;
     close_in ic_err;
     num_of_last_exec_tc := num_of_t_file;
@@ -670,6 +671,7 @@ let run_multi_testfile () =
       (modify_execute_command (multi_test_execute_cmd !info) mt_file)
   in
   let data = read_all_string ic_err in
+  if !Cmdline.debug then L.info "Multi Execution error log: %s" data;
   close_in ic_out;
   close_in ic_err;
   let found_rep_inputs =
@@ -773,12 +775,19 @@ let setup program_dir out_dir =
   let cp_map = parse_callprop !info.call_prop_file in
   L.debug "End parsing call propositions (time: %f)"
     (Unix.gettimeofday () -. !time);
-  let error_method_info = parse_error_summary !info.error_summary_file in
+  let e_method_name, e_summary, used_args =
+    parse_error_summary !info.error_summary_file
+  in
+  let str_args =
+    List.fold_left (fun str x -> str ^ ", " ^ x) "" used_args
+    |> Regexp.rm_first_rest
+  in
+  L.debug "Used args: %s" str_args;
   L.debug "End parsing error summaries (time: %f)"
     (Unix.gettimeofday () -. !time);
   (* for unknown bug detection *)
   error_method_name :=
-    Regexp.first_rm Regexp.method_params (fst error_method_info)
+    Regexp.first_rm Regexp.method_params e_method_name
     |> Str.split Regexp.dot |> List.rev |> List.hd;
   let data =
     {
@@ -793,4 +802,4 @@ let setup program_dir out_dir =
       prim_info;
     }
   in
-  (error_method_info, data)
+  ((e_method_name, e_summary, used_args), data)

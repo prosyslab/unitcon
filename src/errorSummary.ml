@@ -65,6 +65,11 @@ let get_start_line assoc = JsonUtil.member "StartLine" assoc |> JsonUtil.to_int
 
 let get_last_line assoc = JsonUtil.member "LastLine" assoc |> JsonUtil.to_int
 
+let get_used_args assoc =
+  JsonUtil.member "UsedArg" assoc
+  |> JsonUtil.to_list
+  |> List.map JsonUtil.to_string
+
 let is_int str =
   match int_of_string_opt str with Some _ -> true | None -> false
 
@@ -88,8 +93,8 @@ let is_target_error (t_file, t_line) assoc =
 
 let find_error assoc =
   match !Cmdline.synthesis_mode with
-  | Cmdline.Basic -> (get_method_name assoc, empty_summary)
-  | _ -> (get_method_name assoc, parse_summary assoc)
+  | Cmdline.Basic -> (get_method_name assoc, empty_summary, [])
+  | _ -> (get_method_name assoc, parse_summary assoc, get_used_args assoc)
 
 let from_error_summary_json json =
   let target_loc = target_loc !Cmdline.target in
@@ -102,8 +107,8 @@ let from_error_summary_json json =
     find_error (List.hd json))
   else
     List.fold_left
-      (fun (found_error_m, found_error_s) assoc ->
+      (fun (found_error_m, found_error_s, used_args) assoc ->
         if found_error_m = "" && is_target_error target_loc assoc then
           find_error assoc
-        else (found_error_m, found_error_s))
-      ("", empty_summary) json
+        else (found_error_m, found_error_s, used_args))
+      ("", empty_summary, []) json

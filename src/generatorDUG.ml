@@ -19,7 +19,7 @@ module StmtMap = struct
     type t = DUGIR.t [@@deriving compare]
   end)
 
-  type t = (DUGIR.t * DUG.t) list M.t
+  type t = (DUGIR.t * DUG.t * bool) list M.t
 end
 
 module ArgSet = Set.Make (struct
@@ -33,21 +33,25 @@ type partial_tc = {
   nt_cost : int;
   t_cost : int;
   prec : int; (* number of precise statement *)
+  lowest_rank : bool;
+      (* whether unused arguments in the error method have a chance to unroll deeply *)
   tc : DUG.t;
   loop_ids : LoopIdMap.t;
   obj_types : ObjTypeMap.t;
 }
 
-(* non-terminal cost for p, terminal cost for p, precision for p *)
+(* non-terminal cost for p, terminal cost for p, precision for p, lowest_rank for p *)
 let get_cost p =
-  if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec) else (0, 0, 0)
+  if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec, p.lowest_rank)
+  else (0, 0, 0, p.lowest_rank)
 
-let mk_cost prev_p curr_tc curr_loop_id curr_obj_type prec =
+let mk_cost prev_p curr_tc curr_loop_id curr_obj_type prec lowest_rank =
   {
     unroll = prev_p.unroll + 1;
     nt_cost = DUG.count_nt curr_tc;
     t_cost = DUG.count_t curr_tc;
     prec;
+    lowest_rank;
     tc = curr_tc;
     loop_ids = curr_loop_id;
     obj_types = curr_obj_type;
@@ -63,6 +67,7 @@ let empty_p =
     nt_cost = 0;
     t_cost = 0;
     prec = 0;
+    lowest_rank = false;
     tc = DUG.empty;
     loop_ids = empty_id_map;
     obj_types = empty_obj_type_map;
@@ -76,6 +81,16 @@ let is_primitive_from_v v = get_type (fst v.DUGIR.variable) |> is_primitive
 
 let is_special_primitive_from_id x =
   DUG.get_vinfo x |> fst |> is_special_primitive
+
+let is_lowest_rank ~is_error_entry prev_rank var used_args =
+  if (not is_error_entry) || prev_rank then prev_rank
+  else
+    let vname = DUG.get_vinfo var |> snd in
+    let vname = if is_receiver vname then "this" else vname in
+    (if !Cmdline.debug then
+       let check = not (List.mem vname used_args) in
+       Logger.info "Is %s lowest rank: %b" vname check);
+    if List.mem vname used_args then false else true
 
 let get_m_lst x0 m_info (c_info, ig) =
   let c_name = DUG.get_vinfo x0 |> fst |> get_class_name in
@@ -416,13 +431,14 @@ let global_var_list class_name t_summary summary i_info =
       | Some gv -> gv :: common
       | None -> common)
 
-let get_param v summary =
+let get_param ?(is_error_entry = false) v summary =
   let get_field id =
     DUG.get_field_from_ufmap id (fst summary.precond) summary.use_field
   in
   let make_new_var id =
     DUGIR.
       {
+        of_error_method = is_error_entry;
         import = get_package_from_v v;
         variable = (v, mk_some !new_var);
         field = get_field id;
@@ -438,10 +454,12 @@ let get_param v summary =
       incr new_var;
       make_new_var id |> mk_some
 
-let get_org_params_list summary org_param =
+let get_org_params_list ~is_error_entry summary org_param =
   List.fold_left
     (fun params v ->
-      match get_param v summary with Some p -> p :: params | _ -> params)
+      match get_param ~is_error_entry v summary with
+      | Some p -> p :: params
+      | _ -> params)
     [] org_param
   |> List.rev
 
@@ -470,8 +488,8 @@ let get_param_list param std_param curr_param_list =
       (fun acc list -> (param :: list) :: (std_param :: list) :: acc)
       [] curr_param_list
 
-let mk_params_list summary p_set org_param =
-  let org_params_list = get_org_params_list summary org_param in
+let mk_params_list ~is_error_entry summary p_set org_param =
+  let org_params_list = get_org_params_list ~is_error_entry summary org_param in
   let rec mk_params org_params params_list =
     match org_params with
     | hd :: tl ->
@@ -483,10 +501,10 @@ let mk_params_list summary p_set org_param =
   in
   mk_params org_params_list []
 
-let mk_arg ~is_s param s =
+let mk_arg ~is_s ~is_error_entry param s =
   let param = if is_s then param else List.tl param in
   let same_params_set = get_same_params_set s param in
-  mk_params_list s same_params_set param
+  mk_params_list ~is_error_entry s same_params_set param
   |> List.fold_left (fun args lst -> List.rev lst :: args) []
 
 let get_field_set ret s_map =
@@ -506,7 +524,9 @@ let get_field_set ret s_map =
 
 let error_entry_func ee es m_info c_info =
   let param = get_formal_params ee m_info in
-  let f_arg_list = mk_arg ~is_s:(is_static ee m_info) param es in
+  let f_arg_list =
+    mk_arg ~is_s:(is_static ee m_info) ~is_error_entry:true param es
+  in
   let c_name = Utils.get_class_name ee in
   let typ_list = get_usable_types c_name c_info in
   List.fold_left
@@ -543,7 +563,9 @@ let is_number x = is_number (DUG.get_vinfo x |> fst)
 
 let mk_void_func (var : DUGIR.var) id class_name m_info s_lst =
   let get_arg_list s =
-    mk_arg ~is_s:(is_static s m_info) (get_formal_params s m_info) var.summary
+    mk_arg ~is_s:(is_static s m_info) ~is_error_entry:false
+      (get_formal_params s m_info)
+      var.summary
   in
   let typ =
     if Utils.is_array class_name then
@@ -590,7 +612,10 @@ let get_cfunc id constructor m_info =
   in
   let func = DUGIR.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
-    mk_arg ~is_s:(is_static c m_info) (get_formal_params c m_info) s
+    mk_arg ~is_s:(is_static c m_info)
+      ~is_error_entry:(DUG.get_v id).of_error_method
+      (get_formal_params c m_info)
+      s
   in
   if arg_list = [] then [ (cost, (func, DUGIR.Arg [])) ]
   else
@@ -686,7 +711,7 @@ let get_inner_func f arg =
         ((DUG.get_func f).method_name
         |> Regexp.first_rm (Str.regexp ("\\$" ^ escaped_fname)))
     in
-    DUGIR.mk_var recv.import
+    DUGIR.mk_var recv.of_error_method recv.import
       (Var (var, "con_outer"), mk_some !outer)
       FieldSet.empty recv.summary
     |> DUGIR.mk_variable
@@ -719,12 +744,12 @@ let get_reusable_arg s prev_num stmt tc arg =
   let node_to_find = DUGIR.Const (prev_num + 1, var_to_find, (arg, Exp)) in
   if DUG.is_already_node stmt node_to_find tc then
     List.fold_left
-      (fun lst (ids, x) ->
+      (fun lst (ids, x, rank) ->
         let found_node = DUG.find_node stmt node_to_find tc in
         let found_id = DUG.get_id found_node in
         if is_matched_variable found_id arg then (
-          reusable_arg := (arg, found_id) :: !reusable_arg;
-          (found_id :: ids, DUG.mk_already_arg found_node var_to_find tc x)
+          reusable_arg := (arg, found_id, rank) :: !reusable_arg;
+          (found_id :: ids, DUG.mk_already_arg found_node var_to_find tc x, rank)
           :: lst)
         else lst)
       [] s
@@ -732,32 +757,34 @@ let get_reusable_arg s prev_num stmt tc arg =
 
 let get_already_reusable_arg arg_graph arg arg_list reusable_args lst =
   List.fold_left
-    (fun acc (target_arg, replace_arg) ->
+    (fun acc (target_arg, replace_arg, rank) ->
       if arg = target_arg && List.mem replace_arg arg_list then
-        (replace_arg :: arg_list, arg_graph) :: acc
+        (replace_arg :: arg_list, arg_graph, rank) :: acc
       else acc)
     lst reusable_args
 
 let get_already_arg s arg reusable_args =
   List.fold_left
-    (fun lst (arg_list, s) ->
-      if List.mem arg arg_list then (arg :: arg_list, s) :: lst
+    (fun lst (arg_list, s, rank) ->
+      if List.mem arg arg_list then (arg :: arg_list, s, rank) :: lst
       else get_already_reusable_arg s arg arg_list reusable_args lst)
     [] s
 
-let get_arg_seq prev_num stmt tc (args : DUGIR.id list) =
+let get_arg_seq ~is_error_entry prev_num stmt tc (args : DUGIR.id list)
+    lowest_rank used_args =
   let already_arg = ref ArgSet.empty in
   reusable_arg := [];
   let apply_const_rule s arg =
     List.fold_left
-      (fun lst (ids, x) ->
-        (arg :: ids, DUG.mk_const_arg arg (prev_num + 1) x) :: lst)
+      (fun lst (ids, x, rank) ->
+        (arg :: ids, DUG.mk_const_arg arg (prev_num + 1) x, rank) :: lst)
       [] s
   in
   let apply_assign_rule s arg =
     List.fold_left
-      (fun lst (ids, x) ->
-        (arg :: ids, DUG.mk_assign_arg arg (prev_num + 1) x) :: lst)
+      (fun lst (ids, x, rank) ->
+        let rank = is_lowest_rank ~is_error_entry rank arg used_args in
+        (arg :: ids, DUG.mk_assign_arg arg (prev_num + 1) x, rank) :: lst)
       [] s
   in
   List.fold_left
@@ -773,17 +800,19 @@ let get_arg_seq prev_num stmt tc (args : DUGIR.id list) =
         in
         if is_primitive_from_id arg then acc_arg
         else List.rev_append (apply_assign_rule s arg) acc_arg))
-    [ ([], DUG.empty) ]
+    [ ([], DUG.empty, lowest_rank) ]
     args
 
-let mk_arg_seq arg prev_num class_name s tc =
+let mk_arg_seq ?(is_error_entry = false) arg prev_num class_name s tc
+    lowest_rank used_args =
   let modified_x x =
     if is_primitive_from_v x then { x with import = class_name } else x
   in
-  get_arg_seq prev_num s tc
+  get_arg_seq ~is_error_entry prev_num s tc
     (List.fold_left
        (fun lst x -> DUGIR.Variable (modified_x x) :: lst)
        [] (DUG.get_arg arg))
+    lowest_rank used_args
 
 let loop_id_merge old_ids new_ids =
   LoopIdMap.merge
@@ -798,16 +827,17 @@ let loop_id_merge old_ids new_ids =
 let sort_const consts =
   List.stable_sort (fun (c1, _) (c2, _) -> compare c1 c2) consts
 
-let comparable_const s p =
+let comparable_const s p lowest_rank =
   [
     ( 0,
+      lowest_rank,
       DUG.const_rule2 s (DUGIR.GlobalConstant "java.math.BigDecimal.ONE") p.tc,
       empty_id_map,
       ObjTypeMap.add "java.lang.Comparable" "java.math.BigDecimal"
         empty_obj_type_map );
   ]
 
-let object_const s p =
+let object_const s p lowest_rank =
   let f =
     DUGIR.mk_f "java.lang.Object" "java.lang.Object.<init>()" "java.lang.Object"
       Modeling.obj_summary
@@ -815,12 +845,13 @@ let object_const s p =
   let param = DUGIR.Param [] in
   [
     ( 0,
+      lowest_rank,
       DUG.const_rule2_1 s f param p.tc,
       empty_id_map,
       ObjTypeMap.add "java.lang.Object" "java.lang.Object" empty_obj_type_map );
   ]
 
-let list_const s p =
+let list_const s p lowest_rank =
   let f =
     DUGIR.mk_f "java.util.List" "java.util.ArrayList.<init>()"
       "java.util.ArrayList" Modeling.array_list_summary
@@ -828,15 +859,17 @@ let list_const s p =
   let param = DUGIR.Param [] in
   [
     ( 0,
+      lowest_rank,
       DUG.const_rule2_1 s f param p.tc,
       empty_id_map,
       ObjTypeMap.add "java.util.List" "java.util.ArrayList" empty_obj_type_map
     );
   ]
 
-let number_const s p =
+let number_const s p lowest_rank =
   [
     ( 0,
+      lowest_rank,
       DUG.const_rule2 s (DUGIR.GlobalConstant "java.math.BigDecimal.ONE") p.tc,
       empty_id_map,
       ObjTypeMap.add "java.lang.Number" "java.math.BigDecimal"
@@ -844,16 +877,25 @@ let number_const s p =
   ]
 
 let apply_rule1 s p x =
-  (fst x, DUG.const_rule1 s (snd x) p.tc, empty_id_map, empty_obj_type_map)
+  ( fst x,
+    false,
+    DUG.const_rule1 s (snd x) p.tc,
+    empty_id_map,
+    empty_obj_type_map )
 
 let apply_rule2 s p x =
-  (fst x, DUG.const_rule2 s (snd x) p.tc, empty_id_map, empty_obj_type_map)
+  ( fst x,
+    false,
+    DUG.const_rule2 s (snd x) p.tc,
+    empty_id_map,
+    empty_obj_type_map )
 
 let apply_rule3 s p x =
-  (fst x, DUG.const_rule3 s p.tc, empty_id_map, empty_obj_type_map)
+  (fst x, false, DUG.const_rule3 s p.tc, empty_id_map, empty_obj_type_map)
 
 let apply_loop s p x exps prec =
   ( prec,
+    false,
     DUG.const_rule_loop s p.tc,
     LoopIdMap.add x exps empty_id_map,
     empty_obj_type_map )
@@ -875,11 +917,12 @@ let get_r3 s p prim_info x =
     [] (get_value x prim_info)
 
 let get_r2 s p { summary; inst_info; _ } x =
-  if is_comparable x then comparable_const s p
-  else if is_object x then object_const s p
-  else if is_number x then number_const s p
-  else if !Cmdline.unknown_bug && is_list x then (* heuristic *)
-    list_const s p
+  if is_comparable x then comparable_const s p (DUG.get_v x).of_error_method
+  else if is_object x then object_const s p (DUG.get_v x).of_error_method
+  else if is_number x then number_const s p (DUG.get_v x).of_error_method
+  else if !Cmdline.unknown_bug && is_list x then
+    (* heuristic *)
+    list_const s p (DUG.get_v x).of_error_method
   else
     List.fold_left
       (fun lst x1 -> apply_rule2 s p x1 :: lst)
@@ -894,11 +937,12 @@ let get_r2_with_loop s p { summary; inst_info; _ } x =
       (DUG.get_vinfo x |> fst |> get_class_name)
       (DUG.get_v x).summary summary inst_info
   in
-  if is_comparable x then comparable_const s p
-  else if is_object x then object_const s p
-  else if is_number x then number_const s p
-  else if !Cmdline.unknown_bug && is_list x then (* heuristic *)
-    list_const s p
+  if is_comparable x then comparable_const s p (DUG.get_v x).of_error_method
+  else if is_object x then object_const s p (DUG.get_v x).of_error_method
+  else if is_number x then number_const s p (DUG.get_v x).of_error_method
+  else if !Cmdline.unknown_bug && is_list x then
+    (* heuristic *)
+    list_const s p (DUG.get_v x).of_error_method
   else if gcs = [] then []
   else if List.length gcs = 1 then
     (* if number of global constant is one, then do not using loop. (optimize) *)
@@ -941,10 +985,11 @@ let const_unroll (s : DUGIR.t) p ({ prim_info; _ } as info) =
             else List.rev_append (get_r3 s p prim_info x) r2)
   | _ -> failwith "Fail: const_unroll"
 
-let fcall_in_assign_unroll (s : DUGIR.t) p obj_types
+let fcall_in_assign_unroll (s : DUGIR.t) p used_args obj_types
     { summary; m_info; t_info; c_info; setter_map; _ } =
-  let apply_rule f arg field_set obj_map prec =
+  let apply_rule f arg field_set obj_map prec rank =
     ( prec,
+      rank,
       DUG.fcall_in_assign_rule s field_set f arg p.tc,
       empty_id_map,
       obj_map )
@@ -955,19 +1000,29 @@ let fcall_in_assign_unroll (s : DUGIR.t) p obj_types
     | Some _ -> None
     | None -> Some (ObjTypeMap.add class_name child_name obj_types)
   in
-  let apply_rule_for_all class_name field_set c_list =
-    List.fold_left
-      (fun lst (prec, (f, arg)) ->
-        let child_name = Utils.get_class_name (DUG.get_func f).method_name in
-        match set_object_type class_name child_name obj_types with
-        | Some obj -> apply_rule f arg field_set obj prec :: lst
-        | None -> lst)
-      [] c_list
+  let apply_rule_for_all rank is_receiver class_name field_set c_list =
+    let _, lst =
+      List.fold_left
+        (fun (first, lst) (prec, (f, arg)) ->
+          let child_name = Utils.get_class_name (DUG.get_func f).method_name in
+          match set_object_type class_name child_name obj_types with
+          | Some obj ->
+              if first && is_receiver then
+                (false, apply_rule f arg field_set obj prec false :: lst)
+              else (false, apply_rule f arg field_set obj prec rank :: lst)
+          | None -> (false, lst))
+        (true, []) c_list
+    in
+    lst
   in
   match s with
   | Assign (_, _, (x0, _, _, _)) ->
       let field_set = get_field_set x0 setter_map in
       let class_name = DUG.get_vinfo x0 |> fst |> get_class_name in
+      let rank =
+        is_lowest_rank ~is_error_entry:(DUG.get_v x0).of_error_method
+          p.lowest_rank x0 used_args
+      in
       let org_c_lst, c_lst, ret_c_lst =
         (* if class is special class, we don't use the methods returning that class type *)
         if List.mem class_name special_class_list then ([], [], [])
@@ -979,10 +1034,12 @@ let fcall_in_assign_unroll (s : DUGIR.t) p obj_types
         List.rev_append
           (get_c x0 c_lst summary m_info)
           (get_ret_c x0 ret_c_lst summary m_info t_info c_info setter_map)
-        |> apply_rule_for_all class_name field_set
+        |> apply_rule_for_all rank
+             (is_receiver (DUG.get_vinfo x0 |> snd))
+             class_name field_set
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
-let recv_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
+let recv_in_assign_unroll (prec, rank, ((s : DUGIR.t), tc), loop_ids, obj_types)
     { m_info; c_info; _ } =
   match s with
   | Assign (_, _, (x0, _, f, arg)) when DUG.recv_in_assign s ->
@@ -999,10 +1056,12 @@ let recv_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
           let r2 = DUG.recv_in_assign_rule2_1 s recv f arg tc in
           let r3 = DUG.recv_in_assign_rule3_1 s recv f arg tc in
           incr outer;
-          (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ])
+          (prec, rank, r2, loop_ids, obj_types)
+          :: [ (prec, rank, r3, loop_ids, obj_types) ])
       else if cname_condition (DUG.get_func f).method_name m_info c_info then
         [
           ( prec,
+            rank,
             DUG.recv_in_assign_rule1 s (get_cname f) tc,
             loop_ids,
             obj_types );
@@ -1012,22 +1071,24 @@ let recv_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
         let r3 = DUG.recv_in_assign_rule3 s "con_recv" !recv tc in
         incr recv;
         let applied =
-          (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ]
+          (prec, rank, r2, loop_ids, obj_types)
+          :: [ (prec, rank, r3, loop_ids, obj_types) ]
         in
         if DUG.is_already_node s (fst r2) tc then
           let found_node = DUG.find_node s (fst r2) tc in
           let found_id = DUG.get_id found_node in
           if is_matched_variable found_id x0 then
             let r4 = DUG.recv_in_assign_rule4 s found_node tc in
-            (prec, r4, loop_ids, obj_types) :: applied
+            (prec, rank, r4, loop_ids, obj_types) :: applied
           else applied
         else applied
   | _ -> failwith "Fail: recv_in_assign_unroll"
 
-let arg_in_assign_unroll (org_s, org_tc)
-    (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
-  let apply_rule x args =
+let arg_in_assign_unroll ?(is_error_entry = false) (org_s, org_tc)
+    (prec, rank, ((s : DUGIR.t), tc), loop_ids, obj_types) used_args =
+  let apply_rule x args rank =
     ( prec,
+      rank,
       DUG.arg_in_assign_rule s x
         (Param (List.map (fun x -> DUG.get_v x) args))
         tc,
@@ -1037,8 +1098,10 @@ let arg_in_assign_unroll (org_s, org_tc)
   match s with
   | Assign (num, _, (_, _, f, arg)) when DUG.arg_in_assign s ->
       let class_name = Utils.get_class_name (DUG.get_func f).method_name in
-      mk_arg_seq arg num class_name org_s org_tc
-      |> List.fold_left (fun lst (args, x) -> apply_rule x args :: lst) []
+      mk_arg_seq ~is_error_entry arg num class_name org_s org_tc rank used_args
+      |> List.fold_left
+           (fun lst (args, x, rank) -> apply_rule x args rank :: lst)
+           []
   | _ -> failwith "Fail: arg_in_assign_unroll"
 
 let void_unroll (s : DUGIR.t) p =
@@ -1048,19 +1111,20 @@ let void_unroll (s : DUGIR.t) p =
         if DUG.check_assign var prev then
           let s', g' = DUG.void_rule2 prev s p.tc in
           if s' = s then lst
-          else (0, (s', g'), empty_id_map, empty_obj_type_map) :: lst
+          else (0, false, (s', g'), empty_id_map, empty_obj_type_map) :: lst
         else lst)
       [] (DUG.pred s p.tc)
   in
   match s with
   | Stmt (_, var) ->
-      (0, DUG.void_rule1 s p.tc, empty_id_map, empty_obj_type_map)
+      (0, false, DUG.void_rule1 s p.tc, empty_id_map, empty_obj_type_map)
       :: void_rule2 var
   | _ -> failwith "Fail: void_unroll"
 
 let fcall_in_void_unroll (s : DUGIR.t) p p_data =
   let apply_rule f arg prec =
     ( prec,
+      p.lowest_rank,
       DUG.fcall_in_void_rule s f (Arg arg) p.tc,
       empty_id_map,
       empty_obj_type_map )
@@ -1075,25 +1139,32 @@ let fcall_in_void_unroll (s : DUGIR.t) p p_data =
           [] lst
   | _ -> failwith "Fail: fcall_in_void_unroll"
 
-let recv_in_void_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
+let recv_in_void_unroll ?(is_error_entry = false)
+    (prec, lowest_rank, ((s : DUGIR.t), tc), loop_ids, obj_types)
     { m_info; c_info; _ } =
   match s with
   | Void (_, _, (_, f, _)) when DUG.recv_in_void s ->
       if cname_condition (DUG.get_func f).method_name m_info c_info then
         [
-          (prec, DUG.recv_in_void_rule1 s (get_cname f) tc, loop_ids, obj_types);
+          ( prec,
+            lowest_rank,
+            DUG.recv_in_void_rule1 s (get_cname f) tc,
+            loop_ids,
+            obj_types );
         ]
       else
-        let r2 = DUG.recv_in_void_rule2 s "con_recv" !recv tc in
-        let r3 = DUG.recv_in_void_rule3 s "con_recv" !recv tc in
+        let r2 = DUG.recv_in_void_rule2 ~is_error_entry s "con_recv" !recv tc in
+        let r3 = DUG.recv_in_void_rule3 ~is_error_entry s "con_recv" !recv tc in
         incr recv;
-        (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ]
+        (prec, lowest_rank, r2, loop_ids, obj_types)
+        :: [ (prec, lowest_rank, r3, loop_ids, obj_types) ]
   | _ -> failwith "Fail: recv_in_void_unroll"
 
-let arg_in_void_unroll (org_s, org_tc)
-    (prec, ((s : DUGIR.t), tc), loop_ids, obj_types) =
-  let apply_rule x args =
+let arg_in_void_unroll ?(is_error_entry = false) (org_s, org_tc)
+    (prec, lowest_rank, ((s : DUGIR.t), tc), loop_ids, obj_types) used_args =
+  let apply_rule x args rank =
     ( prec,
+      rank,
       DUG.arg_in_void_rule s x (Param (List.map (fun x -> DUG.get_v x) args)) tc,
       loop_ids,
       obj_types )
@@ -1101,44 +1172,48 @@ let arg_in_void_unroll (org_s, org_tc)
   match s with
   | Void (num, _, (_, f, arg)) when DUG.arg_in_void s ->
       let class_name = Utils.get_class_name (DUG.get_func f).method_name in
-      mk_arg_seq arg num class_name org_s org_tc
-      |> List.fold_left (fun lst (args, x) -> apply_rule x args :: lst) []
+      mk_arg_seq ~is_error_entry arg num class_name org_s org_tc lowest_rank
+        used_args
+      |> List.fold_left
+           (fun lst (args, x, rank) -> apply_rule x args rank :: lst)
+           []
   | _ -> failwith "Fail: arg_in_void_unroll"
 
 let apply_mock_rule s p =
-  (0, DUG.mk_mock_statement s p.tc, empty_id_map, empty_obj_type_map)
+  (0, false, DUG.mk_mock_statement s p.tc, empty_id_map, empty_obj_type_map)
 
 let apply_recv_in_assign_rule_for_all p_data p_list =
   List.fold_left
     (fun acc_lst x -> recv_in_assign_unroll x p_data |> append acc_lst)
     [] p_list
 
-let apply_arg_in_assign_rule_for_all s p p_list =
+let apply_arg_in_assign_rule_for_all s p used_args p_list =
   List.fold_left
-    (fun acc_lst x -> arg_in_assign_unroll (s, p.tc) x |> append acc_lst)
+    (fun acc_lst x ->
+      arg_in_assign_unroll (s, p.tc) x used_args |> append acc_lst)
     [] p_list
 
 let is_having_receiver p_list =
   (* at least receiver *)
   let filtered =
-    List.filter (fun (_, (x, _), _, _) -> DUG.count_params x < 2) p_list
+    List.filter (fun (_, _, (x, _), _, _) -> DUG.count_params x < 2) p_list
   in
   if filtered = [] then true else false
 
-let one_unroll (s : DUGIR.t) p obj_types p_data =
+let one_unroll (s : DUGIR.t) p used_args obj_types p_data =
   match s with
   | _ when DUG.void p.tc s -> void_unroll s p
   | Const _ when DUG.const s -> const_unroll s p p_data
   | Assign _ when DUG.fcall_in_assign s -> (
       (* fcall_in_assign --> recv_in_assign --> arg_in_assign *)
-      match fcall_in_assign_unroll s p obj_types p_data with
+      match fcall_in_assign_unroll s p used_args obj_types p_data with
       | exception Not_found_get_object ->
           if !Cmdline.mock then [ apply_mock_rule s p ]
           else raise Not_found_get_object
       | p_lst ->
           let lst =
             apply_recv_in_assign_rule_for_all p_data p_lst
-            |> apply_arg_in_assign_rule_for_all s p
+            |> apply_arg_in_assign_rule_for_all s p used_args
           in
           if !Cmdline.mock && is_having_receiver p_lst then
             apply_mock_rule s p :: lst
@@ -1150,42 +1225,49 @@ let one_unroll (s : DUGIR.t) p obj_types p_data =
            (fun acc_lst x -> recv_in_void_unroll x p_data |> append acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll (s, p.tc) x |> append acc_lst)
+           (fun acc_lst x ->
+             arg_in_void_unroll (s, p.tc) x used_args |> append acc_lst)
            []
   | Void _ when DUG.fcall2_in_void s ->
       (* fcall2_in_void --> arg_in_void *)
       fcall_in_void_unroll s p p_data
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll (s, p.tc) x |> append acc_lst)
+           (fun acc_lst x ->
+             arg_in_void_unroll (s, p.tc) x used_args |> append acc_lst)
            []
   | Void _ when DUG.recv_in_void s ->
       (* unroll error entry *)
-      recv_in_void_unroll
-        (0, (s, p.tc), empty_id_map, empty_obj_type_map)
+      recv_in_void_unroll ~is_error_entry:true
+        (0, p.lowest_rank, (s, p.tc), empty_id_map, empty_obj_type_map)
         p_data
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll (s, p.tc) x |> append acc_lst)
+           (fun acc_lst x ->
+             arg_in_void_unroll ~is_error_entry:true (s, p.tc) x used_args
+             |> append acc_lst)
            []
   | _ -> failwith "Fail: one_unroll"
 
-let rec all_unroll ?(assign_ground = false) p obj_types p_data stmt_map =
+let rec all_unroll ?(assign_ground = false) p used_args obj_types p_data
+    stmt_map =
   G.fold_vertex
     (fun stmt map ->
-      all_unroll_assign ~assign_ground stmt p obj_types p_data map)
+      all_unroll_assign ~assign_ground stmt p used_args obj_types p_data map)
     p.tc stmt_map
 
-and all_unroll_assign ?(assign_ground = false) s p obj_types p_data stmt_map =
+and all_unroll_assign ?(assign_ground = false) s p used_args obj_types p_data
+    stmt_map =
   match s with
   | _ when DUG.ground_stmt s -> stmt_map
-  | _ when assign_ground -> all_unroll_void s p obj_types p_data stmt_map
+  | _ when assign_ground ->
+      all_unroll_void s p used_args obj_types p_data stmt_map
   | _ when DUG.is_stmt s && not assign_ground -> stmt_map
-  | _ -> StmtMap.M.add s (one_unroll s p obj_types p_data) stmt_map
+  | _ -> StmtMap.M.add s (one_unroll s p used_args obj_types p_data) stmt_map
 
-and all_unroll_void s p obj_types p_data stmt_map =
+and all_unroll_void s p used_args obj_types p_data stmt_map =
   match s with
   | _ when DUG.ground_stmt s -> stmt_map
   | _ when DUG.void p.tc s ->
-      StmtMap.M.add s (one_unroll s p obj_types p_data) stmt_map
+      StmtMap.M.add s (one_unroll s p used_args obj_types p_data) stmt_map
   | _ -> failwith "Fail: all_unroll_void"
 
 let return_stmts graph =
@@ -1214,10 +1296,11 @@ let sort_stmts map stmts =
       | None, None -> 0)
     stmts
 
-let combinate_stmt (p', tc', loop_ids', obj_types') s new_s_list =
+let combinate_stmt (p', rank', tc', loop_ids', obj_types') s new_s_list =
   List.fold_left
-    (fun lst (new_p, (new_s, new_tc), new_loop, new_type) ->
+    (fun lst (new_p, new_rank, (new_s, new_tc), new_loop, new_type) ->
       ( p' + new_p,
+        (if rank' then rank' else new_rank),
         DUG.replace_and_union s new_s tc' new_tc,
         loop_id_merge loop_ids' new_loop,
         obj_type_merge obj_types' new_type )
@@ -1229,7 +1312,7 @@ let combinate_stmts s new_s_lst partial_lst =
     (fun l _p -> combinate_stmt _p s new_s_lst |> append l)
     [] partial_lst
 
-let combinate { prec; tc; loop_ids; obj_types; _ } stmt_map =
+let combinate { prec; lowest_rank; tc; loop_ids; obj_types; _ } stmt_map =
   (* stmts is all fragments of statements in partial tc *)
   let all_combinate stmts =
     List.fold_left
@@ -1240,7 +1323,7 @@ let combinate { prec; tc; loop_ids; obj_types; _ } stmt_map =
             []
         | Some new_s_list -> combinate_stmts s new_s_list lst
         | _ -> lst)
-      [ (prec, tc, loop_ids, obj_types) ]
+      [ (prec, lowest_rank, tc, loop_ids, obj_types) ]
       stmts
   in
   return_stmts tc |> to_list |> sort_stmts stmt_map |> all_combinate |> List.rev
@@ -1366,15 +1449,19 @@ let pretty_format tc =
 let priority_q queue =
   List.stable_sort
     (fun p1 p2 ->
-      let nt1, t1, prec1 = get_cost p1 in
-      let nt2, t2, prec2 = get_cost p2 in
-      if compare (nt1 + t1 - prec1) (nt2 + t2 - prec2) <> 0 then
-        compare (nt1 + t1 - prec1) (nt2 + t2 - prec2)
-      else if compare prec1 prec2 <> 0 then compare prec2 prec1
-      else compare nt1 nt2)
+      let nt1, t1, prec1, lowest_rank1 = get_cost p1 in
+      let nt2, t2, prec2, lowest_rank2 = get_cost p2 in
+      if lowest_rank1 = lowest_rank2 then
+        if compare (nt1 + t1 - prec1) (nt2 + t2 - prec2) <> 0 then
+          compare (nt1 + t1 - prec1) (nt2 + t2 - prec2)
+        else if compare prec1 prec2 <> 0 then compare prec2 prec1
+        else compare nt1 nt2
+      else if lowest_rank1 then (* priority of p1 is lower than p2 *)
+        1
+      else -1)
     queue
 
-let rec mk_testcase p_data queue =
+let rec mk_testcase used_args p_data queue =
   let queue =
     match !Cmdline.synthesis_mode with
     | Cmdline.Basic | Cmdline.Pruning -> queue
@@ -1383,15 +1470,20 @@ let rec mk_testcase p_data queue =
   Logger.debug "# of test cases: %d" (List.length queue);
   match queue with
   | p :: tl ->
-      Logger.debug "current tc:\n%s" (pretty_format p.tc |> snd);
+      Logger.debug
+        "cost of current tc (nt, t, prec, rank): (%d, %d, %d, %b)\n\
+         current tc:\n\
+         %s"
+        p.nt_cost p.t_cost p.prec p.lowest_rank
+        (pretty_format p.tc |> snd);
       if !Cmdline.with_loop && DUG.ground p.tc && DUG.with_withloop p.tc then
         [ (Need_Loop, pretty_format p.tc, p.loop_ids, tl) ]
       else if DUG.ground p.tc then
         [ (Complete, pretty_format p.tc, p.loop_ids, tl) ]
       else
         (match
-           all_unroll ~assign_ground:(DUG.assign_ground p.tc) p p.obj_types
-             p_data StmtMap.M.empty
+           all_unroll ~assign_ground:(DUG.assign_ground p.tc) p used_args
+             p.obj_types p_data StmtMap.M.empty
          with
         | exception Not_found_setter ->
             Logger.debug "Exception: not found setter in %s"
@@ -1407,11 +1499,11 @@ let rec mk_testcase p_data queue =
             tl
         | x ->
             List.fold_left
-              (fun lst (new_p, new_tc, new_loop, new_type) ->
-                mk_cost p new_tc new_loop new_type new_p :: lst)
+              (fun lst (new_p, new_rank, new_tc, new_loop, new_type) ->
+                mk_cost p new_tc new_loop new_type new_p new_rank :: lst)
               [] (combinate p x)
             |> List.rev_append (List.rev tl))
-        |> mk_testcase p_data
+        |> mk_testcase used_args p_data
   | [] -> []
 
 let apply_init_rule list =
@@ -1425,10 +1517,10 @@ let apply_init_rule list =
 let init_cost tcs =
   List.fold_left
     (fun lst (_, new_tc) ->
-      mk_cost empty_p new_tc empty_id_map empty_obj_type_map 0 :: lst)
+      mk_cost empty_p new_tc empty_id_map empty_obj_type_map 0 false :: lst)
     [] tcs
 
-let mk_testcases ~is_start queue (e_method, error_summary) p_data =
+let mk_testcases ~is_start queue (e_method, error_summary, used_args) p_data =
   let p_info, init =
     if is_start then (
       set_methods_to_ignore p_data.m_info p_data.c_info p_data.cp_map;
@@ -1442,6 +1534,6 @@ let mk_testcases ~is_start queue (e_method, error_summary) p_data =
         (p_data.prim_info, []))
     else (p_data.prim_info, queue)
   in
-  let result = mk_testcase (update_prim p_data p_info) init in
+  let result = mk_testcase used_args (update_prim p_data p_info) init in
   if result = [] then (Incomplete, (ImportSet.empty, ""), empty_id_map, [])
   else List.hd result

@@ -15,7 +15,7 @@ module StmtMap = struct
     type t = ASTIR.t [@@deriving compare]
   end)
 
-  type t = ASTIR.t list M.t
+  type t = (ASTIR.t * bool) list M.t
 end
 
 module ArgSet = Set.Make (struct
@@ -27,21 +27,25 @@ type partial_tc = {
   nt_cost : int;
   t_cost : int;
   prec : int; (* number of precise statement *)
+  lowest_rank : bool;
+      (* whether unused arguments in the error method have a chance to unroll deeply *)
   tc : ASTIR.t;
   loop_ids : LoopIdMap.t;
   obj_types : ObjTypeMap.t;
 }
 
-(* non-terminal cost for p, terminal cost for p, precision for p *)
+(* non-terminal cost for p, terminal cost for p, precision for p, lowest_rank for p *)
 let get_cost p =
-  if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec) else (0, 0, 0)
+  if p.unroll > 1 then (p.nt_cost, p.t_cost, p.prec, p.lowest_rank)
+  else (0, 0, 0, p.lowest_rank)
 
-let mk_cost prev_p curr_tc curr_loop_id curr_obj_type prec =
+let mk_cost prev_p curr_tc curr_loop_id curr_obj_type prec lowest_rank =
   {
     unroll = prev_p.unroll + 1;
     nt_cost = AST.count_nt curr_tc;
     t_cost = AST.count_t curr_tc;
     prec;
+    lowest_rank;
     tc = curr_tc;
     loop_ids = curr_loop_id;
     obj_types = curr_obj_type;
@@ -57,6 +61,7 @@ let empty_p =
     nt_cost = 0;
     t_cost = 0;
     prec = 0;
+    lowest_rank = false;
     tc = ASTIR.Skip;
     loop_ids = empty_id_map;
     obj_types = empty_obj_type_map;
@@ -70,6 +75,16 @@ let is_primitive_from_v v = get_type (fst v.ASTIR.variable) |> is_primitive
 
 let is_special_primitive_from_id x =
   AST.get_vinfo x |> fst |> is_special_primitive
+
+let is_lowest_rank ~is_error_entry prev_rank var used_args =
+  if (not is_error_entry) || prev_rank then prev_rank
+  else
+    let vname = AST.get_vinfo var |> snd in
+    let vname = if is_receiver vname then "this" else vname in
+    (if !Cmdline.debug then
+       let check = not (List.mem vname used_args) in
+       Logger.info "Is %s lowest rank: %b" vname check);
+    if List.mem vname used_args then false else true
 
 let get_m_lst x0 m_info (c_info, ig) =
   let c_name = AST.get_vinfo x0 |> fst |> get_class_name in
@@ -410,13 +425,14 @@ let global_var_list class_name t_summary summary i_info =
       | Some gv -> gv :: common
       | None -> common)
 
-let get_param v summary =
+let get_param ?(is_error_entry = false) v summary =
   let get_field id =
     AST.get_field_from_ufmap id (fst summary.precond) summary.use_field
   in
   let make_new_var id =
     ASTIR.
       {
+        of_error_method = is_error_entry;
         import = get_package_from_v v;
         variable = (v, mk_some !new_var);
         field = get_field id;
@@ -432,10 +448,12 @@ let get_param v summary =
       incr new_var;
       make_new_var id |> mk_some
 
-let get_org_params_list summary org_param =
+let get_org_params_list ~is_error_entry summary org_param =
   List.fold_left
     (fun params v ->
-      match get_param v summary with Some p -> p :: params | _ -> params)
+      match get_param ~is_error_entry v summary with
+      | Some p -> p :: params
+      | _ -> params)
     [] org_param
   |> List.rev
 
@@ -464,8 +482,8 @@ let get_param_list param std_param curr_param_list =
       (fun acc list -> (param :: list) :: (std_param :: list) :: acc)
       [] curr_param_list
 
-let mk_params_list summary p_set org_param =
-  let org_param_list = get_org_params_list summary org_param in
+let mk_params_list ~is_error_entry summary p_set org_param =
+  let org_param_list = get_org_params_list ~is_error_entry summary org_param in
   let rec mk_params org_params params_list =
     match org_params with
     | hd :: tl ->
@@ -477,10 +495,10 @@ let mk_params_list summary p_set org_param =
   in
   mk_params org_param_list []
 
-let mk_arg ~is_s param s =
+let mk_arg ~is_s ~is_error_entry param s =
   let param = if is_s then param else List.tl param in
   let same_params_set = get_same_params_set s param in
-  mk_params_list s same_params_set param
+  mk_params_list ~is_error_entry s same_params_set param
   |> List.fold_left (fun args lst -> List.rev lst :: args) []
 
 let get_field_set ret s_map =
@@ -500,7 +518,9 @@ let get_field_set ret s_map =
 
 let error_entry_func ee es m_info c_info =
   let param = get_formal_params ee m_info in
-  let f_arg_list = mk_arg ~is_s:(is_static ee m_info) param es in
+  let f_arg_list =
+    mk_arg ~is_s:(is_static ee m_info) ~is_error_entry:true param es
+  in
   let c_name = Utils.get_class_name ee in
   let typ_list = get_usable_types c_name c_info in
   List.fold_left
@@ -512,7 +532,9 @@ let error_entry_func ee es m_info c_info =
 
 let mk_void_func (var : ASTIR.var) id class_name m_info s_lst =
   let get_arg_list s =
-    mk_arg ~is_s:(is_static s m_info) (get_formal_params s m_info) var.summary
+    mk_arg ~is_s:(is_static s m_info) ~is_error_entry:false
+      (get_formal_params s m_info)
+      var.summary
   in
   let typ =
     if Utils.is_array class_name then
@@ -559,7 +581,10 @@ let get_cfunc id constructor m_info =
   in
   let func = ASTIR.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
-    mk_arg ~is_s:(is_static c m_info) (get_formal_params c m_info) s
+    mk_arg ~is_s:(is_static c m_info)
+      ~is_error_entry:(AST.get_v id).of_error_method
+      (get_formal_params c m_info)
+      s
   in
   if arg_list = [] then [ (cost, (func, ASTIR.Arg [])) ]
   else
@@ -654,7 +679,7 @@ let get_inner_func f arg =
         ((AST.get_func f).method_name
         |> Regexp.first_rm (Str.regexp ("\\$" ^ escaped_fname)))
     in
-    ASTIR.mk_var recv.import
+    ASTIR.mk_var recv.of_error_method recv.import
       (Var (var, "con_outer"), mk_some !outer)
       FieldSet.empty recv.summary
     |> ASTIR.mk_variable
@@ -671,13 +696,19 @@ let cname_condition m_name m_info c_info =
 
 let get_cname f = ASTIR.ClassName (AST.get_func f).ASTIR.typ
 
-let get_arg_seq (args : ASTIR.id list) =
+let get_arg_seq ~is_error_entry (args : ASTIR.id list) lowest_rank used_args =
   let already_arg = ref ArgSet.empty in
   let apply_const_rule s arg =
-    List.fold_left (fun lst x -> AST.mk_const_arg x arg :: lst) [] s
+    List.fold_left
+      (fun lst (x, rank) -> (AST.mk_const_arg x arg, rank) :: lst)
+      [] s
   in
   let apply_assign_rule s arg =
-    List.fold_left (fun lst x -> AST.mk_assign_arg x arg :: lst) [] s
+    List.fold_left
+      (fun lst (x, rank) ->
+        let rank = is_lowest_rank ~is_error_entry rank arg used_args in
+        (AST.mk_assign_arg x arg, rank) :: lst)
+      [] s
   in
   List.fold_left
     (fun s arg ->
@@ -687,16 +718,18 @@ let get_arg_seq (args : ASTIR.id list) =
         let const_arg = apply_const_rule s arg in
         if is_primitive_from_id arg then const_arg
         else List.rev_append (apply_assign_rule s arg) const_arg))
-    [ ASTIR.Skip ] args
+    [ (ASTIR.Skip, lowest_rank) ]
+    args
 
-let mk_arg_seq arg class_name =
+let mk_arg_seq ?(is_error_entry = false) arg class_name lowest_rank used_args =
   let modified_x x =
     if is_primitive_from_v x then { x with import = class_name } else x
   in
-  get_arg_seq
+  get_arg_seq ~is_error_entry
     (List.fold_left
        (fun lst x -> ASTIR.Variable (modified_x x) :: lst)
        [] (AST.get_arg arg))
+    lowest_rank used_args
 
 let loop_id_merge old_ids new_ids =
   LoopIdMap.merge
@@ -734,16 +767,17 @@ let is_object x = is_object (AST.get_vinfo x |> fst)
 
 let is_number x = is_number (AST.get_vinfo x |> fst)
 
-let comparable_const p =
+let comparable_const p lowest_rank =
   [
     ( 0,
+      lowest_rank,
       AST.const_rule2 p (ASTIR.GlobalConstant "java.math.BigDecimal.ONE"),
       empty_id_map,
       ObjTypeMap.add "java.lang.Comparable" "java.math.BigDecimal"
         empty_obj_type_map );
   ]
 
-let object_const p =
+let object_const p lowest_rank =
   let f =
     ASTIR.mk_f "java.lang.Object" "java.lang.Object.<init>()" "java.lang.Object"
       Modeling.obj_summary
@@ -751,14 +785,16 @@ let object_const p =
   let param = ASTIR.Param [] in
   [
     ( 0,
+      lowest_rank,
       AST.const_rule2_2 p f param,
       empty_id_map,
       ObjTypeMap.add "java.lang.Object" "java.lang.Object" empty_obj_type_map );
   ]
 
-let number_const p =
+let number_const p lowest_rank =
   [
     ( 0,
+      lowest_rank,
       AST.const_rule2 p (ASTIR.GlobalConstant "java.math.BigDecimal.ONE"),
       empty_id_map,
       ObjTypeMap.add "java.lang.Number" "java.math.BigDecimal"
@@ -766,16 +802,17 @@ let number_const p =
   ]
 
 let apply_rule1 p x =
-  (fst x, AST.const_rule1 p (snd x), empty_id_map, empty_obj_type_map)
+  (fst x, false, AST.const_rule1 p (snd x), empty_id_map, empty_obj_type_map)
 
 let apply_rule2 p x =
-  (fst x, AST.const_rule2 p (snd x), empty_id_map, empty_obj_type_map)
+  (fst x, false, AST.const_rule2 p (snd x), empty_id_map, empty_obj_type_map)
 
 let apply_rule3 p x =
-  (fst x, AST.const_rule3 p, empty_id_map, empty_obj_type_map)
+  (fst x, false, AST.const_rule3 p, empty_id_map, empty_obj_type_map)
 
 let apply_loop p x exps prec =
   ( prec,
+    false,
     AST.const_rule_loop p,
     LoopIdMap.add x exps empty_id_map,
     empty_obj_type_map )
@@ -799,9 +836,9 @@ let get_r3 p prim_info x =
     [] (get_value x prim_info)
 
 let get_r2 p { summary; inst_info; _ } x =
-  if is_comparable x then comparable_const p
-  else if is_object x then object_const p
-  else if is_number x then number_const p
+  if is_comparable x then comparable_const p (AST.get_v x).of_error_method
+  else if is_object x then object_const p (AST.get_v x).of_error_method
+  else if is_number x then number_const p (AST.get_v x).of_error_method
   else
     List.fold_left
       (fun lst x1 -> apply_rule2 p x1 :: lst)
@@ -816,9 +853,9 @@ let get_r2_with_loop p { summary; inst_info; _ } x =
       (AST.get_vinfo x |> fst |> get_class_name)
       (AST.get_v x).summary summary inst_info
   in
-  if is_comparable x then comparable_const p
-  else if is_object x then object_const p
-  else if is_number x then number_const p
+  if is_comparable x then comparable_const p (AST.get_v x).of_error_method
+  else if is_object x then object_const p (AST.get_v x).of_error_method
+  else if is_number x then number_const p (AST.get_v x).of_error_method
   else if gcs = [] then []
   else if List.length gcs = 1 then
     (* if number of global constant is one, then do not using loop. (optimize) *)
@@ -861,10 +898,14 @@ let const_unroll (p : ASTIR.t) ({ prim_info; _ } as info) =
             else List.rev_append (get_r3 p prim_info x) r2)
   | _ -> failwith "Fail: const_unroll"
 
-let fcall_in_assign_unroll (p : ASTIR.t) obj_types
+let fcall_in_assign_unroll (p : ASTIR.t) used_args obj_types
     { summary; m_info; t_info; c_info; setter_map; _ } =
-  let apply_rule f arg field_set obj_map prec =
-    (prec, AST.fcall_in_assign_rule p field_set f arg, empty_id_map, obj_map)
+  let apply_rule f arg field_set obj_map prec rank =
+    ( prec,
+      rank,
+      AST.fcall_in_assign_rule p field_set f arg,
+      empty_id_map,
+      obj_map )
   in
   let set_object_type class_name child_name obj_types =
     match ObjTypeMap.find_opt class_name obj_types with
@@ -872,19 +913,29 @@ let fcall_in_assign_unroll (p : ASTIR.t) obj_types
     | Some _ -> None
     | None -> Some (ObjTypeMap.add class_name child_name obj_types)
   in
-  let apply_rule_for_all class_name field_set c_list =
-    List.fold_left
-      (fun lst (prec, (f, arg)) ->
-        let child_name = Utils.get_class_name (AST.get_func f).method_name in
-        match set_object_type class_name child_name obj_types with
-        | Some obj -> apply_rule f arg field_set obj prec :: lst
-        | None -> lst)
-      [] c_list
+  let apply_rule_for_all rank is_receiver class_name field_set c_list =
+    let _, lst =
+      List.fold_left
+        (fun (first, lst) (prec, (f, arg)) ->
+          let child_name = Utils.get_class_name (AST.get_func f).method_name in
+          match set_object_type class_name child_name obj_types with
+          | Some obj ->
+              if first && is_receiver then
+                (false, apply_rule f arg field_set obj prec false :: lst)
+              else (false, apply_rule f arg field_set obj prec rank :: lst)
+          | None -> (false, lst))
+        (true, []) c_list
+    in
+    lst
   in
   match p with
   | Assign (x0, _, _, _) ->
       let field_set = get_field_set x0 setter_map in
       let class_name = AST.get_vinfo x0 |> fst |> get_class_name in
+      let rank =
+        is_lowest_rank ~is_error_entry:(AST.get_v x0).of_error_method false x0
+          used_args
+      in
       let org_c_lst, c_lst, ret_c_lst =
         (* if class is special class, we don't use the methods returning that class type *)
         if List.mem class_name special_class_list then ([], [], [])
@@ -896,10 +947,12 @@ let fcall_in_assign_unroll (p : ASTIR.t) obj_types
         List.rev_append
           (get_c x0 c_lst summary m_info)
           (get_ret_c x0 ret_c_lst summary m_info t_info c_info setter_map)
-        |> apply_rule_for_all class_name field_set
+        |> apply_rule_for_all rank
+             (is_receiver (AST.get_vinfo x0 |> snd))
+             class_name field_set
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
-let recv_in_assign_unroll (prec, (p : ASTIR.t), loop_ids, obj_types)
+let recv_in_assign_unroll (prec, rank, (p : ASTIR.t), loop_ids, obj_types)
     { m_info; c_info; _ } =
   match p with
   | Assign (_, _, f, arg) when AST.recv_in_assign p ->
@@ -916,21 +969,29 @@ let recv_in_assign_unroll (prec, (p : ASTIR.t), loop_ids, obj_types)
           let r2 = AST.recv_in_assign_rule2_1 p recv f arg in
           let r3 = AST.recv_in_assign_rule3_1 p recv f arg in
           incr outer;
-          (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ])
+          (prec, rank, r2, loop_ids, obj_types)
+          :: [ (prec, rank, r3, loop_ids, obj_types) ])
       else if cname_condition (AST.get_func f).method_name m_info c_info then
         [
-          (prec, get_cname f |> AST.recv_in_assign_rule1 p, loop_ids, obj_types);
+          ( prec,
+            rank,
+            AST.recv_in_assign_rule1 p (get_cname f),
+            loop_ids,
+            obj_types );
         ]
       else
         let r2 = AST.recv_in_assign_rule2 p "con_recv" !recv in
         let r3 = AST.recv_in_assign_rule3 p "con_recv" !recv in
         incr recv;
-        (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ]
+        (prec, rank, r2, loop_ids, obj_types)
+        :: [ (prec, rank, r3, loop_ids, obj_types) ]
   | _ -> failwith "Fail: recv_in_assign_unroll"
 
-let rec arg_in_assign_unroll (prec, (p : ASTIR.t), loop_ids, obj_types) =
-  let apply_rule x arg =
+let rec arg_in_assign_unroll ?(is_error_entry = false)
+    (prec, rank, (p : ASTIR.t), loop_ids, obj_types) used_args =
+  let apply_rule x arg rank =
     ( prec,
+      rank,
       AST.arg_in_assign_rule p x (Param (AST.get_arg arg)),
       loop_ids,
       obj_types )
@@ -938,13 +999,16 @@ let rec arg_in_assign_unroll (prec, (p : ASTIR.t), loop_ids, obj_types) =
   match p with
   | Assign (_, _, f, arg) when AST.arg_in_assign p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
-      mk_arg_seq arg class_name
-      |> List.fold_left (fun lst x -> apply_rule x arg :: lst) []
+      mk_arg_seq ~is_error_entry arg class_name rank used_args
+      |> List.fold_left (fun lst (x, rank) -> apply_rule x arg rank :: lst) []
   | Seq (s1, s2) when AST.arg_in_assign s2 ->
-      arg_in_assign_unroll (prec, s2, loop_ids, obj_types)
+      arg_in_assign_unroll ~is_error_entry
+        (prec, rank, s2, loop_ids, obj_types)
+        used_args
       |> List.fold_left
-           (fun lst (p', s', loop', type') ->
+           (fun lst (p', rank', s', loop', type') ->
              ( p',
+               rank',
                ASTIR.Seq (s1, s'),
                loop_id_merge loop_ids loop',
                obj_type_merge obj_types type' )
@@ -953,14 +1017,15 @@ let rec arg_in_assign_unroll (prec, (p : ASTIR.t), loop_ids, obj_types) =
   | _ -> failwith "Fail: arg_in_assign_unroll"
 
 let void_unroll p =
-  (0, AST.void_rule1 p, empty_id_map, empty_obj_type_map)
+  (0, false, AST.void_rule1 p, empty_id_map, empty_obj_type_map)
   :: List.fold_left
-       (fun lst x -> (0, x, empty_id_map, empty_obj_type_map) :: lst)
+       (fun lst x -> (0, false, x, empty_id_map, empty_obj_type_map) :: lst)
        [] (AST.void_rule2 p)
 
 let fcall_in_void_unroll (p : ASTIR.t) p_data =
   let apply_rule f arg prec =
     ( prec,
+      false,
       AST.fcall_in_void_rule p f (ASTIR.Arg arg),
       empty_id_map,
       empty_obj_type_map )
@@ -975,22 +1040,31 @@ let fcall_in_void_unroll (p : ASTIR.t) p_data =
           [] lst
   | _ -> failwith "Fail: fcall_in_void_unroll"
 
-let recv_in_void_unroll (prec, (p : ASTIR.t), loop_ids, obj_types)
-    { m_info; c_info; _ } =
+let recv_in_void_unroll ?(is_error_entry = false)
+    (prec, rank, (p : ASTIR.t), loop_ids, obj_types) { m_info; c_info; _ } =
   match p with
   | Void (_, f, _) when AST.recv_in_void p ->
       if cname_condition (AST.get_func f).method_name m_info c_info then
-        [ (prec, get_cname f |> AST.recv_in_void_rule1 p, loop_ids, obj_types) ]
+        [
+          ( prec,
+            rank,
+            AST.recv_in_void_rule1 p (get_cname f),
+            loop_ids,
+            obj_types );
+        ]
       else
-        let r2 = AST.recv_in_void_rule2 p "con_recv" !recv in
-        let r3 = AST.recv_in_void_rule3 p "con_recv" !recv in
+        let r2 = AST.recv_in_void_rule2 ~is_error_entry p "con_recv" !recv in
+        let r3 = AST.recv_in_void_rule3 ~is_error_entry p "con_recv" !recv in
         incr recv;
-        (prec, r2, loop_ids, obj_types) :: [ (prec, r3, loop_ids, obj_types) ]
+        (prec, rank, r2, loop_ids, obj_types)
+        :: [ (prec, rank, r3, loop_ids, obj_types) ]
   | _ -> failwith "Fail: recv_in_void_unroll"
 
-let rec arg_in_void_unroll (prec, (p : ASTIR.t), loop_ids, obj_types) =
-  let apply_rule x arg =
+let rec arg_in_void_unroll ?(is_error_entry = false)
+    (prec, rank, (p : ASTIR.t), loop_ids, obj_types) used_args =
+  let apply_rule x arg rank =
     ( prec,
+      rank,
       AST.arg_in_void_rule p x (Param (AST.get_arg arg)),
       loop_ids,
       obj_types )
@@ -998,50 +1072,52 @@ let rec arg_in_void_unroll (prec, (p : ASTIR.t), loop_ids, obj_types) =
   match p with
   | Void (_, f, arg) when AST.arg_in_void p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
-      mk_arg_seq arg class_name
-      |> List.fold_left (fun lst x -> apply_rule x arg :: lst) []
+      mk_arg_seq ~is_error_entry arg class_name rank used_args
+      |> List.fold_left (fun lst (x, rank) -> apply_rule x arg rank :: lst) []
   | Seq (s1, s2) when AST.arg_in_void s2 ->
-      arg_in_void_unroll (prec, s2, loop_ids, obj_types)
+      arg_in_void_unroll ~is_error_entry
+        (prec, rank, s2, loop_ids, obj_types)
+        used_args
       |> List.fold_left
-           (fun lst (p', s', loop', type') ->
-             (p', ASTIR.Seq (s1, s'), loop', type') :: lst)
+           (fun lst (p', rank', s', loop', type') ->
+             (p', rank', ASTIR.Seq (s1, s'), loop', type') :: lst)
            []
   | _ -> failwith "Fail: arg_in_void_unroll"
 
 let apply_mock_rule p =
-  (0, AST.mk_mock_statement p, empty_id_map, empty_obj_type_map)
+  (0, false, AST.mk_mock_statement p, empty_id_map, empty_obj_type_map)
 
 let apply_recv_in_assign_rule_for_all p_data p_list =
   List.fold_left
     (fun acc_lst x -> recv_in_assign_unroll x p_data |> append acc_lst)
     [] p_list
 
-let apply_arg_in_assign_rule_for_all p_list =
+let apply_arg_in_assign_rule_for_all used_args p_list =
   List.fold_left
-    (fun acc_lst x -> arg_in_assign_unroll x |> append acc_lst)
+    (fun acc_lst x -> arg_in_assign_unroll x used_args |> append acc_lst)
     [] p_list
 
 let is_having_receiver p_list =
   (* at least receiver *)
   let filtered =
-    List.filter (fun (_, x, _, _) -> AST.count_params x < 2) p_list
+    List.filter (fun (_, _, x, _, _) -> AST.count_params x < 2) p_list
   in
   if filtered = [] then true else false
 
-let one_unroll (p : ASTIR.t) obj_types p_data =
+let one_unroll (p : ASTIR.t) used_args obj_types p_data =
   match p with
   | Seq _ when AST.void p -> void_unroll p
   | Const _ when AST.const p -> const_unroll p p_data
   | Assign _ when AST.fcall_in_assign p -> (
       (* fcall_in_assign --> recv_in_assign --> arg_in_assign *)
-      match fcall_in_assign_unroll p obj_types p_data with
+      match fcall_in_assign_unroll p used_args obj_types p_data with
       | exception Not_found_get_object ->
           if !Cmdline.mock then [ apply_mock_rule p ]
           else raise Not_found_get_object
       | p_lst ->
           let lst =
             apply_recv_in_assign_rule_for_all p_data p_lst
-            |> apply_arg_in_assign_rule_for_all
+            |> apply_arg_in_assign_rule_for_all used_args
           in
           if !Cmdline.mock && is_having_receiver p_lst then
             apply_mock_rule p :: lst
@@ -1053,45 +1129,50 @@ let one_unroll (p : ASTIR.t) obj_types p_data =
            (fun acc_lst x -> recv_in_void_unroll x p_data |> append acc_lst)
            []
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll x used_args |> append acc_lst)
            []
   | Void _ when AST.fcall2_in_void p ->
       (* fcall2_in_void --> arg_in_void *)
       fcall_in_void_unroll p p_data
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
+           (fun acc_lst x -> arg_in_void_unroll x used_args |> append acc_lst)
            []
   | Void _ when AST.recv_in_void p ->
       (* unroll error entry *)
-      recv_in_void_unroll (0, p, empty_id_map, empty_obj_type_map) p_data
+      recv_in_void_unroll ~is_error_entry:true
+        (0, false, p, empty_id_map, empty_obj_type_map)
+        p_data
       |> List.fold_left
-           (fun acc_lst x -> arg_in_void_unroll x |> append acc_lst)
+           (fun acc_lst x ->
+             arg_in_void_unroll ~is_error_entry:true x used_args
+             |> append acc_lst)
            []
   | _ -> failwith "Fail: one_unroll"
 
-let rec all_unroll ?(assign_ground = false) (p : ASTIR.t) obj_types p_data
-    stmt_map =
+let rec all_unroll ?(assign_ground = false) (p : ASTIR.t) used_args obj_types
+    p_data stmt_map =
   match p with
   | _ when AST.ground p -> stmt_map
-  | _ when assign_ground -> all_unroll_void p obj_types p_data stmt_map
+  | _ when assign_ground ->
+      all_unroll_void p used_args obj_types p_data stmt_map
   | Seq (s1, s2) when s2 = Stmt ->
-      all_unroll ~assign_ground s1 obj_types p_data stmt_map
+      all_unroll ~assign_ground s1 used_args obj_types p_data stmt_map
   | Seq (s1, s2) ->
-      all_unroll ~assign_ground s1 obj_types p_data stmt_map
-      |> all_unroll ~assign_ground s2 obj_types p_data
-  | _ -> StmtMap.M.add p (one_unroll p obj_types p_data) stmt_map
+      all_unroll ~assign_ground s1 used_args obj_types p_data stmt_map
+      |> all_unroll ~assign_ground s2 used_args obj_types p_data
+  | _ -> StmtMap.M.add p (one_unroll p used_args obj_types p_data) stmt_map
 
-and all_unroll_void (p : ASTIR.t) obj_types p_data stmt_map =
+and all_unroll_void (p : ASTIR.t) used_args obj_types p_data stmt_map =
   match p with
   | _ when AST.ground p -> stmt_map
   | Seq _ when AST.void p ->
-      StmtMap.M.add p (one_unroll p obj_types p_data) stmt_map
+      StmtMap.M.add p (one_unroll p used_args obj_types p_data) stmt_map
   | Seq (s1, s2) -> (
-      let new_void s1 (p', s', loop', type') =
-        (p', ASTIR.Seq (AST.modify_last_assign s1, s'), loop', type')
+      let new_void s1 (p', rank', s', loop', type') =
+        (p', rank', ASTIR.Seq (AST.modify_last_assign s1, s'), loop', type')
       in
       let new_void_list s1 s2 =
-        one_unroll (Seq (AST.last_code s1, s2)) obj_types p_data
+        one_unroll (Seq (AST.last_code s1, s2)) used_args obj_types p_data
         |> List.fold_left (fun lst void -> new_void s1 void :: lst) []
         |> List.rev
       in
@@ -1099,8 +1180,8 @@ and all_unroll_void (p : ASTIR.t) obj_types p_data stmt_map =
       | Assign _ when AST.is_stmt s2 ->
           StmtMap.M.add p (new_void_list s1 s2) stmt_map
       | _ ->
-          all_unroll_void s1 obj_types p_data stmt_map
-          |> all_unroll_void s2 obj_types p_data)
+          all_unroll_void s1 used_args obj_types p_data stmt_map
+          |> all_unroll_void s2 used_args obj_types p_data)
   | _ -> failwith "Fail: all_unroll_void"
 
 let rec change_stmt (p : ASTIR.t) s new_s : ASTIR.t =
@@ -1127,10 +1208,11 @@ let sort_stmts map stmts =
       | None, None -> 0)
     stmts
 
-let combinate_stmt (p', s', loop_ids', obj_types') s new_s_list =
+let combinate_stmt (p', rank', s', loop_ids', obj_types') s new_s_list =
   List.fold_left
-    (fun lst (new_p, new_s, new_loop, new_type) ->
+    (fun lst (new_p, new_rank, new_s, new_loop, new_type) ->
       ( p' + new_p,
+        (if rank' then rank' else new_rank),
         change_stmt s' s new_s,
         loop_id_merge loop_ids' new_loop,
         obj_type_merge obj_types' new_type )
@@ -1142,7 +1224,7 @@ let combinate_stmts s new_s_lst partial_lst =
     (fun l _p -> combinate_stmt _p s new_s_lst |> append l)
     [] partial_lst
 
-let combinate { prec; tc; loop_ids; obj_types; _ } stmt_map =
+let combinate { prec; lowest_rank; tc; loop_ids; obj_types; _ } stmt_map =
   (* stmts is all fragments of statements in partial tc *)
   let all_combinate stmts =
     List.fold_left
@@ -1153,7 +1235,7 @@ let combinate { prec; tc; loop_ids; obj_types; _ } stmt_map =
             []
         | Some new_s_list -> combinate_stmts s new_s_list lst
         | _ -> lst)
-      [ (prec, tc, loop_ids, obj_types) ]
+      [ (prec, lowest_rank, tc, loop_ids, obj_types) ]
       stmts
   in
   return_stmts tc |> sort_stmts stmt_map |> all_combinate |> List.rev
@@ -1276,15 +1358,18 @@ let pretty_format p = (imports p ImportSet.empty, AST.code p)
 let priority_q queue =
   List.stable_sort
     (fun p1 p2 ->
-      let nt1, t1, prec1 = get_cost p1 in
-      let nt2, t2, prec2 = get_cost p2 in
-      if compare (nt1 + t1 - prec1) (nt2 + t2 - prec2) <> 0 then
-        compare (nt1 + t1 - prec1) (nt2 + t2 - prec2)
-      else if compare prec1 prec2 <> 0 then compare prec2 prec1
-      else compare nt1 nt2)
+      let nt1, t1, prec1, lowest_rank1 = get_cost p1 in
+      let nt2, t2, prec2, lowest_rank2 = get_cost p2 in
+      if lowest_rank1 = lowest_rank2 then
+        if compare (nt1 + t1 - prec1) (nt2 + t2 - prec2) <> 0 then
+          compare (nt1 + t1 - prec1) (nt2 + t2 - prec2)
+        else if compare prec1 prec2 <> 0 then compare prec2 prec1
+        else compare nt1 nt2
+      else if lowest_rank1 then (* priority of p1 is lower than p2 *) 1
+      else -1)
     queue
 
-let rec mk_testcase p_data queue =
+let rec mk_testcase used_args p_data queue =
   let queue =
     match !Cmdline.synthesis_mode with
     | Cmdline.Basic | Cmdline.Pruning -> queue
@@ -1293,14 +1378,21 @@ let rec mk_testcase p_data queue =
   Logger.debug "# of test cases: %d" (List.length queue);
   match queue with
   | p :: tl ->
+      if !Cmdline.debug then
+        Logger.info
+          "cost of current tc (nt, t, prec, rank): (%d, %d, %d, %b)\n\
+           current tc:\n\
+           %s"
+          p.nt_cost p.t_cost p.prec p.lowest_rank
+          (pretty_format p.tc |> snd);
       if !Cmdline.with_loop && AST.ground p.tc && AST.with_withloop p.tc then
         [ (Need_Loop, pretty_format p.tc, p.loop_ids, tl) ]
       else if AST.ground p.tc then
         [ (Complete, pretty_format p.tc, p.loop_ids, tl) ]
       else
         (match
-           all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc p.obj_types
-             p_data StmtMap.M.empty
+           all_unroll ~assign_ground:(AST.assign_ground p.tc) p.tc used_args
+             p.obj_types p_data StmtMap.M.empty
          with
         | exception Not_found_setter ->
             Logger.debug "Exception: not found setter in %s"
@@ -1316,11 +1408,11 @@ let rec mk_testcase p_data queue =
             tl
         | x ->
             List.fold_left
-              (fun lst (new_p, new_s, new_loop, new_type) ->
-                mk_cost p new_s new_loop new_type new_p :: lst)
+              (fun lst (new_p, new_rank, new_s, new_loop, new_type) ->
+                mk_cost p new_s new_loop new_type new_p new_rank :: lst)
               [] (combinate p x)
             |> List.rev_append (List.rev tl))
-        |> mk_testcase p_data
+        |> mk_testcase used_args p_data
   | [] -> []
 
 let apply_init_rule list =
@@ -1333,10 +1425,10 @@ let apply_init_rule list =
 let init_cost tcs =
   List.fold_left
     (fun lst new_tc ->
-      mk_cost empty_p new_tc empty_id_map empty_obj_type_map 0 :: lst)
+      mk_cost empty_p new_tc empty_id_map empty_obj_type_map 0 false :: lst)
     [] tcs
 
-let mk_testcases ~is_start queue (e_method, error_summary) p_data =
+let mk_testcases ~is_start queue (e_method, error_summary, used_args) p_data =
   let p_info, init =
     if is_start then (
       set_methods_to_ignore p_data.m_info p_data.c_info p_data.cp_map;
@@ -1350,6 +1442,6 @@ let mk_testcases ~is_start queue (e_method, error_summary) p_data =
         (p_data.prim_info, []))
     else (p_data.prim_info, queue)
   in
-  let result = mk_testcase (update_prim p_data p_info) init in
+  let result = mk_testcase used_args (update_prim p_data p_info) init in
   if result = [] then (Incomplete, (ImportSet.empty, ""), empty_id_map, [])
   else List.hd result
