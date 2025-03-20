@@ -581,8 +581,7 @@ let get_cfunc id constructor m_info =
   in
   let func = ASTIR.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
-    mk_arg ~is_s:(is_static c m_info)
-      ~is_error_entry:(AST.get_v id).of_error_method
+    mk_arg ~is_s:(is_static c m_info) ~is_error_entry:false
       (get_formal_params c m_info)
       s
   in
@@ -721,7 +720,7 @@ let get_arg_seq ~is_error_entry (args : ASTIR.id list) lowest_rank used_args =
     [ (ASTIR.Skip, lowest_rank) ]
     args
 
-let mk_arg_seq ?(is_error_entry = false) arg class_name lowest_rank used_args =
+let mk_arg_seq ~is_error_entry arg class_name lowest_rank used_args =
   let modified_x x =
     if is_primitive_from_v x then { x with import = class_name } else x
   in
@@ -804,8 +803,8 @@ let number_const p lowest_rank =
 let apply_rule1 p x =
   (fst x, false, AST.const_rule1 p (snd x), empty_id_map, empty_obj_type_map)
 
-let apply_rule2 p x =
-  (fst x, false, AST.const_rule2 p (snd x), empty_id_map, empty_obj_type_map)
+let apply_rule2 p x rank =
+  (fst x, rank, AST.const_rule2 p (snd x), empty_id_map, empty_obj_type_map)
 
 let apply_rule3 p x =
   (fst x, false, AST.const_rule3 p, empty_id_map, empty_obj_type_map)
@@ -835,40 +834,48 @@ let get_r3 p prim_info x =
       | _ -> apply_rule3 p x1 :: lst)
     [] (get_value x prim_info)
 
-let get_r2 p { summary; inst_info; _ } x =
-  if is_comparable x then comparable_const p (AST.get_v x).of_error_method
-  else if is_object x then object_const p (AST.get_v x).of_error_method
-  else if is_number x then number_const p (AST.get_v x).of_error_method
+let get_r2 p used_args { summary; inst_info; _ } x =
+  let rank =
+    is_lowest_rank ~is_error_entry:(AST.get_v x).of_error_method false x
+      used_args
+  in
+  if is_comparable x then comparable_const p rank
+  else if is_object x then object_const p rank
+  else if is_number x then number_const p rank
   else
     List.fold_left
-      (fun lst x1 -> apply_rule2 p x1 :: lst)
+      (fun lst x1 -> apply_rule2 p x1 rank :: lst)
       []
       (global_var_list
          (AST.get_vinfo x |> fst |> get_class_name)
          (AST.get_v x).summary summary inst_info)
 
-let get_r2_with_loop p { summary; inst_info; _ } x =
+let get_r2_with_loop p used_args { summary; inst_info; _ } x =
   let gcs =
     global_var_list
       (AST.get_vinfo x |> fst |> get_class_name)
       (AST.get_v x).summary summary inst_info
   in
-  if is_comparable x then comparable_const p (AST.get_v x).of_error_method
-  else if is_object x then object_const p (AST.get_v x).of_error_method
-  else if is_number x then number_const p (AST.get_v x).of_error_method
+  let rank =
+    is_lowest_rank ~is_error_entry:(AST.get_v x).of_error_method false x
+      used_args
+  in
+  if is_comparable x then comparable_const p rank
+  else if is_object x then object_const p rank
+  else if is_number x then number_const p rank
   else if gcs = [] then []
   else if List.length gcs = 1 then
     (* if number of global constant is one, then do not using loop. (optimize) *)
-    [ apply_rule2 p (List.hd gcs) ]
+    [ apply_rule2 p (List.hd gcs) rank ]
   else get_loop_appl p x gcs
 
-let const_unroll_with_loop (p : ASTIR.t) ({ prim_info; _ } as info) =
+let const_unroll_with_loop (p : ASTIR.t) used_args ({ prim_info; _ } as info) =
   match p with
   | Const (x, _) -> (
       if is_primitive_from_id x || is_special_primitive_from_id x then
         get_loop_appl p x (get_value x prim_info |> sort_const)
       else
-        match get_r2_with_loop p info x with
+        match get_r2_with_loop p used_args info x with
         | [] ->
             if is_receiver (AST.get_vinfo x |> snd) || not_null_obj x then
               raise Not_found_global_constant
@@ -879,16 +886,16 @@ let const_unroll_with_loop (p : ASTIR.t) ({ prim_info; _ } as info) =
             else List.rev_append (get_r3 p prim_info x) r2_with_loop)
   | _ -> failwith "Fail: const_unroll_with_loop"
 
-let const_unroll (p : ASTIR.t) ({ prim_info; _ } as info) =
+let const_unroll (p : ASTIR.t) used_args ({ prim_info; _ } as info) =
   match p with
   | Const (x, _) -> (
-      if !Cmdline.with_loop then const_unroll_with_loop p info
+      if !Cmdline.with_loop then const_unroll_with_loop p used_args info
       else if is_primitive_from_id x || is_special_primitive_from_id x then
         List.fold_left
           (fun lst x1 -> apply_rule1 p x1 :: lst)
           [] (get_value x prim_info)
       else
-        match get_r2 p info x with
+        match get_r2 p used_args info x with
         | [] ->
             if is_receiver (AST.get_vinfo x |> snd) || not_null_obj x then
               raise Not_found_global_constant
@@ -987,8 +994,8 @@ let recv_in_assign_unroll (prec, rank, (p : ASTIR.t), loop_ids, obj_types)
         :: [ (prec, rank, r3, loop_ids, obj_types) ]
   | _ -> failwith "Fail: recv_in_assign_unroll"
 
-let rec arg_in_assign_unroll ?(is_error_entry = false)
-    (prec, rank, (p : ASTIR.t), loop_ids, obj_types) used_args =
+let rec arg_in_assign_unroll (prec, rank, (p : ASTIR.t), loop_ids, obj_types)
+    used_args =
   let apply_rule x arg rank =
     ( prec,
       rank,
@@ -999,12 +1006,10 @@ let rec arg_in_assign_unroll ?(is_error_entry = false)
   match p with
   | Assign (_, _, f, arg) when AST.arg_in_assign p ->
       let class_name = Utils.get_class_name (AST.get_func f).method_name in
-      mk_arg_seq ~is_error_entry arg class_name rank used_args
+      mk_arg_seq ~is_error_entry:false arg class_name rank used_args
       |> List.fold_left (fun lst (x, rank) -> apply_rule x arg rank :: lst) []
   | Seq (s1, s2) when AST.arg_in_assign s2 ->
-      arg_in_assign_unroll ~is_error_entry
-        (prec, rank, s2, loop_ids, obj_types)
-        used_args
+      arg_in_assign_unroll (prec, rank, s2, loop_ids, obj_types) used_args
       |> List.fold_left
            (fun lst (p', rank', s', loop', type') ->
              ( p',
@@ -1107,7 +1112,7 @@ let is_having_receiver p_list =
 let one_unroll (p : ASTIR.t) used_args obj_types p_data =
   match p with
   | Seq _ when AST.void p -> void_unroll p
-  | Const _ when AST.const p -> const_unroll p p_data
+  | Const _ when AST.const p -> const_unroll p used_args p_data
   | Assign _ when AST.fcall_in_assign p -> (
       (* fcall_in_assign --> recv_in_assign --> arg_in_assign *)
       match fcall_in_assign_unroll p used_args obj_types p_data with
