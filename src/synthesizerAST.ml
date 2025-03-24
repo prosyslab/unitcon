@@ -84,18 +84,22 @@ let loop_value_to_tc rep_input loop_id_map tc =
     tc rep_input
 
 (* return: (testcase * list(partial testcase)) *)
-let make_testcase ~is_start queue e_method_info program_info =
-  GeneratorAST.mk_testcases ~is_start queue e_method_info program_info
+let make_testcase ~is_start queue e_method_info p_info used_args prim_info =
+  GeneratorAST.mk_testcases ~is_start queue e_method_info p_info used_args
+    prim_info
 
 (* queue: (testcase * list(partial testcase)) *)
-let rec run_test ~is_start info queue e_method_info p_data =
+let rec run_test ~is_start info queue e_method_info p_data used_args prim_info =
   if !normal_exit_flag then raise Normal_Exit
   else if !early_stop_flag then raise Early_Stop
-  else run_test_when_no_exn ~is_start info queue e_method_info p_data
+  else
+    run_test_when_no_exn ~is_start info queue e_method_info p_data used_args
+      prim_info
 
-and run_test_when_no_exn ~is_start info queue e_method_info p_data =
-  let completion, tc, loop_id_map, tc_list =
-    make_testcase ~is_start queue e_method_info p_data
+and run_test_when_no_exn ~is_start info queue e_method_info p_data used_args
+    prim_info =
+  let (completion, tc, loop_id_map, tc_list), used_args, prim_info =
+    make_testcase ~is_start queue e_method_info p_data used_args prim_info
   in
   match completion with
   | Need_Loop ->
@@ -108,7 +112,8 @@ and run_test_when_no_exn ~is_start info queue e_method_info p_data =
         (tc, loop_info, _time);
       let found_rep_input = run_multi_testfile () in
       if found_rep_input = [] then
-        run_test ~is_start:false info tc_list e_method_info p_data
+        run_test ~is_start:false info tc_list e_method_info p_data used_args
+          prim_info
       else
         (* found crash input with loop *)
         let new_tc = loop_value_to_tc found_rep_input loop_id_map (tc |> snd) in
@@ -119,7 +124,8 @@ and run_test_when_no_exn ~is_start info queue e_method_info p_data =
           !num_of_tc_files mod !Cmdline.batch_size = 0 || !early_stop_keep_going
         then run_testfile ()
         else ();
-        run_test ~is_start:false info tc_list e_method_info p_data
+        run_test ~is_start:false info tc_list e_method_info p_data used_args
+          prim_info
   | Incomplete ->
       (* early stopping *)
       if !num_of_last_exec_tc < !num_of_tc_files then run_testfile () else ();
@@ -130,12 +136,14 @@ and run_test_when_no_exn ~is_start info queue e_method_info p_data =
       add_testcase info.test_dir !num_of_tc_files (tc, _time);
       if !num_of_tc_files mod !Cmdline.batch_size = 0 then run_testfile ()
       else ();
-      run_test ~is_start:false info tc_list e_method_info p_data
+      run_test ~is_start:false info tc_list e_method_info p_data used_args
+        prim_info
 
 let run program_dir out_dir =
   try
-    let error_method_info, p_data = setup program_dir out_dir in
-    run_test ~is_start:true !info [] error_method_info p_data
+    let (e_method, e_summary, used_args), p_data = setup program_dir out_dir in
+    run_test ~is_start:true !info [] (e_method, e_summary) p_data used_args
+      p_data.prim_info
   with
   | Normal_Exit ->
       Logger.info "Catch Normal Exit exception in RunProgramAST";

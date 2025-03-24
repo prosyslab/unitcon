@@ -440,6 +440,28 @@ module DUG = struct
         | _ -> found)
       node succ
 
+  let get_field_from_ufmap target var ufmap =
+    let symbol =
+      Condition.M.fold
+        (fun sym id find ->
+          match id with Condition.RH_Var i when i = target -> sym | _ -> find)
+        var Condition.RH_Any
+    in
+    match UseFieldMap.M.find_opt symbol ufmap with
+    | Some f -> f
+    | _ -> FieldSet.empty
+
+  let get_import_of_f = function Func -> "" | F f -> f.import
+
+  let get_method_name_of_f = function Func -> "" | F f -> f.method_name
+
+  let get_field_of_f = function
+    | Func -> FieldSet.empty
+    | F f ->
+        get_field_from_ufmap "this" (fst f.summary.precond) f.summary.use_field
+
+  let get_summary_of_f = function Func -> empty_summary | F f -> f.summary
+
   (* ************************************** *
      Synthesis Rules
    * ************************************** *)

@@ -732,11 +732,11 @@ let is_matched_variable already_var new_var =
   let summary2 = (DUG.get_v new_var).summary in
   let this_sym1 = get_id_symbol (fst summary1.precond) "this" |> get_rh_name in
   let this_sym2 = get_id_symbol (fst summary2.precond) "this" |> get_rh_name in
-  let check =
+  let check_intersect =
     check_intersect ~is_init:true summary1 summary2 [ (this_sym1, this_sym2) ]
-    |> List.filter (fun (_, c) -> c = false)
   in
-  if check = [] then true else false
+  let false_check = List.filter (fun (_, c) -> c = FALSE) check_intersect in
+  if false_check = [] then true else false
 
 let get_reusable_arg s prev_num stmt tc arg =
   let var_to_find = (DUG.get_v arg).variable in
@@ -1406,7 +1406,7 @@ and propagation e_method e_summary caller_method caller_preconds call_prop
         "Given wrong summary of error method! So, the \"find_ee\" step \
          progresses using a temporary summary";
       let tmp_summary = get_first_summary e_method p_data.summary in
-      let use_summary = if tmp_summary = empty_summary then false else true in
+      let use_summary = if tmp_summary = empty_summary then FALSE else TRUE in
       (tmp_summary.value, snd tmp_summary.precond, use_summary)
   in
   let new_uf = mk_new_uf e_method e_summary call_prop p_data.m_info in
@@ -1417,17 +1417,18 @@ and propagation e_method e_summary caller_method caller_preconds call_prop
   | Cmdline.Pruning ->
       ErrorEntrySet.union caller_preconds
         (find_ee caller_method call_prop p_data)
-  | Cmdline.Priority | Cmdline.Full ->
-      if check_match then
-        let new_call_prop =
-          {
-            (new_value_summary new_value call_prop |> new_mem_summary new_mem) with
-            use_field = new_uf;
-          }
-        in
-        ErrorEntrySet.union caller_preconds
-          (find_ee caller_method new_call_prop p_data)
-      else caller_preconds
+  | Cmdline.Priority | Cmdline.Full -> (
+      match check_match with
+      | TRUE | DONT_MATTER ->
+          let new_call_prop =
+            {
+              (new_value_summary new_value call_prop |> new_mem_summary new_mem) with
+              use_field = new_uf;
+            }
+          in
+          ErrorEntrySet.union caller_preconds
+            (find_ee caller_method new_call_prop p_data)
+      | FALSE -> caller_preconds)
 
 let stmt_import (s : DUGIR.t) set =
   match s with
@@ -1525,20 +1526,23 @@ let init_cost tcs =
       mk_cost empty_p new_tc empty_id_map empty_obj_type_map 0 false :: lst)
     [] tcs
 
-let mk_testcases ~is_start queue (e_method, error_summary, used_args) p_data =
-  let p_info, init =
+let mk_testcases ~is_start queue (e_method, error_summary) p_data used_args
+    prim_info =
+  let used_args, p_info, init =
     if is_start then (
       set_methods_to_ignore p_data.m_info p_data.c_info p_data.cp_map;
       ErrorEntrySet.fold
-        (fun (ee, ee_s) (p_info_init, init_list) ->
+        (fun (ee, ee_s) (used_args, p_info_init, init_list) ->
           Logger.debug "error entry method: %s" ee;
-          ( Constant.expand_string_value ee p_info_init,
+          ( (if ee = e_method then used_args else []),
+            Constant.expand_string_value ee p_info_init,
             apply_init_rule (get_void_func DUGIR.Id ~ee ~es:ee_s p_data)
             |> init_cost |> List.rev_append init_list ))
         (find_ee e_method error_summary p_data)
-        (p_data.prim_info, []))
-    else (p_data.prim_info, queue)
+        (used_args, prim_info, []))
+    else (used_args, prim_info, queue)
   in
   let result = mk_testcase used_args (update_prim p_data p_info) init in
-  if result = [] then (Incomplete, (ImportSet.empty, ""), empty_id_map, [])
-  else List.hd result
+  if result = [] then
+    ((Incomplete, (ImportSet.empty, ""), empty_id_map, []), used_args, prim_info)
+  else (List.hd result, used_args, prim_info)

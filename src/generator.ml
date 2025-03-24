@@ -21,6 +21,8 @@ type data = {
   prim_info : PrimitiveInfo.t;
 }
 
+type checker = TRUE | FALSE | DONT_MATTER
+
 let update_prim p_data prim_info =
   {
     cg = p_data.cg;
@@ -441,16 +443,16 @@ let check_eq_l_one ~is_le (eq_v : Value.const) (l_v : Value.const) =
   in
   match (eq_v, l_v) with
   | Int eq, Int l | Long eq, Long l | Int eq, Long l | Long eq, Int l ->
-      if int_l eq l then Some true else Some false
+      if int_l eq l then Some TRUE else Some FALSE
   | Float eq, Float l
   | Double eq, Double l
   | Float eq, Double l
   | Double eq, Float l ->
-      if float_l eq l then Some true else Some false
-  | PlusInf, PlusInf when not is_le -> Some false
-  | _, PlusInf -> Some true
-  | MinusInf, MinusInf when is_le -> Some true
-  | _, MinusInf -> Some false
+      if float_l eq l then Some TRUE else Some FALSE
+  | PlusInf, PlusInf when not is_le -> Some FALSE
+  | _, PlusInf -> Some TRUE
+  | MinusInf, MinusInf when is_le -> Some TRUE
+  | _, MinusInf -> Some FALSE
   | _ -> None
 
 let check_eq_g_one ~is_ge (eq_v : Value.const) (g_v : Value.const) =
@@ -469,16 +471,16 @@ let check_eq_g_one ~is_ge (eq_v : Value.const) (g_v : Value.const) =
   | Long eq_i, Long g_i
   | Int eq_i, Long g_i
   | Long eq_i, Int g_i ->
-      if int_g eq_i g_i then Some true else Some false
+      if int_g eq_i g_i then Some TRUE else Some FALSE
   | Float eq_f, Float g_f
   | Double eq_f, Double g_f
   | Float eq_f, Double g_f
   | Double eq_f, Float g_f ->
-      if float_g eq_f g_f then Some true else Some false
-  | PlusInf, PlusInf when is_ge -> Some true
-  | _, PlusInf -> Some false
-  | MinusInf, MinusInf when not is_ge -> Some false
-  | _, MinusInf -> Some true
+      if float_g eq_f g_f then Some TRUE else Some FALSE
+  | PlusInf, PlusInf when is_ge -> Some TRUE
+  | _, PlusInf -> Some FALSE
+  | MinusInf, MinusInf when not is_ge -> Some FALSE
+  | _, MinusInf -> Some TRUE
   | _ -> None
 
 let check_eq_btw_one (eq_v : Value.const) (btw_min : Value.const)
@@ -492,7 +494,7 @@ let check_eq_btw_one (eq_v : Value.const) (btw_min : Value.const)
   | Long eq_i, Int btw_min_i, Long btw_max_i
   | Long eq_i, Long btw_min_i, Int btw_max_i
   | Long eq_i, Long btw_min_i, Long btw_max_i ->
-      if eq_i >= btw_min_i && eq_i <= btw_max_i then Some true else Some false
+      if eq_i >= btw_min_i && eq_i <= btw_max_i then Some TRUE else Some FALSE
   | Float eq_f, Float btw_min_f, Float btw_max_f
   | Float eq_f, Float btw_min_f, Double btw_max_f
   | Float eq_f, Double btw_min_f, Float btw_max_f
@@ -501,12 +503,12 @@ let check_eq_btw_one (eq_v : Value.const) (btw_min : Value.const)
   | Double eq_f, Float btw_min_f, Double btw_max_f
   | Double eq_f, Double btw_min_f, Float btw_max_f
   | Double eq_f, Double btw_min_f, Double btw_max_f ->
-      if eq_f >= btw_min_f && eq_f <= btw_max_f then Some true else Some false
+      if eq_f >= btw_min_f && eq_f <= btw_max_f then Some TRUE else Some FALSE
   | Int _, MinusInf, PlusInf
   | Long _, MinusInf, PlusInf
   | Float _, MinusInf, PlusInf
   | Double _, MinusInf, PlusInf ->
-      Some true
+      Some TRUE
   | Int _, MinusInf, _
   | Long _, MinusInf, _
   | Float _, MinusInf, _
@@ -530,7 +532,7 @@ let check_eq_out_one (eq_v : Value.const) (out_min : Value.const)
   | Long eq_i, Int o_min_i, Long o_max_i
   | Long eq_i, Long o_min_i, Int o_max_i
   | Long eq_i, Long o_min_i, Long o_max_i ->
-      if eq_i < o_min_i && eq_i > o_max_i then Some true else Some false
+      if eq_i < o_min_i && eq_i > o_max_i then Some TRUE else Some FALSE
   | Float eq_f, Float o_min_f, Float o_max_f
   | Float eq_f, Float o_min_f, Double o_max_f
   | Float eq_f, Double o_min_f, Float o_max_f
@@ -539,12 +541,12 @@ let check_eq_out_one (eq_v : Value.const) (out_min : Value.const)
   | Double eq_f, Float o_min_f, Double o_max_f
   | Double eq_f, Double o_min_f, Float o_max_f
   | Double eq_f, Double o_min_f, Double o_max_f ->
-      if eq_f < o_min_f && eq_f > o_max_f then Some true else Some false
+      if eq_f < o_min_f && eq_f > o_max_f then Some TRUE else Some FALSE
   | Int _, MinusInf, PlusInf
   | Long _, MinusInf, PlusInf
   | Float _, MinusInf, PlusInf
   | Double _, MinusInf, PlusInf ->
-      Some false
+      Some FALSE
   | Int _, MinusInf, _
   | Long _, MinusInf, _
   | Float _, MinusInf, _
@@ -573,16 +575,16 @@ let check_l_g_one ~is_e (l_v : Value.const) (g_v : Value.const) =
   | Long l_i, Long g_i
   | Int l_i, Long g_i
   | Long l_i, Int g_i ->
-      if int_e l_i g_i then Some true else Some false
+      if int_e l_i g_i then Some TRUE else Some FALSE
   | Float l_f, Float g_f
   | Double l_f, Double g_f
   | Float l_f, Double g_f
   | Double l_f, Float g_f ->
-      if float_e l_f g_f then Some true else Some false
-  | PlusInf, PlusInf when not is_e -> Some false
-  | PlusInf, _ -> Some true
-  | MinusInf, MinusInf when not is_e -> Some false
-  | _, MinusInf -> Some true
+      if float_e l_f g_f then Some TRUE else Some FALSE
+  | PlusInf, PlusInf when not is_e -> Some FALSE
+  | PlusInf, _ -> Some TRUE
+  | MinusInf, MinusInf when not is_e -> Some FALSE
+  | _, MinusInf -> Some TRUE
   | _ -> None
 
 let check_l_btw_one ~is_le (l_v : Value.const) (btw_min : Value.const) =
@@ -601,16 +603,16 @@ let check_l_btw_one ~is_le (l_v : Value.const) (btw_min : Value.const) =
   | Long l_i, Long btw_min_i
   | Int l_i, Long btw_min_i
   | Long l_i, Int btw_min_i ->
-      if int_l l_i btw_min_i then Some false else Some true
+      if int_l l_i btw_min_i then Some FALSE else Some TRUE
   | Float l_f, Float btw_min_f
   | Double l_f, Double btw_min_f
   | Float l_f, Double btw_min_f
   | Double l_f, Float btw_min_f ->
-      if float_l l_f btw_min_f then Some false else Some true
-  | MinusInf, MinusInf when not is_le -> Some false
-  | _, MinusInf -> Some true
-  | PlusInf, PlusInf when is_le -> Some true
-  | _, PlusInf -> Some false
+      if float_l l_f btw_min_f then Some FALSE else Some TRUE
+  | MinusInf, MinusInf when not is_le -> Some FALSE
+  | _, MinusInf -> Some TRUE
+  | PlusInf, PlusInf when is_le -> Some TRUE
+  | _, PlusInf -> Some FALSE
   | _ -> None
 
 let check_g_btw_one ~is_ge (g_v : Value.const) (btw_max : Value.const) =
@@ -629,16 +631,16 @@ let check_g_btw_one ~is_ge (g_v : Value.const) (btw_max : Value.const) =
   | Long g_i, Long btw_max_i
   | Int g_i, Long btw_max_i
   | Long g_i, Int btw_max_i ->
-      if int_g g_i btw_max_i then Some false else Some true
+      if int_g g_i btw_max_i then Some FALSE else Some TRUE
   | Float g_f, Float btw_max_f
   | Double g_f, Double btw_max_f
   | Float g_f, Double btw_max_f
   | Double g_f, Float btw_max_f ->
-      if float_g g_f btw_max_f then Some false else Some true
-  | MinusInf, MinusInf when not is_ge -> Some false
-  | _, MinusInf -> Some true
-  | PlusInf, PlusInf when is_ge -> Some true
-  | _, PlusInf -> Some false
+      if float_g g_f btw_max_f then Some FALSE else Some TRUE
+  | MinusInf, MinusInf when not is_ge -> Some FALSE
+  | _, MinusInf -> Some TRUE
+  | PlusInf, PlusInf when is_ge -> Some TRUE
+  | _, PlusInf -> Some FALSE
   | _ -> None
 
 let check_btw_btw_one (caller_min : Value.const) (caller_max : Value.const)
@@ -660,7 +662,7 @@ let check_btw_btw_one (caller_min : Value.const) (caller_max : Value.const)
   | Long r_min_i, Long r_max_i, Int e_min_i, Long e_max_i
   | Long r_min_i, Long r_max_i, Long e_min_i, Int e_max_i
   | Long r_min_i, Long r_max_i, Long e_min_i, Long e_max_i ->
-      if r_max_i < e_min_i || e_max_i < r_min_i then Some false else Some true
+      if r_max_i < e_min_i || e_max_i < r_min_i then Some FALSE else Some TRUE
   | Float r_min_f, Float r_max_f, Float e_min_f, Float e_max_f
   | Float r_min_f, Float r_max_f, Float e_min_f, Double e_max_f
   | Float r_min_f, Float r_max_f, Double e_min_f, Float e_max_f
@@ -677,13 +679,13 @@ let check_btw_btw_one (caller_min : Value.const) (caller_max : Value.const)
   | Double r_min_f, Double r_max_f, Float e_min_f, Double e_max_f
   | Double r_min_f, Double r_max_f, Double e_min_f, Float e_max_f
   | Double r_min_f, Double r_max_f, Double e_min_f, Double e_max_f ->
-      if r_max_f < e_min_f || e_max_f < r_min_f then Some false else Some true
-  | MinusInf, PlusInf, _, _ -> Some true
-  | _, _, MinusInf, PlusInf -> Some true
-  | MinusInf, MinusInf, _, _ -> Some false
-  | PlusInf, PlusInf, _, _ -> Some false
-  | _, _, MinusInf, MinusInf -> Some false
-  | _, _, PlusInf, PlusInf -> Some false
+      if r_max_f < e_min_f || e_max_f < r_min_f then Some FALSE else Some TRUE
+  | MinusInf, PlusInf, _, _ -> Some TRUE
+  | _, _, MinusInf, PlusInf -> Some TRUE
+  | MinusInf, MinusInf, _, _ -> Some FALSE
+  | PlusInf, PlusInf, _, _ -> Some FALSE
+  | _, _, MinusInf, MinusInf -> Some FALSE
+  | _, _, PlusInf, PlusInf -> Some FALSE
   | _ -> None
 
 let check_btw_out_one (btw_min : Value.const) (btw_max : Value.const)
@@ -705,8 +707,8 @@ let check_btw_out_one (btw_min : Value.const) (btw_max : Value.const)
   | Long btw_min_i, Long btw_max_i, Int o_min_i, Long o_max_i
   | Long btw_min_i, Long btw_max_i, Long o_min_i, Int o_max_i
   | Long btw_min_i, Long btw_max_i, Long o_min_i, Long o_max_i ->
-      if o_min_i <= btw_min_i && o_max_i >= btw_max_i then Some false
-      else Some true
+      if o_min_i <= btw_min_i && o_max_i >= btw_max_i then Some FALSE
+      else Some TRUE
   | Float btw_min_f, Float btw_max_f, Float o_min_f, Float o_max_f
   | Float btw_min_f, Float btw_max_f, Float o_min_f, Double o_max_f
   | Float btw_min_f, Float btw_max_f, Double o_min_f, Float o_max_f
@@ -723,10 +725,10 @@ let check_btw_out_one (btw_min : Value.const) (btw_max : Value.const)
   | Double btw_min_f, Double btw_max_f, Float o_min_f, Double o_max_f
   | Double btw_min_f, Double btw_max_f, Double o_min_f, Float o_max_f
   | Double btw_min_f, Double btw_max_f, Double o_min_f, Double o_max_f ->
-      if btw_min_f <= o_min_f && btw_max_f >= o_max_f then Some false
-      else Some true
-  | _, _, MinusInf, PlusInf -> Some false
-  | MinusInf, PlusInf, _, _ -> Some true
+      if btw_min_f <= o_min_f && btw_max_f >= o_max_f then Some FALSE
+      else Some TRUE
+  | _, _, MinusInf, PlusInf -> Some FALSE
+  | MinusInf, PlusInf, _, _ -> Some TRUE
   | _ -> None
 
 let calc_z3_value value =
@@ -929,22 +931,23 @@ let check_intersect_one caller_sym callee_sym caller_prop callee_summary =
   match (caller_value_opt, callee_value_opt) with
   | Some caller_value, Some callee_value -> (
       let return_caller check =
-        if check then
-          ( (caller_value.Value.from_error || callee_value.Value.from_error)
-            |> vmap_maker caller_sym caller_prop.value,
-            check )
-        else (caller_prop.value, check)
+        match check with
+        | TRUE | DONT_MATTER ->
+            ( (caller_value.Value.from_error || callee_value.Value.from_error)
+              |> vmap_maker caller_sym caller_prop.value,
+              check )
+        | FALSE -> (caller_prop.value, check)
       in
       let get_result check_opt =
         match check_opt with
         | Some check -> return_caller check
-        | _ -> (ValueMap.empty, false)
+        | _ -> (ValueMap.empty, FALSE)
       in
       match (caller_value.Value.value, callee_value.Value.value) with
       | Eq eq_v1, Eq eq_v2 ->
-          if eq_v1 = eq_v2 then return_caller true else return_caller false
+          if eq_v1 = eq_v2 then return_caller TRUE else return_caller FALSE
       | Eq eq_v, Neq neq_v | Neq neq_v, Eq eq_v ->
-          if eq_v = neq_v then return_caller false else return_caller true
+          if eq_v = neq_v then return_caller FALSE else return_caller TRUE
       | Eq eq_v, Le le_v | Le le_v, Eq eq_v ->
           check_eq_l_one ~is_le:true eq_v le_v |> get_result
       | Eq eq_v, Lt lt_v | Lt lt_v, Eq eq_v ->
@@ -993,15 +996,15 @@ let check_intersect_one caller_sym callee_sym caller_prop callee_summary =
       | Ge _, Gt _
       | Neq _, _
       | _, Neq _ ->
-          return_caller true)
+          return_caller TRUE)
   | None, Some callee_value ->
       ( ValueMap.add caller_sym callee_value caller_prop.value
         |> ValueMap.add callee_sym callee_value,
-        true )
+        DONT_MATTER )
   | Some caller_value, None ->
       (* constructor prop propagation *)
-      (ValueMap.add callee_sym caller_value callee_summary.value, true)
-  | None, None -> (caller_prop.value, true)
+      (ValueMap.add callee_sym caller_value callee_summary.value, DONT_MATTER)
+  | None, None -> (caller_prop.value, DONT_MATTER)
 
 let check_intersect ~is_init caller_prop callee_summary vs_list =
   let vs_list =
@@ -1064,15 +1067,19 @@ let satisfy callee_method callee_summary call_prop m_info =
   let caller_new_mem =
     combine_memory call_prop value_symbol_list callee_head_symbols
   in
-  let intersect_value =
+  let intersect_value, true_check, false_check =
     let values_and_check =
       check_intersect ~is_init:false call_prop callee_summary value_symbol_list
     in
     ( combine_value call_prop.value values_and_check,
-      List.filter (fun (_, c) -> c = false) values_and_check )
+      List.filter (fun (_, c) -> c = TRUE) values_and_check,
+      List.filter (fun (_, c) -> c = FALSE) values_and_check )
   in
-  if snd intersect_value = [] then (fst intersect_value, caller_new_mem, true)
-  else (fst intersect_value, caller_new_mem, false)
+  if false_check = [] then
+    ( intersect_value,
+      caller_new_mem,
+      if true_check = [] then DONT_MATTER else TRUE )
+  else (intersect_value, caller_new_mem, FALSE)
 
 let new_value_summary new_value old_summary =
   {
@@ -1610,6 +1617,41 @@ let is_getter_with_memory_effect m_summary fld_name =
   let new_loc = is_new_loc_field "return" m_summary in
   (fld_name = "" && not new_loc) || new_loc
 
+let calc_ret_recv_mem_effect fld_name subtypes summary m_info ret_recv_methods =
+  let check_ret_recv fld_name subtypes m_name effect_fld_lst =
+    let info = MethodInfoMap.find m_name m_info in
+    List.mem info.return subtypes && List.mem fld_name effect_fld_lst
+  in
+  List.fold_left
+    (fun (check, acc) m_name ->
+      if check_ret_recv fld_name subtypes m_name (get_fields m_name summary)
+      then (true, m_name :: acc)
+      else (check, acc))
+    (false, []) ret_recv_methods
+
+let calc_set_recv_mem_effect fld_name summary m_info set_recv_methods =
+  let check_set_recv fld_name m_name summaries =
+    let get_fld_symbol { postcond = post_var, post_mem; _ } =
+      get_field_symbol (mk_var fld_name)
+        (get_id_symbol post_var "this")
+        post_mem
+    in
+    List.fold_left
+      (fun check smy ->
+        check
+        || List.mem (get_fld_symbol smy) (get_params_symbol m_name m_info smy)
+           |> not)
+      false summaries
+  in
+  List.fold_left
+    (fun (check, acc) (m_name, fld_set) ->
+      if
+        FieldSet.mem { used_in_error = false; name = fld_name } fld_set
+        && check_set_recv fld_name m_name (get_summaries m_name summary)
+      then (true, m_name :: acc)
+      else (check, acc))
+    (false, []) set_recv_methods
+
 let is_ret_recv_mem_effect fld_name subtypes summary m_info ret_recv_methods =
   let check_ret_recv fld_name subtypes m_name effect_fld_lst =
     let info = MethodInfoMap.find m_name m_info in
@@ -1648,7 +1690,7 @@ let satisfied_c m_summary id candidate_constructor summary =
     get_target_symbol (if is_receiver id then "this" else id) m_summary
     |> get_rh_name
   in
-  if target_symbol = "" then [ (true, List.hd c_summaries) ]
+  if target_symbol = "" then [ (DONT_MATTER, List.hd c_summaries) ]
   else
     let meet lst c_summary =
       ( [
@@ -1660,12 +1702,20 @@ let satisfied_c m_summary id candidate_constructor summary =
       :: lst
     in
     let sat lst (check_summary, c_summary) =
-      if List.filter (fun (_, c) -> c = false) check_summary = [] then
-        ( true,
-          c_summary
-          |> new_value_summary (combine_value c_summary.value check_summary) )
-        :: lst
-      else (false, c_summary) :: lst
+      if List.filter (fun (_, c) -> c = FALSE) check_summary = [] then
+        if List.filter (fun (_, c) -> c = TRUE) check_summary = [] then
+          ( DONT_MATTER,
+            c_summary
+            |> new_value_summary (combine_value c_summary.value check_summary)
+          )
+          :: lst
+        else
+          ( TRUE,
+            c_summary
+            |> new_value_summary (combine_value c_summary.value check_summary)
+          )
+          :: lst
+      else (FALSE, c_summary) :: lst
     in
     List.fold_left meet [] c_summaries |> List.fold_left sat []
 
@@ -1676,9 +1726,10 @@ let check_satisfied_c id const_name t_summary init sat_lst =
   in
   List.fold_left
     (fun pick (check, smy) ->
-      if check then
+      if check = TRUE || check = DONT_MATTER then
         let new_summary = get_new_summary smy in
-        (is_from_error true new_summary, const_name, new_summary)
+        let prec = if check = TRUE then is_from_error true new_summary else 0 in
+        (prec, const_name, new_summary)
       else if pick = (0, "", empty_summary) then (-3, const_name, smy)
       else pick)
     init sat_lst
