@@ -83,7 +83,8 @@ let is_special_primitive_from_id x =
   DUG.get_vinfo x |> fst |> is_special_primitive
 
 let is_lowest_rank ~is_error_entry prev_rank var used_args =
-  if (not is_error_entry) || prev_rank then prev_rank
+  if used_args = [] then false
+  else if (not is_error_entry) || prev_rank then prev_rank
   else
     let vname = DUG.get_vinfo var |> snd in
     let vname = if is_receiver vname then "this" else vname in
@@ -956,23 +957,35 @@ let const_unroll_with_loop (s : DUGIR.t) p used_args ({ prim_info; _ } as info)
     =
   match s with
   | Const (_, _, (x, _)) -> (
+      let lowest_rank =
+        is_lowest_rank ~is_error_entry:(DUG.get_v x).of_error_method
+          p.lowest_rank x used_args
+      in
       if is_primitive_from_id x || is_special_primitive_from_id x then
         get_loop_appl s p x (get_value x prim_info |> sort_const)
       else
         match get_r2_with_loop s p used_args info x with
         | [] ->
-            if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then
-              raise Not_found_global_constant
+            if
+              is_receiver (DUG.get_vinfo x |> snd)
+              || (not_null_obj x && not lowest_rank)
+            then raise Not_found_global_constant
             else get_r3 s p prim_info x
         | r2_with_loop ->
-            if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then
-              r2_with_loop
+            if
+              is_receiver (DUG.get_vinfo x |> snd)
+              || (not_null_obj x && not lowest_rank)
+            then r2_with_loop
             else List.rev_append (get_r3 s p prim_info x) r2_with_loop)
   | _ -> failwith "Fail: const_unroll_with_loop"
 
 let const_unroll (s : DUGIR.t) p used_args ({ prim_info; _ } as info) =
   match s with
   | Const (_, _, (x, _)) -> (
+      let lowest_rank =
+        is_lowest_rank ~is_error_entry:(DUG.get_v x).of_error_method
+          p.lowest_rank x used_args
+      in
       if !Cmdline.with_loop then const_unroll_with_loop s p used_args info
       else if is_primitive_from_id x || is_special_primitive_from_id x then
         List.fold_left
@@ -981,11 +994,16 @@ let const_unroll (s : DUGIR.t) p used_args ({ prim_info; _ } as info) =
       else
         match get_r2 s p used_args info x with
         | [] ->
-            if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then
-              raise Not_found_global_constant
+            if
+              is_receiver (DUG.get_vinfo x |> snd)
+              || (not_null_obj x && not lowest_rank)
+            then raise Not_found_global_constant
             else get_r3 s p prim_info x
         | r2 ->
-            if is_receiver (DUG.get_vinfo x |> snd) || not_null_obj x then r2
+            if
+              is_receiver (DUG.get_vinfo x |> snd)
+              || (not_null_obj x && not lowest_rank)
+            then r2
             else List.rev_append (get_r3 s p prim_info x) r2)
   | _ -> failwith "Fail: const_unroll"
 
