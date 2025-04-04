@@ -1,4 +1,4 @@
-<img src="https://github.com/prosyslab/unitcon/assets/44044134/80ea91bc-8d08-462a-b8c1-d25edb761349"  width="140">
+<img src="https://github.com/user-attachments/assets/ac3f3013-94cf-49e1-b94a-e6c78e54992e"  width="140">
 
 # Unitcon
 Unitcon is a targeted unit test generator for Java.
