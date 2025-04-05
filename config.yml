@@ -1,0 +1,31 @@
+baseURL: https://prosys.kaist.ac.kr/unitcon
+title: UnitCon
+copyright: "© [PaperMod Contributors](https://github.com/adityatelange/hugo-PaperMod/graphs/contributors)"
+theme: [PaperMod]
+
+languages:
+  en:
+    languageName: "English"
+    weight: 1
+    taxonomies:
+      category: categories
+      tag: tags
+      series: series
+
+params:
+  homeInfoParams:
+    Title: UnitCon
+    Content: >
+      Synthesizing Targeted Unit Tests for Java Runtime Exceptions
+
+  bugReports:
+
+  people:
+
+  socialIcons:
+    - name: "github"
+      title: View Source on Github
+      url: "https://github.com/prosyslab/unitcon"
+    - name: "prosyslab"
+      title: Prosys Lab @ KAIST
+      url: "https://prosys.kaist.ac.kr"
