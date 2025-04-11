@@ -512,6 +512,31 @@ let error_entry_func ee es m_info c_info =
       else List.fold_left (fun acc f_arg -> (0, f, f_arg) :: acc) lst f_arg_list)
     [] typ_list
 
+let is_file_obj x = is_file_obj (DUG.get_vinfo x |> fst)
+
+let is_instream_obj x = is_instream_obj (DUG.get_vinfo x |> fst)
+
+let is_outstream_obj x = is_outstream_obj (DUG.get_vinfo x |> fst)
+
+let is_reader_obj x = is_reader_obj (DUG.get_vinfo x |> fst)
+
+let is_writer_obj x = is_writer_obj (DUG.get_vinfo x |> fst)
+
+let not_null_obj x =
+  if
+    is_file_obj x || is_instream_obj x || is_outstream_obj x || is_reader_obj x
+    || is_writer_obj x
+  then true
+  else false
+
+let is_comparable x = is_comparable (DUG.get_vinfo x |> fst)
+
+let is_object x = is_object (DUG.get_vinfo x |> fst)
+
+let is_list x = is_list (DUG.get_vinfo x |> fst)
+
+let is_number x = is_number (DUG.get_vinfo x |> fst)
+
 let mk_void_func (var : DUGIR.var) id class_name m_info s_lst =
   let get_arg_list s =
     mk_arg ~is_s:(is_static s m_info) (get_formal_params s m_info) var.summary
@@ -586,7 +611,7 @@ let get_c ret c_lst summary m_info =
     let s_list =
       satisfied_c_list id (DUG.get_v ret).summary summary c_lst
       |> summary_filtering class_name m_info
-      |> prune_dup_summary m_info
+      |> prune_dup_summary ~is_constructor:true m_info
     in
     get_cfuncs ret s_list m_info
 
@@ -627,6 +652,7 @@ let memory_effect_filtering summary m_info type_info c_info s_map smy_lst =
 let get_ret_c ret ret_obj_lst summary m_info type_info c_info s_map =
   let class_name = DUG.get_vinfo ret |> fst |> get_class_name in
   if class_name = "" then []
+  else if !Cmdline.unknown_bug && is_instream_obj ret then []
   else
     let id = DUG.get_vinfo ret |> snd in
     let s_list =
@@ -769,29 +795,6 @@ let loop_id_merge old_ids new_ids =
 let sort_const consts =
   List.stable_sort (fun (c1, _) (c2, _) -> compare c1 c2) consts
 
-let is_file_obj x = is_file_obj (DUG.get_vinfo x |> fst)
-
-let is_instream_obj x = is_instream_obj (DUG.get_vinfo x |> fst)
-
-let is_outstream_obj x = is_outstream_obj (DUG.get_vinfo x |> fst)
-
-let is_reader_obj x = is_reader_obj (DUG.get_vinfo x |> fst)
-
-let is_writer_obj x = is_writer_obj (DUG.get_vinfo x |> fst)
-
-let not_null_obj x =
-  if
-    is_file_obj x || is_instream_obj x || is_outstream_obj x || is_reader_obj x
-    || is_writer_obj x
-  then true
-  else false
-
-let is_comparable x = is_comparable (DUG.get_vinfo x |> fst)
-
-let is_object x = is_object (DUG.get_vinfo x |> fst)
-
-let is_number x = is_number (DUG.get_vinfo x |> fst)
-
 let comparable_const s p =
   [
     ( 0,
@@ -812,6 +815,20 @@ let object_const s p =
       DUG.const_rule2_1 s f param p.tc,
       empty_id_map,
       ObjTypeMap.M.add "java.lang.Object" "java.lang.Object" empty_obj_type_map
+    );
+  ]
+
+let list_const s p =
+  let f =
+    DUGIR.mk_f "java.util.List" "java.util.ArrayList.<init>()"
+      "java.util.ArrayList" Modeling.array_list_summary
+  in
+  let param = DUGIR.Param [] in
+  [
+    ( 0,
+      DUG.const_rule2_1 s f param p.tc,
+      empty_id_map,
+      ObjTypeMap.M.add "java.util.List" "java.util.ArrayList" empty_obj_type_map
     );
   ]
 
@@ -859,6 +876,8 @@ let get_r2 s p { summary; inst_info; _ } x =
   if is_comparable x then comparable_const s p
   else if is_object x then object_const s p
   else if is_number x then number_const s p
+  else if !Cmdline.unknown_bug && is_list x then (* heuristic *)
+    list_const s p
   else
     List.fold_left
       (fun lst x1 -> apply_rule2 s p x1 :: lst)
@@ -876,6 +895,8 @@ let get_r2_with_loop s p { summary; inst_info; _ } x =
   if is_comparable x then comparable_const s p
   else if is_object x then object_const s p
   else if is_number x then number_const s p
+  else if !Cmdline.unknown_bug && is_list x then (* heuristic *)
+    list_const s p
   else if gcs = [] then []
   else if List.length gcs = 1 then
     (* if number of global constant is one, then do not using loop. (optimize) *)

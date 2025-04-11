@@ -389,7 +389,14 @@ module DUG = struct
   let is_similar n1 n2 =
     let v1 = get_var n1 in
     let v2 = get_var n2 in
-    if fst v1 = This NonType || fst v2 = This NonType then false
+    if !Cmdline.unknown_bug then
+      match (fst v1, fst v2) with
+      | This NonType, This NonType -> false
+      | This NonType, _ -> false
+      | _, This NonType -> false
+      | Var (typ1, _), Var (typ2, _) when typ1 = typ2 -> true
+      | _, _ -> false
+    else if fst v1 = This NonType || fst v2 = This NonType then false
     else if fst v1 = fst v2 then true
     else false
 
@@ -918,6 +925,12 @@ module DUG = struct
     | _, None -> (NonType, "")
     | This _, _ -> (NonType, "")
 
+  let loop_id_lval_for_check v =
+    match (get_v v).variable with
+    | Var (typ, id), Some idx -> (typ, id ^ string_of_int idx)
+    | _, None -> (NonType, "")
+    | This _, _ -> (NonType, "")
+
   let exp_code exp x =
     match exp with
     | Primitive p -> primitive_code p x
@@ -1005,11 +1018,16 @@ module DUG = struct
       | _ -> ""
     in
     if is_primitive (fst v) then
-      lval ^ " = " ^ "{"
-      ^ Regexp.rm_first_rest (rval loop_id exp_list)
-      ^ "};\n" ^ lval ^ "_comb = UnitconCombinator.combine"
-      ^ comb_func_name (fst v)
-      ^ "(" ^ snd v ^ ");\n"
+      if !Cmdline.unknown_bug then
+        lval ^ "_comb = " ^ "{"
+        ^ Regexp.rm_first_rest (rval loop_id exp_list)
+        ^ "};\n"
+      else
+        lval ^ " = " ^ "{"
+        ^ Regexp.rm_first_rest (rval loop_id exp_list)
+        ^ "};\n" ^ lval ^ "_comb = UnitconCombinator.combine"
+        ^ comb_func_name (fst v)
+        ^ "(" ^ snd v ^ ");\n"
     else
       lval ^ "_comb = " ^ "{"
       ^ Regexp.rm_first_rest (rval loop_id exp_list)

@@ -246,7 +246,6 @@ let check_useless_npe error_trace =
       "java.io.File.<init>";
       "java.io.FileInputStream.<init>";
       "java.io.FileOutputStream.<init>";
-      "java.util.Objects.requireNonNull";
     ]
   in
   List.exists (fun ignored -> check_substring ignored error_trace) ignored_npes
@@ -624,7 +623,7 @@ let run_testfile () =
       last_success_tc := t_file;
       incr num_of_success;
       L.info "Success Test: %s" t_file;
-      raise Normal_Exit)
+      if !Cmdline.unknown_bug then () else raise Normal_Exit)
     else if not (Sys.file_exists Filename.(test_dir / (t_file ^ ".java"))) then
       ()
     else (

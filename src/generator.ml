@@ -148,6 +148,8 @@ let is_object = function
   | Object t when t = "java.lang.Object" -> true
   | _ -> false
 
+let is_list = function Object t when t = "java.util.List" -> true | _ -> false
+
 let is_number = function
   | Object t when t = "java.lang.Number" -> true
   | _ -> false
@@ -1364,7 +1366,14 @@ let match_constructor_name class_name method_name =
 let match_return_object class_name method_name m_info =
   let info = MethodInfo.M.find method_name m_info in
   let return = info.MethodInfo.return in
-  String.equal class_name return
+  let cname_of_method = Utils.get_class_name method_name in
+  let is_recursive_obj =
+    String.equal cname_of_method return && not (is_static method_name m_info)
+  in
+  (* heuristic for unknown bug detection *)
+  if !Cmdline.unknown_bug then
+    (not is_recursive_obj) && String.equal class_name return
+  else String.equal class_name return
 
 let is_available_method m_name m_info =
   (is_public m_name m_info || is_usable_default m_name m_info)
@@ -1454,12 +1463,26 @@ let rec collect_dup m_info lst set =
       |> collect_dup m_info t
   | _ -> set
 
-let prune_dup_summary m_info lst =
+let check_unique_class target_method methods =
+  let target_class = Utils.get_class_name target_method in
+  List.fold_left
+    (fun check (_, m, _) ->
+      if target_method <> m && target_class = Utils.get_class_name m then false
+      else check)
+    true methods
+
+let prune_dup_summary ?(is_constructor = false) m_info lst =
   if !Cmdline.basic_mode || !Cmdline.priority_mode then List.rev lst
   else
     let dup_set = collect_dup m_info lst DuplicatedSummaries.empty in
     List.fold_left
-      (fun l s -> if DuplicatedSummaries.mem s dup_set then l else s :: l)
+      (fun l s ->
+        if DuplicatedSummaries.mem s dup_set then
+          if !Cmdline.unknown_bug && is_constructor then
+            let _, m_name, _ = s in
+            if check_unique_class m_name lst then s :: l else l
+          else l
+        else s :: l)
       [] lst
 
 let get_package_from_v v =

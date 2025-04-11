@@ -161,6 +161,8 @@ let mapping_method_info method_info mmap =
          method_name 0
     || is_unnes_method formal_params
     || List.mem method_name Utils.filter_list
+    || !Cmdline.unknown_bug
+       && Str.string_match (Str.regexp "java\\.nio\\..*") method_name 0
   then mmap
   else MethodInfo.M.add method_name info mmap
 
