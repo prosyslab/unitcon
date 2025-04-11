@@ -23,7 +23,7 @@ let rec collect_classpaths dir =
           List.rev_append (collect_classpaths abspath) acc
         else if
           List.mem (Filename.extension file) [ ".jar"; ".class"; ".properties" ]
-        then abspath :: acc
+        then if String.contains abspath ' ' then acc else abspath :: acc
         else acc)
       [] (Sys.readdir dir)
   else []

@@ -30,6 +30,28 @@ let is_ignore_class name = is_test_class name || is_anonymous name
 let make_dir_absolute dir =
   if Filename.is_relative dir then Filename.(Unix.getcwd () / dir) else dir
 
+let process_jar f acc jar_file =
+  let zip = Zip.open_in jar_file in
+  let entries = Zip.entries zip in
+  let acc =
+    List.fold_left
+      (fun acc e ->
+        if Filename.check_suffix e.Zip.filename ".class" then
+          (* class path in jar is absolute path *)
+          let filename = Filename.("/" / e.Zip.filename) in
+          try
+            let cname, cp = Javalib.extract_class_name_from_file filename in
+            let cp = Javalib.class_path cp in
+            let acc = f acc (Javalib.get_class cp cname) in
+            Javalib.close_class_path cp;
+            acc
+          with _ -> acc
+        else acc)
+      acc entries
+  in
+  Zip.close_in zip;
+  acc
+
 (* copyed and modified from https://github.com/javalib-team/javalib/blob/ae04c6b3c2331b01876dcf7a0dade45e51c9574b/src/jFile.ml#L361 *)
 let fold f acc filename =
   if is_file filename && Filename.check_suffix filename ".class" then (
@@ -45,10 +67,15 @@ let fold f acc filename =
   then
     let cp = Filename.dirname filename in
     let filename = Filename.basename filename in
-    Javalib.read
-      (Javalib.make_directories cp)
-      (fun acc c -> f acc c)
-      acc [ filename ]
+    if !Cmdline.unknown_bug then
+      List.fold_left
+        (fun acc jar -> process_jar f acc Filename.(cp / jar))
+        acc [ filename ]
+    else
+      Javalib.read
+        (Javalib.make_directories cp)
+        (fun acc c -> f acc c)
+        acc [ filename ]
   else if Sys.is_directory filename then (
     let cp = filename in
     let jar_files = ref [] in
@@ -63,10 +90,15 @@ let fold f acc filename =
       assert false
     with End_of_file ->
       Unix.closedir dir;
-      Javalib.read
-        (Javalib.make_directories cp)
-        (fun acc c -> f acc c)
-        acc !jar_files)
+      if !Cmdline.unknown_bug then
+        List.fold_left
+          (fun acc jar -> process_jar f acc Filename.(cp / jar))
+          acc !jar_files
+      else
+        Javalib.read
+          (Javalib.make_directories cp)
+          (fun acc c -> f acc c)
+          acc !jar_files)
   else (
     prerr_string filename;
     prerr_endline
