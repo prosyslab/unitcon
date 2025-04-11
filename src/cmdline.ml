@@ -32,6 +32,8 @@ let interproc = ref false
 
 let skip_procedures : string ref = ref ""
 
+let java_version = ref 8
+
 (* analyze and synthesize options *)
 let target = ref ""
 
@@ -107,6 +109,10 @@ let _interproc =
 let _skip_procedures =
   let doc = "Procedures that do not want to analyze" in
   Arg.(value & opt string "" & info [ "skip-procedures" ] ~doc)
+
+let _java_version =
+  let doc = "Set Java version" in
+  Arg.(value & opt int 8 & info [ "java-version" ] ~doc)
 
 let _target =
   let doc = "Set target location in form of [file]:[line]" in
@@ -196,12 +202,13 @@ module Build = struct
 end
 
 module Analyze = struct
-  let opt _copt _target _keep_going _interproc _skip_procedures =
+  let opt _copt _target _keep_going _interproc _skip_procedures _java_version =
     command := Analyze;
     target := _target;
     keep_going := _keep_going;
     interproc := _interproc;
-    skip_procedures := _skip_procedures
+    skip_procedures := _skip_procedures;
+    java_version := _java_version
 
   let cmd =
     let name = "analyze" in
@@ -211,7 +218,7 @@ module Analyze = struct
     Cmd.v info
       Term.(
         const opt $ common_opt $ _target $ _keep_going $ _interproc
-        $ _skip_procedures)
+        $ _skip_procedures $ _java_version)
 end
 
 module Synthesize = struct

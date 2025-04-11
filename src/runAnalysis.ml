@@ -29,7 +29,9 @@ let execute_command run_type command =
       let set_out_dir = "--results-dir " ^ out_dir in
       let no_pb = "--no-progress-bar" in
       let command =
-        infer_bin ^ " capture " ^ set_out_dir ^ " " ^ no_pb ^ " -- " ^ command
+        infer_bin ^ " capture " ^ " --java-version "
+        ^ string_of_int !Cmdline.java_version
+        ^ " " ^ set_out_dir ^ " " ^ no_pb ^ " -- " ^ command
       in
       L.info "Capturing step!";
       execute command
