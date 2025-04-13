@@ -315,7 +315,7 @@ let execute_command command =
   in
   match run_type command with
   | Compile | Group -> execute command
-  | Test -> execute ("timeout 5s " ^ command)
+  | Test -> execute ("timeout -k 1s 5s " ^ command)
 
 let simple_compiler program_dir command =
   let current_dir = Unix.getcwd () in
