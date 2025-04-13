@@ -58,8 +58,8 @@ let make_jar_with_dependencies p =
   let dep_jar = dependency_jar !Cmdline.out_dir in
   let manifest_oc = open_out m_file in
   let jar_files_oc = open_out jar_files in
-  let abspaths = collect_classpaths p in
   Filename.remove_file dep_jar;
+  let abspaths = collect_classpaths p in
   write_manifest_file manifest_oc abspaths;
   write_dep_files jar_files_oc abspaths;
   close_out manifest_oc;
