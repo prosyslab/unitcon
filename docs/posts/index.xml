@@ -15,7 +15,188 @@
       <pubDate>Thu, 12 Sep 2024 00:00:00 +0000</pubDate>
       <guid>https://prosys.kaist.ac.kr/unitcon/posts/2024-bug-release/</guid>
       <description>&lt;p&gt;We experimented to find Null Pointer Exception bugs in 51 popular libraries,
-and reported 21 bugs to the maintainers of each library.&lt;/p&gt;</description>
+and reported 21 bugs to the maintainers of each library.&lt;/p&gt;
+&lt;p&gt;Of these, &lt;strong&gt;15&lt;/strong&gt; reports have been patched, &lt;strong&gt;4&lt;/strong&gt; reports are still open, and &lt;strong&gt;2&lt;/strong&gt; reports were rejected.
+The table below lists the reported bugs.&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+      &lt;tr&gt;
+          &lt;th&gt;Project&lt;/th&gt;
+          &lt;th&gt;Report&lt;/th&gt;
+          &lt;th&gt;Status&lt;/th&gt;
+      &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Activiti&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/Activiti/Activiti/issues/4553&#34;&gt;Issue 4553&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#B0A695; font-weight: bold&#34;&gt;Open&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Commons BCEL&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/commons-bcel/pull/289&#34;&gt;Issue 289&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#B0A695; font-weight: bold&#34;&gt;Open&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Commons Configuration&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/commons-configuration/pull/355&#34;&gt;Issue 355&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Commons Configuration&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/commons-configuration/pull/365&#34;&gt;Issue 365&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Commons Configuration&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/commons-configuration/pull/368&#34;&gt;Issue 368&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Commons Configuration&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/commons-configuration/pull/381&#34;&gt;Issue 381&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Commons Configuration&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/commons-configuration/pull/382&#34;&gt;Issue 382&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#D4C9BE; font-weight: bold&#34;&gt;Rejected&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Commons DBCP&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/commons-dbcp/pull/352&#34;&gt;Issue 352&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Commons IO&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/commons-io/pull/569&#34;&gt;Issue 569&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#D4C9BE; font-weight: bold&#34;&gt;Rejected&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Commons Math&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/commons-math/pull/236&#34;&gt;Issue 236&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#B0A695; font-weight: bold&#34;&gt;Open&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Johnzon&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/johnzon/pull/117&#34;&gt;Issue 117&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Johnzon&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/johnzon/pull/123&#34;&gt;Issue 123&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Karaf&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/karaf/pull/1825&#34;&gt;Issue 1825&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache Karaf&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/karaf/pull/1826&#34;&gt;Issue 1826&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache PDFBox&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/pdfbox/pull/178&#34;&gt;Issue 178&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Apache TsFile&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/apache/tsfile/pull/50&#34;&gt;Issue 50&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#B0A695; font-weight: bold&#34;&gt;Open&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Feign&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/OpenFeign/feign/pull/2304&#34;&gt;Issue 2304&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;JSqlParser&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/JSQLParser/JSqlParser/pull/1965&#34;&gt;Issue 1965&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Kubernetes Java Client&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/kubernetes-client/java/pull/3081&#34;&gt;Issue 3081&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Nutz&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/nutzam/nutz/pull/1613&#34;&gt;Issue 1613&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#B0A695; font-weight: bold&#34;&gt;Open&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;OpenGrok&lt;/td&gt;
+          &lt;td&gt;&lt;a href=&#34;https://github.com/oracle/opengrok/pull/4542&#34;&gt;Issue 4542&lt;/a&gt;&lt;/td&gt;
+          &lt;td&gt;
+
+  &lt;span style=&#34;color:#123458; font-weight: bold&#34;&gt;Patched&lt;/span&gt;
+&lt;/td&gt;
+      &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;</description>
     </item>
   </channel>
 </rss>
