@@ -1,0 +1,10 @@
+{{ $status := .Inner }}
+{{ if (eq $status "Patched") }}
+  <span style="color:#123458; font-weight: bold">{{ "Patched" }}</span>
+{{ else if (eq $status "Open") }}
+  <span style="color:#B0A695; font-weight: bold">{{ "Open" }}</span>
+{{ else if (eq $status "Rejected") }}
+  <span style="color:#D4C9BE; font-weight: bold">{{ "Rejected" }}</span>
+{{ else }}
+  <span style="color:black;">{{ .Inner }}</span>
+{{ end }}

@@ -23,9 +23,12 @@ params:
   people:
 
   socialIcons:
-    - name: "github"
-      title: View Source on Github
-      url: "https://github.com/prosyslab/unitcon"
     - name: "prosyslab"
       title: Prosys Lab @ KAIST
       url: "https://prosys.kaist.ac.kr"
+    - name: "github"
+      title: View Source on Github
+      url: "https://github.com/prosyslab/unitcon"
+    - name: "zip"
+      title: artifact
+      url: "https://doi.org/10.5281/zenodo.15205112"

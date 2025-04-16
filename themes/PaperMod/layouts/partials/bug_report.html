@@ -1,32 +1,60 @@
+<style>
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 50px;
+    margin-top: 20px;
+}
+.item {
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+}
+.label { 
+    font-size: 24px;
+}
+.item .patched {
+    font-weight: bold;
+    margin-top: 2px;
+    font-size: 52px;
+    color: #123458;
+}
+.item .open {
+    font-weight: bold;
+    margin-top: 2px;
+    font-size: 52px;
+    color: #B0A695;
+}
+.item .rejected {
+    font-weight: bold;
+    margin-top: 2px;
+    font-size: 52px;
+    color: #D4C9BE;
+}
+</style>
+
 <div id="bug-reports">
     <h2>Our Bug Reports</h2>
-    <div>
-        <canvas id="bug-chart"></canvas>
+
+    <div class="container">
+        <div class="item">
+            <div class="label">Patched</div>
+            <a href="posts/2024-bug-release">
+                <div class="patched">15</div>
+            </a>
+        </div>
+        <div class="item">
+            <div class="label">Open</div>
+            <a href="posts/2024-bug-release">
+                <div class="open">4</div>
+            </a>
+        </div>
+        <div class="item">
+            <div class="label">Rejected</div>
+            <a href="posts/2024-bug-release">
+                <div class="rejected">2</div>
+            </a>
+        </div>
     </div>
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    const ctx = document.getElementById('bug-chart').getContext('2d');
-    new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: ['Patched', 'Reported', 'Rejected'],
-            datasets: [{
-                label: 'Bugs Reported',
-                data: [15, 4, 2],
-                backgroundColor: [
-                    '#123458',
-                    '#B0A695',
-                    '#D4C9BE',
-                ],
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            layout: {
-                padding: 10
-            },
-        }
-    });
-</script>
