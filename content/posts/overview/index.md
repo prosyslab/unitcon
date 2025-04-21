@@ -4,7 +4,7 @@ title = 'Overview'
 +++
 
 The overall structure of UnitCon is illustrated below.
-![overview of UnitCon](posts/overview.png)
+![overview of UnitCon](overview.png)
 
 ## 1. Initialization
 For the given target program location. UnitCon first the error entry methods using the call graph derived by the static analyzer. Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods. Such partial test cases are written in a domain-specific language that we designed for the synthesis.

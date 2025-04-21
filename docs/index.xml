@@ -15,7 +15,7 @@
       <pubDate>Thu, 12 Sep 2024 00:00:00 +0000</pubDate>
       <guid>https://prosys.kaist.ac.kr/unitcon/posts/overview/</guid>
       <description>&lt;p&gt;The overall structure of UnitCon is illustrated below.
-&lt;img alt=&#34;overview of UnitCon&#34; loading=&#34;lazy&#34; src=&#34;posts/overview.png&#34;&gt;&lt;/p&gt;
+&lt;img alt=&#34;overview of UnitCon&#34; loading=&#34;lazy&#34; src=&#34;https://prosys.kaist.ac.kr/unitcon/posts/overview/overview.png&#34;&gt;&lt;/p&gt;
 &lt;h2 id=&#34;1-initialization&#34;&gt;1. Initialization&lt;/h2&gt;
 &lt;p&gt;For the given target program location. UnitCon first the error entry methods using the call graph derived by the static analyzer. Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods. Such partial test cases are written in a domain-specific language that we designed for the synthesis.&lt;/p&gt;
 &lt;h2 id=&#34;2-enumeration&#34;&gt;2. Enumeration&lt;/h2&gt;
