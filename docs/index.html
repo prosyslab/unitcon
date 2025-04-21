@@ -152,19 +152,19 @@
 .item .patched {
     font-weight: bold;
     margin-top: 2px;
-    font-size: 52px;
+    font-size: 48px;
     color: #123458;
 }
 .item .open {
     font-weight: bold;
     margin-top: 2px;
-    font-size: 52px;
+    font-size: 48px;
     color: #B0A695;
 }
 .item .rejected {
     font-weight: bold;
     margin-top: 2px;
-    font-size: 52px;
+    font-size: 48px;
     color: #D4C9BE;
 }
 </style>
@@ -174,21 +174,18 @@
 
     <div class="container">
         <div class="item">
-            <div class="label">Patched</div>
-            <a href="posts/2024-bug-release">
-                <div class="patched">15</div>
+            <a href="posts/2024-bug-release-patched">
+                <div class="patched">Patched</div>
             </a>
         </div>
         <div class="item">
-            <div class="label">Open</div>
-            <a href="posts/2024-bug-release">
-                <div class="open">4</div>
+            <a href="posts/2024-bug-release-open">
+                <div class="open">Open</div>
             </a>
         </div>
         <div class="item">
-            <div class="label">Rejected</div>
-            <a href="posts/2024-bug-release">
-                <div class="rejected">2</div>
+            <a href="posts/2024-bug-release-rejected">
+                <div class="rejected">Rejected</div>
             </a>
         </div>
     </div>
@@ -243,23 +240,33 @@
     </a>
     <a href="https://github.com/prosyslab/unitcon" target="_blank" rel="noopener noreferrer me"
         title="View Source on Github">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-    stroke-linecap="round" stroke-linejoin="round">
-    <path
-        d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
-    </path>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-github" viewBox="0 0 16 16">
+  <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/>
+</svg>
 </svg>
     </a>
     <a href="https://doi.org/10.5281/zenodo.15205112" target="_blank" rel="noopener noreferrer me"
         title="Artifact">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-zip" viewBox="0 0 16 16">
-  <path d="M6.5 7.5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v.938l.4 1.599a1 1 0 0 1-.416 1.074l-.93.62a1 1 0 0 1-1.109 0l-.93-.62a1 1 0 0 1-.415-1.074l.4-1.599zm2 0h-1v.938a1 1 0 0 1-.03.243l-.4 1.598.93.62.93-.62-.4-1.598a1 1 0 0 1-.03-.243z"/>
-  <path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zm5.5-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H9v1H8v1h1v1H8v1h1v1H7.5V5h-1V4h1V3h-1V2h1z"/>
-</svg>
+        
+<img src="img/zenodo.svg" alt="" width="42" height="28" />
     </a>
 </div>
 
     </footer>
+</article>
+
+<article class="post-entry"> 
+  <header class="entry-header">
+    <h2 class="entry-hint-parent">Overview
+    </h2>
+  </header>
+  <div class="entry-content">
+    <p>The overall structure of UnitCon is illustrated below. 1. Initialization For the given target program location. UnitCon first the error entry methods using the call graph derived by the static analyzer. Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods. Such partial test cases are written in a domain-specific language that we designed for the synthesis.
+2. Enumeration Given a set of partial test cases, UnitCon enumerates new partial unit tests by expanding the placeholders.
+...</p>
+  </div>
+  <footer class="entry-footer"><span title='2024-09-12 00:00:00 +0000 UTC'>September 12, 2024</span></footer>
+  <a class="entry-link" aria-label="post link to Overview" href="https://prosys.kaist.ac.kr/unitcon/posts/overview/"></a>
 </article>
 
 <article class="post-entry"> 
@@ -273,7 +280,49 @@ Of these, 15 reports have been patched, 4 reports are still open, and 2 reports 
 Project Report Status Activiti Issue 4553 OpenApache Commons BCEL Issue 289 OpenApache Commons Configuration Issue 355 PatchedApache Commons Configuration Issue 365 PatchedApache Commons Configuration Issue 368 PatchedApache Commons Configuration Issue 381 PatchedApache Commons Configuration Issue 382 RejectedApache Commons DBCP Issue 352 PatchedApache Commons IO Issue 569 RejectedApache Commons Math Issue 236 OpenApache Johnzon Issue 117 PatchedApache Johnzon Issue 123 PatchedApache Karaf Issue 1825 PatchedApache Karaf Issue 1826 PatchedApache PDFBox Issue 178 PatchedApache TsFile Issue 50 OpenFeign Issue 2304 PatchedJSqlParser Issue 1965 PatchedKubernetes Java Client Issue 3081 PatchedNutz Issue 1613 OpenOpenGrok Issue 4542 Patched</p>
   </div>
   <footer class="entry-footer"><span title='2024-09-12 00:00:00 +0000 UTC'>September 12, 2024</span></footer>
-  <a class="entry-link" aria-label="post link to We reported 21 Null Pointer Exception bugs in 2024" href="https://prosys.kaist.ac.kr/unitcon/posts/2024-bug-release/"></a>
+  <a class="entry-link" aria-label="post link to We reported 21 Null Pointer Exception bugs in 2024" href="https://prosys.kaist.ac.kr/unitcon/posts/2024-bug-release-copy/"></a>
+</article>
+
+<article class="post-entry"> 
+  <header class="entry-header">
+    <h2 class="entry-hint-parent">We reported 21 Null Pointer Exception bugs in 2024 (Open)
+    </h2>
+  </header>
+  <div class="entry-content">
+    <p>We experimented to find Null Pointer Exception bugs in 51 popular libraries, and reported 21 bugs to the maintainers of each library.
+Of these, 4 reports are still open. The table below lists the open bugs.
+Project Report Status Activiti Issue 4553 OpenApache Commons Math Issue 236 OpenApache TsFile Issue 50 OpenNutz Issue 1613 Open</p>
+  </div>
+  <footer class="entry-footer"><span title='2024-09-12 00:00:00 +0000 UTC'>September 12, 2024</span></footer>
+  <a class="entry-link" aria-label="post link to We reported 21 Null Pointer Exception bugs in 2024 (Open)" href="https://prosys.kaist.ac.kr/unitcon/posts/2024-bug-release-open/"></a>
+</article>
+
+<article class="post-entry"> 
+  <header class="entry-header">
+    <h2 class="entry-hint-parent">We reported 21 Null Pointer Exception bugs in 2024 (Patched)
+    </h2>
+  </header>
+  <div class="entry-content">
+    <p>We experimented to find Null Pointer Exception bugs in 51 popular libraries, and reported 21 bugs to the maintainers of each library.
+Of these, 15 reports have been patched. The table below lists the patched bugs.
+Project Report Status Apache Commons BCEL Issue 289 PatchedApache Commons Configuration Issue 355 PatchedApache Commons Configuration Issue 365 PatchedApache Commons Configuration Issue 368 PatchedApache Commons Configuration Issue 381 PatchedApache Commons DBCP Issue 352 PatchedApache Johnzon Issue 117 PatchedApache Johnzon Issue 123 PatchedApache Karaf Issue 1825 PatchedApache Karaf Issue 1826 PatchedApache PDFBox Issue 178 PatchedFeign Issue 2304 PatchedJSqlParser Issue 1965 PatchedKubernetes Java Client Issue 3081 PatchedOpenGrok Issue 4542 Patched</p>
+  </div>
+  <footer class="entry-footer"><span title='2024-09-12 00:00:00 +0000 UTC'>September 12, 2024</span></footer>
+  <a class="entry-link" aria-label="post link to We reported 21 Null Pointer Exception bugs in 2024 (Patched)" href="https://prosys.kaist.ac.kr/unitcon/posts/2024-bug-release-patched/"></a>
+</article>
+
+<article class="post-entry"> 
+  <header class="entry-header">
+    <h2 class="entry-hint-parent">We reported 21 Null Pointer Exception bugs in 2024 (Rejected)
+    </h2>
+  </header>
+  <div class="entry-content">
+    <p>We experimented to find Null Pointer Exception bugs in 51 popular libraries, and reported 21 bugs to the maintainers of each library.
+Of these, 2 reports were rejected. The table below lists the rejected bugs.
+Project Report Status Apache Commons Configuration Issue 382 RejectedApache Commons IO Issue 569 Rejected</p>
+  </div>
+  <footer class="entry-footer"><span title='2024-09-12 00:00:00 +0000 UTC'>September 12, 2024</span></footer>
+  <a class="entry-link" aria-label="post link to We reported 21 Null Pointer Exception bugs in 2024 (Rejected)" href="https://prosys.kaist.ac.kr/unitcon/posts/2024-bug-release-rejected/"></a>
 </article>
     </main>
     
