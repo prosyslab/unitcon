@@ -7,6 +7,9 @@
         {{ .Content | markdownify }}
     </div>
     <div class="entry-content">
+        {{ partial "overview.html" }}
+    </div>
+    <div class="entry-content">
         {{ partial "bug_report.html" }}
     </div>
     <div class="entry-content">
