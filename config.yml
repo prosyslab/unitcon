@@ -29,6 +29,9 @@ params:
     - name: "github"
       title: View Source on Github
       url: "https://github.com/prosyslab/unitcon"
+    - name: "paper"
+      title: Paper
+      url: "https://prosys.kaist.ac.kr/publications/fse25.pdf"
     - name: "zip"
       title: artifact
       url: "https://doi.org/10.5281/zenodo.15205112"
