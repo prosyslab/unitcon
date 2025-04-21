@@ -427,7 +427,9 @@ let need_default_class tc_body =
 
 let insert_test oc (file_num, tc, time) =
   let insert oc (i_set, m_bodies) =
-    let time = "/* Duration of synthesis: " ^ string_of_float time ^ " */\n" in
+    let time =
+      "/* Synthesis completed in " ^ string_of_float time ^ " s */\n"
+    in
     let start = "@Test\npublic void test() {\n" in
     need_default_class m_bodies;
     get_package !Cmdline.extension |> output_string oc;
@@ -607,7 +609,7 @@ let run_testfile () =
   add_default_class !info.test_dir;
   L.info "Start compilation! (# of test files: %d)" !num_of_tc_files;
   build_program !info;
-  L.info "End compilation! (duration: %f)"
+  L.info "End compilation! (Elapsed time: %fs)"
     (Unix.gettimeofday () -. compile_start);
   let execute test_dir expected_bug t_file num_of_t_file =
     let ic_out, ic_err =
@@ -666,7 +668,8 @@ let run_multi_testfile () =
       get_rep_input data !info.expected_bug)
     else []
   in
-  L.info "End multi-test! (duration: %f)" (Unix.gettimeofday () -. compile_start);
+  L.info "End multi-test! (Elapsed time: %fs)"
+    (Unix.gettimeofday () -. compile_start);
   found_rep_inputs
 
 let normal_exit curr_time =
