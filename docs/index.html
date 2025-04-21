@@ -11,7 +11,7 @@
 <meta name="description" content="">
 <meta name="author" content="">
 <link rel="canonical" href="https://prosys.kaist.ac.kr/unitcon/">
-<link crossorigin="anonymous" href="/unitcon/assets/css/stylesheet.f49d66caae9ea0fd43f21f29e71a8d3e284517ed770f2aa86fa012953ad3c9ef.css" integrity="sha256-9J1myq6eoP1D8h8p5xqNPihFF&#43;13Dyqob6ASlTrTye8=" rel="preload stylesheet" as="style">
+<link crossorigin="anonymous" href="/unitcon/assets/css/stylesheet.f3b4f7998b20e71b28ed7f5cb1c3efb5fe7481309e82343536a4514a48c89970.css" integrity="sha256-87T3mYsg5xso7X9cscPvtf50gTCegjQ1NqRRSkjImXA=" rel="preload stylesheet" as="style">
 <link rel="icon" href="https://prosys.kaist.ac.kr/unitcon/favicon.ico">
 <link rel="icon" type="image/png" sizes="16x16" href="https://prosys.kaist.ac.kr/unitcon/favicon-16x16.png">
 <link rel="icon" type="image/png" sizes="32x32" href="https://prosys.kaist.ac.kr/unitcon/favicon-32x32.png">
@@ -130,71 +130,237 @@
         <h1>UnitCon</h1>
     </header>
     <div class="entry-content">
-        Synthesizing Targeted Unit Tests for Java Runtime Exceptions
-    </div>
-    <div class="entry-content">
         <h1>Overview of UnitCon</h1>
-<a href="posts/overview">
-<img src="img/overview.png" />
-</a>
+
+The overall structure of UnitCon is illustrated below.
+<img src="img/overview.svg" alt="overview of UnitCon" />
+
+<h3>1. Initialization</h3>
+For the given target program location. UnitCon first the error entry methods using the call graph derived by the static analyzer.
+Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods.
+Such partial test cases are written in a domain-specific language that we designed for the synthesis.
+<br></br>
+
+<h3>2. Enumeration</h3>
+Given a set of partial test cases, UnitCon enumerates new partial unit tests by expanding the placeholders.
+<br></br>
+
+<h3>3. Pruning & Prioritization</h3>
+To improve the efficiency, we guide the search using static analysis results.
+<br></br>
+
+<h4>3.1. Pruning</h4>
+UnitCon effectively prunes the search space by comparing the semantics between partial test cases.
+If two partial test cases are deemed to be semantically equivalent by the static analyzer, UnitCon discards the larger one.
+<br></br>
+
+<h4>3.2. Prioritization</h4>
+UnitCon effectively prioritizes the partial test cases that are more likely to trigger the target error.
+For a given target program location, the static analyzer estimates sufficient conditions for the target error.
+During the synthesis, UnitCon checks if the partial test case can potentially satisfy the error conditions.
+If so, UnitCon prioritizes the partial test case.
+<br></br>
+
+<h3>4. Ground Check</h3>
+It checks whether UnitCon has generated an executable test case.
+If it fails to generate one, the synthesis process is repeated.
+If an executable test case is generated, it is executed using the Tester to check whether the targeted exception is triggered.
+If the targeted exception is successfully reproduced, the test case is returned; otherwise, it is discarded.
     </div>
     <div class="entry-content">
         <style>
-.container {
-    display: flex;
-    justify-content: center;
-    align-items: baseline;
-    gap: 50px;
-    margin-top: 20px;
-}
-.item {
-    display: flex;
-    flex-direction: column;
-    text-align: center;
-}
-.label { 
-    font-size: 24px;
-}
-.item .patched {
-    font-weight: bold;
-    margin-top: 2px;
-    font-size: 48px;
-    color: #123458;
-}
-.item .open {
-    font-weight: bold;
-    margin-top: 2px;
-    font-size: 48px;
-    color: #B0A695;
-}
-.item .rejected {
-    font-weight: bold;
-    margin-top: 2px;
-    font-size: 48px;
-    color: #D4C9BE;
-}
+    table {
+        border-collapse: collapse;
+    }
+
+    th {
+        width: 250px;
+        height: 45px;
+        text-align: center;
+        color: #000;
+        border: 1px solid #000;
+        vertical-align: middle;
+    }
+
+    body.dark th {
+        width: 250px;
+        height: 45px;
+        text-align: center;
+        color: #fff;
+        border: 1px solid #fff;
+        vertical-align: middle;
+
+    }
+
+    td {
+        width: 250px;
+        height: 45px;
+        text-align: center;
+        color: #000;
+        border: 1px solid #000;
+        vertical-align: middle;
+    }
+
+    body.dark td {
+        width: 250px;
+        height: 45px;
+        text-align: center;
+        color: #DADADB;
+        border: 1px solid #DADADB;
+        vertical-align: middle;
+
+    }
+
+    .patched {
+        font-weight: bold;
+        color: #123458;
+    }
+
+    body.dark .patched {
+        color: #A5C9CA;
+    }
+
+    .open {
+        font-weight: bold;
+        color: #A9A9A9;
+    }
+
+    body.dark .open {
+        font-weight: bold;
+        color: #7A7E85;
+    }
+
+    .rejected {
+        font-weight: bold;
+        color: #C5C5C5;
+    }
+
+    body.dark .rejected {
+        font-weight: bold;
+        color: #5B5F66;
+    }
 </style>
 
 <div id="bug-reports">
-    <h2>Our Bug Reports</h2>
-
-    <div class="container">
-        <div class="item">
-            <a href="posts/2024-bug-release-patched">
-                <div class="patched">Patched</div>
-            </a>
-        </div>
-        <div class="item">
-            <a href="posts/2024-bug-release-open">
-                <div class="open">Open</div>
-            </a>
-        </div>
-        <div class="item">
-            <a href="posts/2024-bug-release-rejected">
-                <div class="rejected">Rejected</div>
-            </a>
-        </div>
-    </div>
+    <h1>Our Bug Reports</h1>
+    We experimented to find Null Pointer Exception bugs in 51 popular libraries, and reported 21 bugs to the maintainers
+    of each library.
+    Of these, <b class="patched">15</b> reports have been patched, <b class="open">4</b> reports are still open, and <b
+        class="rejected">2</b> reports were rejected.
+    The table below lists the reported bugs.
+    <br></br>
+    <table>
+        <tr>
+            <th scope="col">Project</th>
+            <th scope="col">Report</th>
+            <th scope="col">Status</th>
+        </tr>
+        <tr>
+            <td>Activiti</td>
+            <td><a href="https://github.com/Activiti/Activiti/issues/4553">Issue 4553</a></td>
+            <td class="open">Open</td>
+        </tr>
+        <tr>
+            <td>Apache Commons BCEL</td>
+            <td><a href="https://github.com/apache/commons-bcel/pull/289">Issue 289</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache Commons Configuration</td>
+            <td><a href="https://github.com/apache/commons-configuration/pull/355">Issue 355</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache Commons Configuration</td>
+            <td><a href="https://github.com/apache/commons-configuration/pull/365">Issue 365</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache Commons Configuration</td>
+            <td><a href="https://github.com/apache/commons-configuration/pull/368">Issue 368</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache Commons Configuration</td>
+            <td><a href="https://github.com/apache/commons-configuration/pull/381">Issue 381</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache Commons Configuration</td>
+            <td><a href="https://github.com/apache/commons-configuration/pull/382">Issue 382</a></td>
+            <td class="rejected">Rejected</td>
+        </tr>
+        <tr>
+            <td>Apache Commons DBCP</td>
+            <td><a href="https://github.com/apache/commons-dbcp/pull/352">Issue 352</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache Commons IO</td>
+            <td><a href="https://github.com/apache/commons-io/pull/569">Issue 569</a></td>
+            <td class="rejected">Rejected</td>
+        </tr>
+        <tr>
+            <td>Apache Commons Math</td>
+            <td><a href="https://github.com/apache/commons-math/pull/236">Issue 236</a></td>
+            <td class="open">Open</td>
+        </tr>
+        <tr>
+            <td>Apache Johnzon</td>
+            <td><a href="https://github.com/apache/johnzon/pull/117">Issue 117</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache Johnzon</td>
+            <td><a href="https://github.com/apache/johnzon/pull/123">Issue 123</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache Karaf</td>
+            <td><a href="https://github.com/apache/karaf/pull/1825">Issue 1825</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache Karaf</td>
+            <td><a href="https://github.com/apache/karaf/pull/1826">Issue 1826</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache PDFBox</td>
+            <td><a href="https://github.com/apache/pdfbox/pull/178">Issue 178</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Apache TsFile</td>
+            <td><a href="https://github.com/apache/tsfile/pull/50">Issue 50</a></td>
+            <td class="open">Open</td>
+        </tr>
+        <tr>
+            <td>Feign</td>
+            <td><a href="https://github.com/OpenFeign/feign/pull/2304">Issue 2304</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>JSqlParser</td>
+            <td><a href="https://github.com/JSQLParser/JSqlParser/pull/1965">Issue 1965</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Kubernetes Java Client</td>
+            <td><a href="https://github.com/kubernetes-client/java/pull/3081">Issue 3081</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+        <tr>
+            <td>Nutz</td>
+            <td><a href="https://github.com/nutzam/nutz/pull/1613">Issue 1613</a></td>
+            <td class="open">Open</td>
+        </tr>
+        <tr>
+            <td>OpenGrok</td>
+            <td><a href="https://github.com/oracle/opengrok/pull/4542">Issue 4542</a></td>
+            <td class="patched">Patched</td>
+        </tr>
+    </table>
 </div>
     </div>
     <div class="entry-content">
@@ -238,90 +404,74 @@
     </ul>
 </div>
     </div>
-    <footer class="entry-footer">
-        <div class="social-icons" >
-    <a href="https://prosys.kaist.ac.kr" target="_blank" rel="noopener noreferrer me"
-        title="Prosys Lab @ KAIST">
-        <img src="img/prosys-logo-black.png" alt="" width="22" height="26" />
+    <div class="entry-content">
+        <h1>Publication Links</h1>
+
+<div class="social-icons" >
+    <a href="https://prosys.kaist.ac.kr" target="_blank" rel="noopener noreferrer me">
+        <img id="prosys-logo" src="img/prosys-logo-black.png" alt="" width="22" height="26" />
+        Prosys @ KAIST
     </a>
-    <a href="https://github.com/prosyslab/unitcon" target="_blank" rel="noopener noreferrer me"
-        title="View Source on Github">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-github" viewBox="0 0 16 16">
-  <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/>
-</svg>
-</svg>
+    <a href="https://github.com/prosyslab/unitcon" target="_blank" rel="noopener noreferrer me">
+        <svg xmlns="http://www.w3.org/2000/svg" id="github-logo" width="16" height="16" fill="currentColor"
+            class="bi bi-github" viewBox="0 0 16 16">
+            <path
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8" />
+        </svg>
+        Github
     </a>
-    <a href="https://prosys.kaist.ac.kr/publications/fse25.pdf" target="_blank" rel="noopener noreferrer me"
-        title="Paper">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-pdf" viewBox="0 0 16 16">
-  <path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 1h8a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1"/>
-  <path d="M4.603 12.087a.8.8 0 0 1-.438-.42c-.195-.388-.13-.776.08-1.102.198-.307.526-.568.897-.787a7.7 7.7 0 0 1 1.482-.645 20 20 0 0 0 1.062-2.227 7.3 7.3 0 0 1-.43-1.295c-.086-.4-.119-.796-.046-1.136.075-.354.274-.672.65-.823.192-.077.4-.12.602-.077a.7.7 0 0 1 .477.365c.088.164.12.356.127.538.007.187-.012.395-.047.614-.084.51-.27 1.134-.52 1.794a11 11 0 0 0 .98 1.686 5.8 5.8 0 0 1 1.334.05c.364.065.734.195.96.465.12.144.193.32.2.518.007.192-.047.382-.138.563a1.04 1.04 0 0 1-.354.416.86.86 0 0 1-.51.138c-.331-.014-.654-.196-.933-.417a5.7 5.7 0 0 1-.911-.95 11.6 11.6 0 0 0-1.997.406 11.3 11.3 0 0 1-1.021 1.51c-.29.35-.608.655-.926.787a.8.8 0 0 1-.58.029m1.379-1.901q-.25.115-.459.238c-.328.194-.541.383-.647.547-.094.145-.096.25-.04.361q.016.032.026.044l.035-.012c.137-.056.355-.235.635-.572a8 8 0 0 0 .45-.606m1.64-1.33a13 13 0 0 1 1.01-.193 12 12 0 0 1-.51-.858 21 21 0 0 1-.5 1.05zm2.446.45q.226.244.435.41c.24.19.407.253.498.256a.1.1 0 0 0 .07-.015.3.3 0 0 0 .094-.125.44.44 0 0 0 .059-.2.1.1 0 0 0-.026-.063c-.052-.062-.2-.152-.518-.209a4 4 0 0 0-.612-.053zM8.078 5.8a7 7 0 0 0 .2-.828q.046-.282.038-.465a.6.6 0 0 0-.032-.198.5.5 0 0 0-.145.04c-.087.035-.158.106-.196.283-.04.192-.03.469.046.822q.036.167.09.346z"/>
-</svg>
+    <a href="https://prosys.kaist.ac.kr/publications/fse25.pdf" target="_blank" rel="noopener noreferrer me">
+        <svg xmlns="http://www.w3.org/2000/svg" id="paper-logo" width="16" height="16" fill="currentColor"
+            class="bi bi-file-pdf" viewBox="0 0 16 16">
+            <path
+                d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 1h8a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1" />
+            <path
+                d="M4.603 12.087a.8.8 0 0 1-.438-.42c-.195-.388-.13-.776.08-1.102.198-.307.526-.568.897-.787a7.7 7.7 0 0 1 1.482-.645 20 20 0 0 0 1.062-2.227 7.3 7.3 0 0 1-.43-1.295c-.086-.4-.119-.796-.046-1.136.075-.354.274-.672.65-.823.192-.077.4-.12.602-.077a.7.7 0 0 1 .477.365c.088.164.12.356.127.538.007.187-.012.395-.047.614-.084.51-.27 1.134-.52 1.794a11 11 0 0 0 .98 1.686 5.8 5.8 0 0 1 1.334.05c.364.065.734.195.96.465.12.144.193.32.2.518.007.192-.047.382-.138.563a1.04 1.04 0 0 1-.354.416.86.86 0 0 1-.51.138c-.331-.014-.654-.196-.933-.417a5.7 5.7 0 0 1-.911-.95 11.6 11.6 0 0 0-1.997.406 11.3 11.3 0 0 1-1.021 1.51c-.29.35-.608.655-.926.787a.8.8 0 0 1-.58.029m1.379-1.901q-.25.115-.459.238c-.328.194-.541.383-.647.547-.094.145-.096.25-.04.361q.016.032.026.044l.035-.012c.137-.056.355-.235.635-.572a8 8 0 0 0 .45-.606m1.64-1.33a13 13 0 0 1 1.01-.193 12 12 0 0 1-.51-.858 21 21 0 0 1-.5 1.05zm2.446.45q.226.244.435.41c.24.19.407.253.498.256a.1.1 0 0 0 .07-.015.3.3 0 0 0 .094-.125.44.44 0 0 0 .059-.2.1.1 0 0 0-.026-.063c-.052-.062-.2-.152-.518-.209a4 4 0 0 0-.612-.053zM8.078 5.8a7 7 0 0 0 .2-.828q.046-.282.038-.465a.6.6 0 0 0-.032-.198.5.5 0 0 0-.145.04c-.087.035-.158.106-.196.283-.04.192-.03.469.046.822q.036.167.09.346z" />
+        </svg>
+        Paper
     </a>
-    <a href="https://doi.org/10.5281/zenodo.15205112" target="_blank" rel="noopener noreferrer me"
-        title="Artifact">
-        
-<img src="img/zenodo.svg" alt="" width="42" height="28" />
+    <a href="https://doi.org/10.5281/zenodo.15205112" target="_blank" rel="noopener noreferrer me">
+        <img id="zenodo-logo" src="https://about.zenodo.org/static/img/icons/zenodo-icon-black.svg" alt="" width="26"
+            height="24" />
+        Artifact
     </a>
 </div>
 
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const observer = new MutationObserver(() => {
+            updateLogo();
+        });
+        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        updateLogo();
+    });
+
+    function updateLogo() {
+        const isDarkMode = document.body.classList.contains('dark');
+        const prosys_logo = document.querySelector('#prosys-logo');
+        const zenodo_logo = document.querySelector('#zenodo-logo');
+
+        if (prosys_logo) {
+            prosys_logo.src = isDarkMode
+                ? 'img/prosys-logo-white.svg'
+                : 'img/prosys-logo-black.png';
+        }
+        if (zenodo_logo) {
+            zenodo_logo.src = isDarkMode
+                ? 'https://about.zenodo.org/static/img/icons/zenodo-icon-white.svg'
+                : 'https://about.zenodo.org/static/img/icons/zenodo-icon-black.svg';
+        }
+    }
+</script>
+    </div>
+    <footer class="entry-footer">
+        <h1>Acknowledgements</h1>
+
+This work was partly supported by the National Research Foundation of Korea (NRF) grant funded by
+the Korea government (MSIT) (No. RS-2021-NR060080) and
+the Institute of Information & Communications Technology Planning & Evaluation (IITP) grant funded by
+the Korea government (MSIT) (No.RS-2025-02263143, Development of Ground Station Security Threat Response Technology for Space Cybersecurity).
     </footer>
-</article>
-
-<article class="post-entry"> 
-  <header class="entry-header">
-    <h2 class="entry-hint-parent">Overview
-    </h2>
-  </header>
-  <div class="entry-content">
-    <p>The overall structure of UnitCon is illustrated below. 1. Initialization For the given target program location. UnitCon first the error entry methods using the call graph derived by the static analyzer. Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods. Such partial test cases are written in a domain-specific language that we designed for the synthesis.
-2. Enumeration Given a set of partial test cases, UnitCon enumerates new partial unit tests by expanding the placeholders.
-...</p>
-  </div>
-  <footer class="entry-footer"><span title='2024-09-12 00:00:00 +0000 UTC'>September 12, 2024</span></footer>
-  <a class="entry-link" aria-label="post link to Overview" href="https://prosys.kaist.ac.kr/unitcon/posts/overview/"></a>
-</article>
-
-<article class="post-entry"> 
-  <header class="entry-header">
-    <h2 class="entry-hint-parent">We reported 21 Null Pointer Exception bugs in 2024 (Open)
-    </h2>
-  </header>
-  <div class="entry-content">
-    <p>We experimented to find Null Pointer Exception bugs in 51 popular libraries, and reported 21 bugs to the maintainers of each library.
-Of these, 4 reports are still open. The table below lists the open bugs.
-Project Report Status Activiti Issue 4553 OpenApache Commons Math Issue 236 OpenApache TsFile Issue 50 OpenNutz Issue 1613 Open</p>
-  </div>
-  <footer class="entry-footer"><span title='2024-09-12 00:00:00 +0000 UTC'>September 12, 2024</span></footer>
-  <a class="entry-link" aria-label="post link to We reported 21 Null Pointer Exception bugs in 2024 (Open)" href="https://prosys.kaist.ac.kr/unitcon/posts/2024-bug-release-open/"></a>
-</article>
-
-<article class="post-entry"> 
-  <header class="entry-header">
-    <h2 class="entry-hint-parent">We reported 21 Null Pointer Exception bugs in 2024 (Patched)
-    </h2>
-  </header>
-  <div class="entry-content">
-    <p>We experimented to find Null Pointer Exception bugs in 51 popular libraries, and reported 21 bugs to the maintainers of each library.
-Of these, 15 reports have been patched. The table below lists the patched bugs.
-Project Report Status Apache Commons BCEL Issue 289 PatchedApache Commons Configuration Issue 355 PatchedApache Commons Configuration Issue 365 PatchedApache Commons Configuration Issue 368 PatchedApache Commons Configuration Issue 381 PatchedApache Commons DBCP Issue 352 PatchedApache Johnzon Issue 117 PatchedApache Johnzon Issue 123 PatchedApache Karaf Issue 1825 PatchedApache Karaf Issue 1826 PatchedApache PDFBox Issue 178 PatchedFeign Issue 2304 PatchedJSqlParser Issue 1965 PatchedKubernetes Java Client Issue 3081 PatchedOpenGrok Issue 4542 Patched</p>
-  </div>
-  <footer class="entry-footer"><span title='2024-09-12 00:00:00 +0000 UTC'>September 12, 2024</span></footer>
-  <a class="entry-link" aria-label="post link to We reported 21 Null Pointer Exception bugs in 2024 (Patched)" href="https://prosys.kaist.ac.kr/unitcon/posts/2024-bug-release-patched/"></a>
-</article>
-
-<article class="post-entry"> 
-  <header class="entry-header">
-    <h2 class="entry-hint-parent">We reported 21 Null Pointer Exception bugs in 2024 (Rejected)
-    </h2>
-  </header>
-  <div class="entry-content">
-    <p>We experimented to find Null Pointer Exception bugs in 51 popular libraries, and reported 21 bugs to the maintainers of each library.
-Of these, 2 reports were rejected. The table below lists the rejected bugs.
-Project Report Status Apache Commons Configuration Issue 382 RejectedApache Commons IO Issue 569 Rejected</p>
-  </div>
-  <footer class="entry-footer"><span title='2024-09-12 00:00:00 +0000 UTC'>September 12, 2024</span></footer>
-  <a class="entry-link" aria-label="post link to We reported 21 Null Pointer Exception bugs in 2024 (Rejected)" href="https://prosys.kaist.ac.kr/unitcon/posts/2024-bug-release-rejected/"></a>
 </article>
     </main>
     

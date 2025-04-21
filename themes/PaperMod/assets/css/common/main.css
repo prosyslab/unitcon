@@ -30,10 +30,19 @@
 
 .social-icons a {
     display: inline-flex;
+    align-items: center;
     padding: 10px;
 }
 
+.social-icons a img {
+    display: inline-flex;
+    margin-right: 10px;
+    align-items: center;
+}
+
 .social-icons a svg {
+    align-items: center;
+    margin-right: 8px;
     height: 26px;
     width: 26px;
 }
