@@ -214,42 +214,45 @@ The overall structure of UnitCon is illustrated below.
 <img src="img/overview.svg" alt="overview of UnitCon" />
 
 The following explains the gray boxes in the figure above.
-<br></br>
-<h3>Initialization</h3>
-For the given target program location, UnitCon first finds the error entry methods using the call graph derived by the static analyzer.
-Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods.
-Such partial test cases are written in a domain-specific language that we designed for the synthesis.
-<br></br>
-
-<h3>Enumeration</h3>
-Given a set of partial test cases, UnitCon enumerates new partial unit tests by expanding the placeholders.
-<br></br>
-
-<h3>Pruning & Prioritization</h3>
-To improve the efficiency, we guide the search using static analysis results.
 <ul class="overview-ul">
-  <li>
-    <b>Pruning</b>
+  <li><b>Initialization</b>
     <br/>
-    UnitCon effectively prunes the search space by comparing the semantics between partial test cases.
-    If two partial test cases are deemed to be semantically equivalent by the static analyzer, UnitCon discards the larger one.
+    For the given target program location, UnitCon first finds the error entry methods using the call graph derived by the static analyzer.
+    Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods.
+    Such partial test cases are written in a domain-specific language that we designed for the synthesis.
   </li>
-  <li>
-    <b>Prioritization</b>
+  <li><b>Enumeration</b>
     <br/>
-    UnitCon effectively prioritizes the partial test cases that are more likely to trigger the target error.
-    For a given target program location, the static analyzer estimates sufficient conditions for the target error.
-    During the synthesis, UnitCon checks if the partial test case can potentially satisfy the error conditions.
-    If so, UnitCon prioritizes the partial test case.
+    Given a set of partial test cases, UnitCon enumerates new partial unit tests by expanding the placeholders.
+  </li>
+  <li><b>Pruning & Prioritization</b>
+    <br/>
+    To improve the efficiency, we guide the search using static analysis results.
+    <ul class="overview-ul">
+      <li>
+        <b>Pruning</b>
+        <br/>
+        UnitCon effectively prunes the search space by comparing the semantics between partial test cases.
+        If two partial test cases are deemed to be semantically equivalent by the static analyzer, UnitCon discards the larger one.
+      </li>
+      <li>
+        <b>Prioritization</b>
+        <br/>
+        UnitCon effectively prioritizes the partial test cases that are more likely to trigger the target error.
+        For a given target program location, the static analyzer estimates sufficient conditions for the target error.
+        During the synthesis, UnitCon checks if the partial test case can potentially satisfy the error conditions.
+        If so, UnitCon prioritizes the partial test case.
+      </li>
+    </ul>
+  </li>
+  <li><b>Ground Checker</b>
+    <br/>
+    It checks whether UnitCon has synthesized an executable test case.
+    If it fails to synthesize one, the synthesis process is repeated.
+    Otherwise, the synthesized test case is executed using the <b>Tester</b> to check whether the targeted exception is triggered.
+    If the targeted exception is successfully reproduced, the test case is returned; otherwise, it is discarded.
   </li>
 </ul>
-<br/>
-
-<h3>Ground Checker</h3>
-It checks whether UnitCon has synthesized an executable test case.
-If it fails to synthesize one, the synthesis process is repeated.
-Otherwise, the synthesized test case is executed using the <b>Tester</b> to check whether the targeted exception is triggered.
-If the targeted exception is successfully reproduced, the test case is returned; otherwise, it is discarded.
     </div>
     <div class="entry-content">
         <style>
@@ -526,8 +529,7 @@ the Korea government (MSIT) (No.RS-2025-02263143, Development of Ground Station 
 
   .image-row img{
     width: 100%;
-    height: auto;
-    max-width: 150px;
+    object-fit: contain;
   }
 </style>
 <footer class="footer">
@@ -540,8 +542,8 @@ the Korea government (MSIT) (No.RS-2025-02263143, Development of Ground Station 
     </span>
     <br></br>
     <div class="image-row">
-        <img id="prosys-long-logo" src="img/prosys-logo-long-blue.png" alt=""/>
-        <img id="kaist-long-logo" src="img/kaist-logo-blue.png" alt=""/>
+        <img id="prosys-long-logo" src="img/prosys-logo-long-blue.png" alt="" style="max-width: 200px"/>
+        <img id="kaist-long-logo" src="img/kaist-logo-blue.png" alt="" style="max-width: 150px"/>
     </div>
     <br></br>
 </footer>
