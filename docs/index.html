@@ -11,7 +11,7 @@
 <meta name="description" content="">
 <meta name="author" content="">
 <link rel="canonical" href="https://prosys.kaist.ac.kr/unitcon/">
-<link crossorigin="anonymous" href="/unitcon/assets/css/stylesheet.7871e460c7d553dd180fa3ef33c4bd1de20490ab341df57b244bfdeb58901f5b.css" integrity="sha256-eHHkYMfVU90YD6PvM8S9HeIEkKs0HfV7JEv961iQH1s=" rel="preload stylesheet" as="style">
+<link crossorigin="anonymous" href="/unitcon/assets/css/stylesheet.0927bf4cd2ad253d44baa876b96e30354ff2a0b0cfe3a1b22335aa57176fc500.css" integrity="sha256-CSe/TNKtJT1Euqh2uW4wNU/yoLDP46GyIzWqVxdvxQA=" rel="preload stylesheet" as="style">
 <link rel="icon" href="https://prosys.kaist.ac.kr/unitcon/favicon.ico">
 <link rel="icon" type="image/png" sizes="16x16" href="https://prosys.kaist.ac.kr/unitcon/favicon-16x16.png">
 <link rel="icon" type="image/png" sizes="32x32" href="https://prosys.kaist.ac.kr/unitcon/favicon-32x32.png">
@@ -193,8 +193,8 @@ If the targeted exception is successfully reproduced, the test case is returned;
         border-bottom: 1px solid #fff;  
     }
 
-    th {
-        width : 450px;
+    .project-th {
+        width : 300px;
         height: 40px;
         text-align: center;
         border-collapse: collapse;
@@ -203,8 +203,8 @@ If the targeted exception is successfully reproduced, the test case is returned;
         vertical-align: middle;
     }
 
-    body.dark th {
-        width : 450px;
+    body.dark .project-th {
+        width : 300px;
         height: 40px;
         text-align: center;
         color: #fff;
@@ -212,28 +212,70 @@ If the targeted exception is successfully reproduced, the test case is returned;
         vertical-align: middle;
     }
 
-    td {
-        width : 450px;
+    .report-th {
+        width : 600px;
+        height: 40px;
+        text-align: center;
+        border-collapse: collapse;
+        color: #000;
+        border-bottom: 1px solid #000;
+        vertical-align: middle;
+    }
+
+    body.dark .report-th {
+        width : 600px;
+        height: 40px;
+        text-align: center;
+        color: #fff;
+        border-bottom: 1px solid #fff;
+        vertical-align: middle;
+    }
+
+    .project-td {
+        width : 300px;
         height: 40px;
         text-align: left;
         color: #000;
         border-bottom: 1px solid #0000001b;
         vertical-align: middle;
         padding-left: 10px;
+        font-size: 18px;
     }
 
-    body.dark td {
-        width : 450px;
+    body.dark .project-td {
+        width : 300px;
         height: 40px;
         text-align: left;
         color: #DADADB;
         border-bottom: 1px solid #2c2d30;
         vertical-align: middle;
         padding-left: 10px;
+        font-size: 18px;
+    }
+
+    .report-td {
+        width : 600px;
+        height: 40px;
+        text-align: left;
+        color: #000;
+        border-bottom: 1px solid #0000001b;
+        vertical-align: middle;
+        padding-left: 10px;
+        font-size: 18px;
+    }
+
+    body.dark .report-td {
+        width : 600px;
+        height: 40px;
+        text-align: left;
+        color: #DADADB;
+        border-bottom: 1px solid #2c2d30;
+        vertical-align: middle;
+        padding-left: 10px;
+        font-size: 18px;
     }
 
     .patched {
-        font-weight: bold;
         color: #123458;
     }
 
@@ -242,23 +284,19 @@ If the targeted exception is successfully reproduced, the test case is returned;
     }
 
     .open {
-        font-weight: bold;
         color: #A9A9A9;
     }
 
     body.dark .open {
-        font-weight: bold;
         color: #7A7E85;
     }
 
     .rejected {
-        font-weight: bold;
-        color: #C5C5C5;
+        color: #A9A9A9;
     }
 
     body.dark .rejected {
-        font-weight: bold;
-        color: #5B5F66;
+        color: #7A7E85;
     }
 </style>
 
@@ -272,86 +310,86 @@ If the targeted exception is successfully reproduced, the test case is returned;
     <br></br>
     <table>
         <tr>
-            <th scope="col">Project</th>
-            <th scope="col">Report</th>
+            <th class="project-th" scope="col">Project</th>
+            <th class="report-th" scope="col">Report</th>
         </tr>
         <tr>
-            <td>Activiti</td>
-            <td><a class="open" href="https://github.com/Activiti/Activiti/issues/4553">Issue 4553 (Open)</a></td>
+            <td class="project-td">Activiti</td>
+            <td class="report-td"><a class="open" href="https://github.com/Activiti/Activiti/issues/4553">Issue 4553 (Open)</a></td>
         </tr>
         <tr>
-            <td>Apache Commons BCEL</td>
-            <td><a class="patched" href="https://github.com/apache/commons-bcel/pull/289">Issue 289 (Patched)</a></td>
+            <td class="project-td">Apache Commons BCEL</td>
+            <td class="report-td"><a class="patched" href="https://github.com/apache/commons-bcel/pull/289">Issue 289 (Patched)</a></td>
         </tr>
         <tr>
-            <td>Apache Commons Configuration</td>
-            <td>
+            <td class="project-td">Apache Commons Configuration</td>
+            <td class="report-td">
                 <a class="patched" href="https://github.com/apache/commons-configuration/pull/355">Issue 355 (Patched)</a>
-                <br/>
+                ,
                 <a class="patched" href="https://github.com/apache/commons-configuration/pull/365">Issue 365 (Patched)</a>
-                <br/>
+                ,
                 <a class="patched" href="https://github.com/apache/commons-configuration/pull/368">Issue 368 (Patched)</a>
                 <br/>
                 <a class="patched" href="https://github.com/apache/commons-configuration/pull/381">Issue 381 (Patched)</a>
-                <br/>
+                ,
                 <a class="rejected" href="https://github.com/apache/commons-configuration/pull/382">Issue 382 (Rejected)</a>
             </td>
         </tr>
         <tr>
-            <td>Apache Commons DBCP</td>
-            <td><a class="patched" href="https://github.com/apache/commons-dbcp/pull/352">Issue 352 (Patched)</a></td>
+            <td class="project-td">Apache Commons DBCP</td>
+            <td class="report-td"><a class="patched" href="https://github.com/apache/commons-dbcp/pull/352">Issue 352 (Patched)</a></td>
         </tr>
         <tr>
-            <td>Apache Commons IO</td>
-            <td><a class="rejected" href="https://github.com/apache/commons-io/pull/569">Issue 569 (Rejected)</a></td>
+            <td class="project-td">Apache Commons IO</td>
+            <td class="report-td"><a class="rejected" href="https://github.com/apache/commons-io/pull/569">Issue 569 (Rejected)</a></td>
         </tr>
         <tr>
-            <td>Apache Commons Math</td>
-            <td><a class="open" href="https://github.com/apache/commons-math/pull/236">Issue 236 (Open)</a></td>
+            <td class="project-td">Apache Commons Math</td>
+            <td class="report-td"><a class="open" href="https://github.com/apache/commons-math/pull/236">Issue 236 (Open)</a></td>
         </tr>
         <tr>
-            <td>Apache Johnzon</td>
-            <td>
+            <td class="project-td">Apache Johnzon</td>
+            <td class="report-td">
                 <a class="patched" href="https://github.com/apache/johnzon/pull/117">Issue 117 (Patched)</a>
-                <br/>
+                ,
                 <a class="patched" href="https://github.com/apache/johnzon/pull/123">Issue 123 (Patched)</a>
             </td>
         </tr>
         <tr>
-            <td>Apache Karaf</td>
-            <td>
+            <td class="project-td">Apache Karaf</td>
+            <td class="report-td">
                 <a class="patched" href="https://github.com/apache/karaf/pull/1825">Issue 1825 (Patched)</a>
-                <br/>
+                ,
                 <a class="patched" href="https://github.com/apache/karaf/pull/1826">Issue 1826 (Patched)</a>
             </td>
         </tr>
         <tr>
-            <td>Apache PDFBox</td>
-            <td><a class="patched" href="https://github.com/apache/pdfbox/pull/178">Issue 178 (Patched)</a></td>
+            <td class="project-td">Apache PDFBox</td>
+            <td class="report-td"><a class="patched" href="https://github.com/apache/pdfbox/pull/178">Issue 178 (Patched)</a></td>
         </tr>
         <tr>
-            <td>Apache TsFile</td>
-            <td><a class="open" href="https://github.com/apache/tsfile/pull/50">Issue 50 (Open)</a></td>
+            <td class="project-td">Apache TsFile</td>
+            <td class="report-td"><a class="open" href="https://github.com/apache/tsfile/pull/50">Issue 50 (Open)</a></td>
         </tr>
         <tr>
-            <td>Feign</td>
-            <td><a class="patched" href="https://github.com/OpenFeign/feign/pull/2304">Issue 2304 (Patched)</a></td>
+            <td class="project-td">Feign</td>
+            <td class="report-td"><a class="patched" href="https://github.com/OpenFeign/feign/pull/2304">Issue 2304 (Patched)</a></td>
         </tr>
         <tr>
-            <td>JSqlParser</td>
-            <td><a class="patched" href="https://github.com/JSQLParser/JSqlParser/pull/1965">Issue 1965 (Patched)</a></td>
+            <td class="project-td">JSqlParser</td>
+            <td class="report-td"><a class="patched" href="https://github.com/JSQLParser/JSqlParser/pull/1965">Issue 1965 (Patched)</a></td>
         </tr>
         <tr>
-            <td>Kubernetes Java Client</td>
-            <td><a class="patched" href="https://github.com/kubernetes-client/java/pull/3081">Issue 3081 (Patched)</a></td>
+            <td class="project-td">Kubernetes Java Client</td>
+            <td class="report-td"><a class="patched" href="https://github.com/kubernetes-client/java/pull/3081">Issue 3081 (Patched)</a></td>
         </tr>
         <tr>
-            <td>Nutz</td>
-            <td><a class="open" href="https://github.com/nutzam/nutz/pull/1613">Issue 1613 (Open)</a></td>
+            <td class="project-td">Nutz</td>
+            <td class="report-td"><a class="open" href="https://github.com/nutzam/nutz/pull/1613">Issue 1613 (Open)</a></td>
         </tr>
         <tr>
-            <td>OpenGrok</td>
-            <td><a class="patched" href="https://github.com/oracle/opengrok/pull/4542">Issue 4542 (Patched)</a></td>
+            <td class="project-td">OpenGrok</td>
+            <td class="report-td"><a class="patched" href="https://github.com/oracle/opengrok/pull/4542">Issue 4542 (Patched)</a></td>
         </tr>
     </table>
 </div>
