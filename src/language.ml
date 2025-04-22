@@ -1,44 +1,6 @@
+include Ppx_compare_lib.Builtin
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
-
-(* compare *)
-let compare_string = String.compare
-
-let compare_bool = Bool.compare
-
-let compare_list = List.compare
-
-let compare_int = Int.compare
-
-let compare_char = Char.compare
-
-let compare_float = Float.compare
-
-let compare_option cmp o1 o2 =
-  match (o1, o2) with
-  | Some x1, Some x2 -> cmp x1 x2
-  | Some _, None -> 1
-  | None, Some _ -> -1
-  | None, None -> 0
-
-(* equal *)
-let equal_string = String.equal
-
-let equal_bool = Bool.equal
-
-let equal_list = List.equal
-
-let equal_int = Int.equal
-
-let equal_char = Char.equal
-
-let equal_float = Float.equal
-
-let equal_option eq o1 o2 =
-  match (o1, o2) with
-  | Some x1, Some x2 -> eq x1 x2
-  | None, None -> true
-  | _ -> false
 
 type tc_completion = Complete | Need_Fuzzer | Need_Loop | Incomplete
 
