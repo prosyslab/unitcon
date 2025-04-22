@@ -11,7 +11,7 @@
 <meta name="description" content="">
 <meta name="author" content="">
 <link rel="canonical" href="https://prosys.kaist.ac.kr/unitcon/">
-<link crossorigin="anonymous" href="/unitcon/assets/css/stylesheet.4e806a9bb765a03d0dd57a58c91bf51b4d38e5d68b1b71260fb841e113489bd1.css" integrity="sha256-ToBqm7dloD0N1XpYyRv1G0045daLG3EmD7hB4RNIm9E=" rel="preload stylesheet" as="style">
+<link crossorigin="anonymous" href="/unitcon/assets/css/stylesheet.7871e460c7d553dd180fa3ef33c4bd1de20490ab341df57b244bfdeb58901f5b.css" integrity="sha256-eHHkYMfVU90YD6PvM8S9HeIEkKs0HfV7JEv961iQH1s=" rel="preload stylesheet" as="style">
 <link rel="icon" href="https://prosys.kaist.ac.kr/unitcon/favicon.ico">
 <link rel="icon" type="image/png" sizes="16x16" href="https://prosys.kaist.ac.kr/unitcon/favicon-16x16.png">
 <link rel="icon" type="image/png" sizes="32x32" href="https://prosys.kaist.ac.kr/unitcon/favicon-32x32.png">
@@ -178,29 +178,33 @@ If the targeted exception is successfully reproduced, the test case is returned;
     table {
         margin-left:auto;
         margin-right:auto;
-        width: 800px;
+        width: 100%;
         border-collapse: collapse;
         border-top: 1px solid #000;
         border-bottom: 1px solid #000;
     }
 
     body.dark table {
+        margin-left:auto;
+        margin-right:auto;
+        width: 100%;
         border-collapse: collapse;
         border-top: 1px solid #fff;
         border-bottom: 1px solid #fff;  
     }
 
     th {
-        width: 400px;
+        width : 450px;
         height: 40px;
         text-align: center;
+        border-collapse: collapse;
         color: #000;
         border-bottom: 1px solid #000;
         vertical-align: middle;
     }
 
     body.dark th {
-        width: 400px;
+        width : 450px;
         height: 40px;
         text-align: center;
         color: #fff;
@@ -209,22 +213,23 @@ If the targeted exception is successfully reproduced, the test case is returned;
     }
 
     td {
-        width: 400px;
+        width : 450px;
         height: 40px;
         text-align: left;
         color: #000;
         border-bottom: 1px solid #0000001b;
         vertical-align: middle;
+        padding-left: 10px;
     }
 
     body.dark td {
-        width: 400px;
+        width : 450px;
         height: 40px;
         text-align: left;
         color: #DADADB;
         border-bottom: 1px solid #2c2d30;
         vertical-align: middle;
-
+        padding-left: 10px;
     }
 
     .patched {
