@@ -130,7 +130,48 @@
         <h1>UnitCon: Synthesizing Targeted Unit Tests for Java Runtime Exceptions</h1>
     </header>
     <div class="entry-content">
-         We present <strong>UnitCon</strong>, a system for synthesizing targeted unit tests to trigger runtime exceptions in Java programs. Unlike existing tools that focus on code coverage, UnitCon uses static analysis to prune and prioritize the search space, enabling efficient discovery of exception-triggering tests. Applied to 51 open-source projects, UnitCon found 21 previously unknown null pointer exception (NPE) bugs.
+        <style>
+    ul{
+        list-style: none;
+        display: flex;
+        justify-content: space-around;
+    }
+
+    li {
+        display: inline-block;
+        text-align: center;
+    }
+</style>
+
+<div id="people">
+    <ul>
+        <li>
+            <a href="https://sujin0529.github.io/">Sujin Jang
+            </a>
+        </li>
+        <li>
+            <a href="https://yeonhee-ryou.github.io/">Yeonhee Ryou
+            </a>
+        </li>
+        <li>
+            Heewon Lee
+        </li>
+        <li>
+            <a href="https://kihongheo.kaist.ac.kr/">Kihong Heo
+            </a>
+        </li>
+    </ul>
+    <ul>
+        <li>
+            <a href="https://prosys.kaist.ac.kr">
+                Prosys @ KAIST
+            </a>
+        </li>
+    </ul>
+</div>
+    </div>
+    <div class="entry-content">
+         <strong>UnitCon</strong> is a system that synthesizes targeted unit tests to trigger runtime exceptions in Java programs. UnitCon uses static analysis to prune and prioritize the search space, enabling efficient discovery of exception-triggering tests. Applied to 51 open-source projects, UnitCon found 21 previously unknown null pointer exception (NPE) bugs.
      </div>
     <div class="entry-content">
         <h1>Overview of UnitCon</h1>
@@ -142,7 +183,7 @@ The overall structure of UnitCon is illustrated below.
 The following explains the gray boxes in the figure above.
 <br></br>
 <h3>Initialization</h3>
-For the given target program location. UnitCon first the error entry methods using the call graph derived by the static analyzer.
+For the given target program location, UnitCon first finds the error entry methods using the call graph derived by the static analyzer.
 Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods.
 Such partial test cases are written in a domain-specific language that we designed for the synthesis.
 <br></br>
@@ -168,9 +209,9 @@ If so, UnitCon prioritizes the partial test case.
 <br></br>
 
 <h3>Ground Checker</h3>
-It checks whether UnitCon has generated an executable test case.
-If it fails to generate one, the synthesis process is repeated.
-If an executable test case is generated, it is executed using the Tester to check whether the targeted exception is triggered.
+It checks whether UnitCon has synthesized an executable test case.
+If it fails to synthesize one, the synthesis process is repeated.
+Otherwise, the synthesized test case is executed using the <b>Tester</b> to check whether the targeted exception is triggered.
 If the targeted exception is successfully reproduced, the test case is returned; otherwise, it is discarded.
     </div>
     <div class="entry-content">
@@ -302,11 +343,11 @@ If the targeted exception is successfully reproduced, the test case is returned;
 
 <div id="bug-reports">
     <h1>Our Bug Reports</h1>
-    We experimented to find Null Pointer Exception bugs in 51 popular libraries, and reported 21 bugs to the maintainers
-    of each library.
-    Of these, <b class="patched">15</b> reports have been patched, <b class="open">4</b> reports are still open, and <b
-        class="rejected">2</b> reports were rejected.
+    UnitCon found 21 Null Pointer Exception bugs in 51 popular libraries, and we reported them.
+    Of these, <b class="patched">15</b> reports have been patched, <b class="open">4</b> reports are still open,
+    and <b class="rejected">2</b> reports were rejected.
     The table below lists the reported bugs.
+
     <br></br>
     <table>
         <tr>
@@ -329,6 +370,7 @@ If the targeted exception is successfully reproduced, the test case is returned;
                 <a class="patched" href="https://github.com/apache/commons-configuration/pull/365">Issue 365 (Patched)</a>
                 ,
                 <a class="patched" href="https://github.com/apache/commons-configuration/pull/368">Issue 368 (Patched)</a>
+                ,
                 <br/>
                 <a class="patched" href="https://github.com/apache/commons-configuration/pull/381">Issue 381 (Patched)</a>
                 ,
@@ -392,47 +434,6 @@ If the targeted exception is successfully reproduced, the test case is returned;
             <td class="report-td"><a class="patched" href="https://github.com/oracle/opengrok/pull/4542">Issue 4542 (Patched)</a></td>
         </tr>
     </table>
-</div>
-    </div>
-    <div class="entry-content">
-        <div id="people">
-    <h1>People</h1>
-    <ul>
-        <li>
-            Sujin Jang (KAIST)
-            <a href="https://sujin0529.github.io/">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-house-fill" viewBox="0 0 16 16">
-                    <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L8 2.207l6.646 6.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293z"/>
-                    <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293z"/>
-                </svg>
-            </a>
-        </li>
-        <li>
-            Yeonhee Ryou (KAIST)
-            <a href="https://yeonhee-ryou.github.io/">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-house-fill" viewBox="0 0 16 16">
-                    <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L8 2.207l6.646 6.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293z"/>
-                    <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293z"/>
-                </svg>
-            </a>
-        </li>
-        <li>
-            Heewon Lee (KAIST)
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-house-fill" viewBox="0 0 16 16">
-                <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L8 2.207l6.646 6.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293z"/>
-                <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293z"/>
-            </svg>
-        </li>
-        <li>
-            Kihong Heo (KAIST)
-            <a href="https://kihongheo.kaist.ac.kr/">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-house-fill" viewBox="0 0 16 16">
-                    <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L8 2.207l6.646 6.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293z"/>
-                    <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293z"/>
-                </svg>
-            </a>
-        </li>
-    </ul>
 </div>
     </div>
     <div class="entry-content">

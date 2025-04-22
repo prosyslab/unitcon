@@ -16,8 +16,8 @@ params:
   homeInfoParams:
     Title: "UnitCon: Synthesizing Targeted Unit Tests for Java Runtime Exceptions"
     Content: >
-      We present **UnitCon**, a system for synthesizing targeted unit tests to trigger runtime exceptions in Java programs.
-      Unlike existing tools that focus on code coverage, UnitCon uses static analysis to prune and prioritize the search space, enabling efficient discovery of exception-triggering tests.
+      **UnitCon** is a system that synthesizes targeted unit tests to trigger runtime exceptions in Java programs.
+      UnitCon uses static analysis to prune and prioritize the search space, enabling efficient discovery of exception-triggering tests.
       Applied to 51 open-source projects, UnitCon found 21 previously unknown null pointer exception (NPE) bugs.
 
   overview:

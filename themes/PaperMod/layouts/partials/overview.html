@@ -7,7 +7,7 @@ The overall structure of UnitCon is illustrated below.
 The following explains the gray boxes in the figure above.
 <br></br>
 <h3>Initialization</h3>
-For the given target program location. UnitCon first the error entry methods using the call graph derived by the static analyzer.
+For the given target program location, UnitCon first finds the error entry methods using the call graph derived by the static analyzer.
 Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods.
 Such partial test cases are written in a domain-specific language that we designed for the synthesis.
 <br></br>
@@ -33,7 +33,7 @@ If so, UnitCon prioritizes the partial test case.
 <br></br>
 
 <h3>Ground Checker</h3>
-It checks whether UnitCon has generated an executable test case.
-If it fails to generate one, the synthesis process is repeated.
-If an executable test case is generated, it is executed using the Tester to check whether the targeted exception is triggered.
+It checks whether UnitCon has synthesized an executable test case.
+If it fails to synthesize one, the synthesis process is repeated.
+Otherwise, the synthesized test case is executed using the <b>Tester</b> to check whether the targeted exception is triggered.
 If the targeted exception is successfully reproduced, the test case is returned; otherwise, it is discarded.
