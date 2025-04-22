@@ -1,35 +1,38 @@
 <h1>Overview of UnitCon</h1>
 
 The overall structure of UnitCon is illustrated below.
+
 <img src="img/overview.svg" alt="overview of UnitCon" />
 
-<h3>1. Initialization</h3>
+The following explains the gray boxes in the figure above.
+<br></br>
+<h3>Initialization</h3>
 For the given target program location. UnitCon first the error entry methods using the call graph derived by the static analyzer.
 Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods.
 Such partial test cases are written in a domain-specific language that we designed for the synthesis.
 <br></br>
 
-<h3>2. Enumeration</h3>
+<h3>Enumeration</h3>
 Given a set of partial test cases, UnitCon enumerates new partial unit tests by expanding the placeholders.
 <br></br>
 
-<h3>3. Pruning & Prioritization</h3>
+<h3>Pruning & Prioritization</h3>
 To improve the efficiency, we guide the search using static analysis results.
 <br></br>
 
-<h4>3.1. Pruning</h4>
+<h4>Pruning</h4>
 UnitCon effectively prunes the search space by comparing the semantics between partial test cases.
 If two partial test cases are deemed to be semantically equivalent by the static analyzer, UnitCon discards the larger one.
 <br></br>
 
-<h4>3.2. Prioritization</h4>
+<h4>Prioritization</h4>
 UnitCon effectively prioritizes the partial test cases that are more likely to trigger the target error.
 For a given target program location, the static analyzer estimates sufficient conditions for the target error.
 During the synthesis, UnitCon checks if the partial test case can potentially satisfy the error conditions.
 If so, UnitCon prioritizes the partial test case.
 <br></br>
 
-<h3>4. Ground Check</h3>
+<h3>Ground Checker</h3>
 It checks whether UnitCon has generated an executable test case.
 If it fails to generate one, the synthesis process is repeated.
 If an executable test case is generated, it is executed using the Tester to check whether the targeted exception is triggered.

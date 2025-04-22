@@ -127,41 +127,47 @@
 <main class="main"> 
 <article class="first-entry home-info">
     <header class="entry-header">
-        <h1>UnitCon</h1>
+        <h1>UnitCon: Synthesizing Targeted Unit Tests for Java Runtime Exceptions</h1>
     </header>
+    <div class="entry-content">
+         We present <strong>UnitCon</strong>, a system for synthesizing targeted unit tests to trigger runtime exceptions in Java programs. Unlike existing tools that focus on code coverage, UnitCon uses static analysis to prune and prioritize the search space, enabling efficient discovery of exception-triggering tests. Applied to 51 open-source projects, UnitCon found 21 previously unknown null pointer exception (NPE) bugs.
+     </div>
     <div class="entry-content">
         <h1>Overview of UnitCon</h1>
 
 The overall structure of UnitCon is illustrated below.
+
 <img src="img/overview.svg" alt="overview of UnitCon" />
 
-<h3>1. Initialization</h3>
+The following explains the gray boxes in the figure above.
+<br></br>
+<h3>Initialization</h3>
 For the given target program location. UnitCon first the error entry methods using the call graph derived by the static analyzer.
 Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods.
 Such partial test cases are written in a domain-specific language that we designed for the synthesis.
 <br></br>
 
-<h3>2. Enumeration</h3>
+<h3>Enumeration</h3>
 Given a set of partial test cases, UnitCon enumerates new partial unit tests by expanding the placeholders.
 <br></br>
 
-<h3>3. Pruning & Prioritization</h3>
+<h3>Pruning & Prioritization</h3>
 To improve the efficiency, we guide the search using static analysis results.
 <br></br>
 
-<h4>3.1. Pruning</h4>
+<h4>Pruning</h4>
 UnitCon effectively prunes the search space by comparing the semantics between partial test cases.
 If two partial test cases are deemed to be semantically equivalent by the static analyzer, UnitCon discards the larger one.
 <br></br>
 
-<h4>3.2. Prioritization</h4>
+<h4>Prioritization</h4>
 UnitCon effectively prioritizes the partial test cases that are more likely to trigger the target error.
 For a given target program location, the static analyzer estimates sufficient conditions for the target error.
 During the synthesis, UnitCon checks if the partial test case can potentially satisfy the error conditions.
 If so, UnitCon prioritizes the partial test case.
 <br></br>
 
-<h3>4. Ground Check</h3>
+<h3>Ground Checker</h3>
 It checks whether UnitCon has generated an executable test case.
 If it fails to generate one, the synthesis process is repeated.
 If an executable test case is generated, it is executed using the Tester to check whether the targeted exception is triggered.
@@ -170,43 +176,53 @@ If the targeted exception is successfully reproduced, the test case is returned;
     <div class="entry-content">
         <style>
     table {
+        margin-left:auto;
+        margin-right:auto;
+        width: 450px;
         border-collapse: collapse;
+        border-top: 1px solid #000;
+        border-bottom: 1px solid #000;
+    }
+
+    body.dark table {
+        border-collapse: collapse;
+        border-top: 1px solid #fff;
+        border-bottom: 1px solid #fff;  
     }
 
     th {
-        width: 250px;
-        height: 45px;
+        width: 225px;
+        height: 40px;
         text-align: center;
         color: #000;
-        border: 1px solid #000;
+        border-bottom: 1px solid #000;
         vertical-align: middle;
     }
 
     body.dark th {
-        width: 250px;
-        height: 45px;
+        width: 225px;
+        height: 40px;
         text-align: center;
         color: #fff;
-        border: 1px solid #fff;
+        border-bottom: 1px solid #fff;
         vertical-align: middle;
-
     }
 
     td {
-        width: 250px;
-        height: 45px;
-        text-align: center;
+        width: 225px;
+        height: 40px;
+        text-align: left;
         color: #000;
-        border: 1px solid #000;
+        border-bottom: 1px solid #0000001b;
         vertical-align: middle;
     }
 
     body.dark td {
-        width: 250px;
-        height: 45px;
-        text-align: center;
+        width: 225px;
+        height: 40px;
+        text-align: left;
         color: #DADADB;
-        border: 1px solid #DADADB;
+        border-bottom: 1px solid #2c2d30;
         vertical-align: middle;
 
     }
@@ -253,112 +269,84 @@ If the targeted exception is successfully reproduced, the test case is returned;
         <tr>
             <th scope="col">Project</th>
             <th scope="col">Report</th>
-            <th scope="col">Status</th>
         </tr>
         <tr>
             <td>Activiti</td>
-            <td><a href="https://github.com/Activiti/Activiti/issues/4553">Issue 4553</a></td>
-            <td class="open">Open</td>
+            <td><a class="open" href="https://github.com/Activiti/Activiti/issues/4553">Issue 4553 (Open)</a></td>
         </tr>
         <tr>
             <td>Apache Commons BCEL</td>
-            <td><a href="https://github.com/apache/commons-bcel/pull/289">Issue 289</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/apache/commons-bcel/pull/289">Issue 289 (Patched)</a></td>
         </tr>
         <tr>
             <td>Apache Commons Configuration</td>
-            <td><a href="https://github.com/apache/commons-configuration/pull/355">Issue 355</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Commons Configuration</td>
-            <td><a href="https://github.com/apache/commons-configuration/pull/365">Issue 365</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Commons Configuration</td>
-            <td><a href="https://github.com/apache/commons-configuration/pull/368">Issue 368</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Commons Configuration</td>
-            <td><a href="https://github.com/apache/commons-configuration/pull/381">Issue 381</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Commons Configuration</td>
-            <td><a href="https://github.com/apache/commons-configuration/pull/382">Issue 382</a></td>
-            <td class="rejected">Rejected</td>
+            <td>
+                <a class="patched" href="https://github.com/apache/commons-configuration/pull/355">Issue 355 (Patched)</a>
+                <br/>
+                <a class="patched" href="https://github.com/apache/commons-configuration/pull/365">Issue 365 (Patched)</a>
+                <br/>
+                <a class="patched" href="https://github.com/apache/commons-configuration/pull/368">Issue 368 (Patched)</a>
+                <br/>
+                <a class="patched" href="https://github.com/apache/commons-configuration/pull/381">Issue 381 (Patched)</a>
+                <br/>
+                <a class="rejected" href="https://github.com/apache/commons-configuration/pull/382">Issue 382 (Rejected)</a>
+            </td>
         </tr>
         <tr>
             <td>Apache Commons DBCP</td>
-            <td><a href="https://github.com/apache/commons-dbcp/pull/352">Issue 352</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/apache/commons-dbcp/pull/352">Issue 352 (Patched)</a></td>
         </tr>
         <tr>
             <td>Apache Commons IO</td>
-            <td><a href="https://github.com/apache/commons-io/pull/569">Issue 569</a></td>
-            <td class="rejected">Rejected</td>
+            <td><a class="rejected" href="https://github.com/apache/commons-io/pull/569">Issue 569 (Rejected)</a></td>
         </tr>
         <tr>
             <td>Apache Commons Math</td>
-            <td><a href="https://github.com/apache/commons-math/pull/236">Issue 236</a></td>
-            <td class="open">Open</td>
+            <td><a class="open" href="https://github.com/apache/commons-math/pull/236">Issue 236 (Open)</a></td>
         </tr>
         <tr>
             <td>Apache Johnzon</td>
-            <td><a href="https://github.com/apache/johnzon/pull/117">Issue 117</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Johnzon</td>
-            <td><a href="https://github.com/apache/johnzon/pull/123">Issue 123</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Karaf</td>
-            <td><a href="https://github.com/apache/karaf/pull/1825">Issue 1825</a></td>
-            <td class="patched">Patched</td>
+            <td>
+                <a class="patched" href="https://github.com/apache/johnzon/pull/117">Issue 117 (Patched)</a>
+                <br/>
+                <a class="patched" href="https://github.com/apache/johnzon/pull/123">Issue 123 (Patched)</a>
+            </td>
         </tr>
         <tr>
             <td>Apache Karaf</td>
-            <td><a href="https://github.com/apache/karaf/pull/1826">Issue 1826</a></td>
-            <td class="patched">Patched</td>
+            <td>
+                <a class="patched" href="https://github.com/apache/karaf/pull/1825">Issue 1825 (Patched)</a>
+                <br/>
+                <a class="patched" href="https://github.com/apache/karaf/pull/1826">Issue 1826 (Patched)</a>
+            </td>
         </tr>
         <tr>
             <td>Apache PDFBox</td>
-            <td><a href="https://github.com/apache/pdfbox/pull/178">Issue 178</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/apache/pdfbox/pull/178">Issue 178 (Patched)</a></td>
         </tr>
         <tr>
             <td>Apache TsFile</td>
-            <td><a href="https://github.com/apache/tsfile/pull/50">Issue 50</a></td>
-            <td class="open">Open</td>
+            <td><a class="open" href="https://github.com/apache/tsfile/pull/50">Issue 50 (Open)</a></td>
         </tr>
         <tr>
             <td>Feign</td>
-            <td><a href="https://github.com/OpenFeign/feign/pull/2304">Issue 2304</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/OpenFeign/feign/pull/2304">Issue 2304 (Patched)</a></td>
         </tr>
         <tr>
             <td>JSqlParser</td>
-            <td><a href="https://github.com/JSQLParser/JSqlParser/pull/1965">Issue 1965</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/JSQLParser/JSqlParser/pull/1965">Issue 1965 (Patched)</a></td>
         </tr>
         <tr>
             <td>Kubernetes Java Client</td>
-            <td><a href="https://github.com/kubernetes-client/java/pull/3081">Issue 3081</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/kubernetes-client/java/pull/3081">Issue 3081 (Patched)</a></td>
         </tr>
         <tr>
             <td>Nutz</td>
-            <td><a href="https://github.com/nutzam/nutz/pull/1613">Issue 1613</a></td>
-            <td class="open">Open</td>
+            <td><a class="open" href="https://github.com/nutzam/nutz/pull/1613">Issue 1613 (Open)</a></td>
         </tr>
         <tr>
             <td>OpenGrok</td>
-            <td><a href="https://github.com/oracle/opengrok/pull/4542">Issue 4542</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/oracle/opengrok/pull/4542">Issue 4542 (Patched)</a></td>
         </tr>
     </table>
 </div>
@@ -408,10 +396,6 @@ If the targeted exception is successfully reproduced, the test case is returned;
         <h1>Publication Links</h1>
 
 <div class="social-icons" >
-    <a href="https://prosys.kaist.ac.kr" target="_blank" rel="noopener noreferrer me">
-        <img id="prosys-logo" src="img/prosys-logo-black.png" alt="" width="22" height="26" />
-        Prosys @ KAIST
-    </a>
     <a href="https://github.com/prosyslab/unitcon" target="_blank" rel="noopener noreferrer me">
         <svg xmlns="http://www.w3.org/2000/svg" id="github-logo" width="16" height="16" fill="currentColor"
             class="bi bi-github" viewBox="0 0 16 16">
@@ -448,14 +432,8 @@ If the targeted exception is successfully reproduced, the test case is returned;
 
     function updateLogo() {
         const isDarkMode = document.body.classList.contains('dark');
-        const prosys_logo = document.querySelector('#prosys-logo');
         const zenodo_logo = document.querySelector('#zenodo-logo');
 
-        if (prosys_logo) {
-            prosys_logo.src = isDarkMode
-                ? 'img/prosys-logo-white.svg'
-                : 'img/prosys-logo-black.png';
-        }
         if (zenodo_logo) {
             zenodo_logo.src = isDarkMode
                 ? 'https://about.zenodo.org/static/img/icons/zenodo-icon-white.svg'

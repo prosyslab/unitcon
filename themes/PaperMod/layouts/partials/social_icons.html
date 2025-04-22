@@ -1,10 +1,6 @@
 <h1>Publication Links</h1>
 
 <div class="social-icons" {{ with .align}}align="{{ . }}" {{- end }}>
-    <a href="https://prosys.kaist.ac.kr" target="_blank" rel="noopener noreferrer me">
-        <img id="prosys-logo" src="img/prosys-logo-black.png" alt="" width="22" height="26" />
-        Prosys @ KAIST
-    </a>
     <a href="https://github.com/prosyslab/unitcon" target="_blank" rel="noopener noreferrer me">
         <svg xmlns="http://www.w3.org/2000/svg" id="github-logo" width="16" height="16" fill="currentColor"
             class="bi bi-github" viewBox="0 0 16 16">
@@ -41,14 +37,8 @@
 
     function updateLogo() {
         const isDarkMode = document.body.classList.contains('dark');
-        const prosys_logo = document.querySelector('#prosys-logo');
         const zenodo_logo = document.querySelector('#zenodo-logo');
 
-        if (prosys_logo) {
-            prosys_logo.src = isDarkMode
-                ? 'img/prosys-logo-white.svg'
-                : 'img/prosys-logo-black.png';
-        }
         if (zenodo_logo) {
             zenodo_logo.src = isDarkMode
                 ? 'https://about.zenodo.org/static/img/icons/zenodo-icon-white.svg'

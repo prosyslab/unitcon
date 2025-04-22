@@ -14,9 +14,13 @@ languages:
 
 params:
   homeInfoParams:
-    Title: UnitCon
+    Title: "UnitCon: Synthesizing Targeted Unit Tests for Java Runtime Exceptions"
     Content: >
-      Synthesizing Targeted Unit Tests for Java Runtime Exceptions
+      We present **UnitCon**, a system for synthesizing targeted unit tests to trigger runtime exceptions in Java programs.
+      Unlike existing tools that focus on code coverage, UnitCon uses static analysis to prune and prioritize the search space, enabling efficient discovery of exception-triggering tests.
+      Applied to 51 open-source projects, UnitCon found 21 previously unknown null pointer exception (NPE) bugs.
+
+  overview:
 
   bugReports:
 
@@ -27,11 +31,12 @@ params:
       title: Prosys Lab @ KAIST
       url: "https://prosys.kaist.ac.kr"
     - name: "github"
-      title: View Source on Github
+      title: Github
       url: "https://github.com/prosyslab/unitcon"
     - name: "paper"
       title: Paper
       url: "https://prosys.kaist.ac.kr/publications/fse25.pdf"
-    - name: "zip"
-      title: artifact
+    - name: "zenodo"
+      title: Artifact
       url: "https://doi.org/10.5281/zenodo.15205112"
+  

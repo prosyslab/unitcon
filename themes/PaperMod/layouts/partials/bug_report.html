@@ -1,42 +1,52 @@
 <style>
     table {
+        margin-left:auto;
+        margin-right:auto;
+        width: 450px;
         border-collapse: collapse;
+        border-top: 1px solid #000;
+        border-bottom: 1px solid #000;
+    }
+
+    body.dark table {
+        border-collapse: collapse;
+        border-top: 1px solid #fff;
+        border-bottom: 1px solid #fff;  
     }
 
     th {
-        width: 250px;
-        height: 45px;
+        width: 225px;
+        height: 40px;
         text-align: center;
         color: #000;
-        border: 1px solid #000;
+        border-bottom: 1px solid #000;
         vertical-align: middle;
     }
 
     body.dark th {
-        width: 250px;
-        height: 45px;
+        width: 225px;
+        height: 40px;
         text-align: center;
         color: #fff;
-        border: 1px solid #fff;
+        border-bottom: 1px solid #fff;
         vertical-align: middle;
-
     }
 
     td {
-        width: 250px;
-        height: 45px;
-        text-align: center;
+        width: 225px;
+        height: 40px;
+        text-align: left;
         color: #000;
-        border: 1px solid #000;
+        border-bottom: 1px solid #0000001b;
         vertical-align: middle;
     }
 
     body.dark td {
-        width: 250px;
-        height: 45px;
-        text-align: center;
+        width: 225px;
+        height: 40px;
+        text-align: left;
         color: #DADADB;
-        border: 1px solid #DADADB;
+        border-bottom: 1px solid #2c2d30;
         vertical-align: middle;
 
     }
@@ -83,112 +93,84 @@
         <tr>
             <th scope="col">Project</th>
             <th scope="col">Report</th>
-            <th scope="col">Status</th>
         </tr>
         <tr>
             <td>Activiti</td>
-            <td><a href="https://github.com/Activiti/Activiti/issues/4553">Issue 4553</a></td>
-            <td class="open">Open</td>
+            <td><a class="open" href="https://github.com/Activiti/Activiti/issues/4553">Issue 4553 (Open)</a></td>
         </tr>
         <tr>
             <td>Apache Commons BCEL</td>
-            <td><a href="https://github.com/apache/commons-bcel/pull/289">Issue 289</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/apache/commons-bcel/pull/289">Issue 289 (Patched)</a></td>
         </tr>
         <tr>
             <td>Apache Commons Configuration</td>
-            <td><a href="https://github.com/apache/commons-configuration/pull/355">Issue 355</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Commons Configuration</td>
-            <td><a href="https://github.com/apache/commons-configuration/pull/365">Issue 365</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Commons Configuration</td>
-            <td><a href="https://github.com/apache/commons-configuration/pull/368">Issue 368</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Commons Configuration</td>
-            <td><a href="https://github.com/apache/commons-configuration/pull/381">Issue 381</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Commons Configuration</td>
-            <td><a href="https://github.com/apache/commons-configuration/pull/382">Issue 382</a></td>
-            <td class="rejected">Rejected</td>
+            <td>
+                <a class="patched" href="https://github.com/apache/commons-configuration/pull/355">Issue 355 (Patched)</a>
+                <br/>
+                <a class="patched" href="https://github.com/apache/commons-configuration/pull/365">Issue 365 (Patched)</a>
+                <br/>
+                <a class="patched" href="https://github.com/apache/commons-configuration/pull/368">Issue 368 (Patched)</a>
+                <br/>
+                <a class="patched" href="https://github.com/apache/commons-configuration/pull/381">Issue 381 (Patched)</a>
+                <br/>
+                <a class="rejected" href="https://github.com/apache/commons-configuration/pull/382">Issue 382 (Rejected)</a>
+            </td>
         </tr>
         <tr>
             <td>Apache Commons DBCP</td>
-            <td><a href="https://github.com/apache/commons-dbcp/pull/352">Issue 352</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/apache/commons-dbcp/pull/352">Issue 352 (Patched)</a></td>
         </tr>
         <tr>
             <td>Apache Commons IO</td>
-            <td><a href="https://github.com/apache/commons-io/pull/569">Issue 569</a></td>
-            <td class="rejected">Rejected</td>
+            <td><a class="rejected" href="https://github.com/apache/commons-io/pull/569">Issue 569 (Rejected)</a></td>
         </tr>
         <tr>
             <td>Apache Commons Math</td>
-            <td><a href="https://github.com/apache/commons-math/pull/236">Issue 236</a></td>
-            <td class="open">Open</td>
+            <td><a class="open" href="https://github.com/apache/commons-math/pull/236">Issue 236 (Open)</a></td>
         </tr>
         <tr>
             <td>Apache Johnzon</td>
-            <td><a href="https://github.com/apache/johnzon/pull/117">Issue 117</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Johnzon</td>
-            <td><a href="https://github.com/apache/johnzon/pull/123">Issue 123</a></td>
-            <td class="patched">Patched</td>
-        </tr>
-        <tr>
-            <td>Apache Karaf</td>
-            <td><a href="https://github.com/apache/karaf/pull/1825">Issue 1825</a></td>
-            <td class="patched">Patched</td>
+            <td>
+                <a class="patched" href="https://github.com/apache/johnzon/pull/117">Issue 117 (Patched)</a>
+                <br/>
+                <a class="patched" href="https://github.com/apache/johnzon/pull/123">Issue 123 (Patched)</a>
+            </td>
         </tr>
         <tr>
             <td>Apache Karaf</td>
-            <td><a href="https://github.com/apache/karaf/pull/1826">Issue 1826</a></td>
-            <td class="patched">Patched</td>
+            <td>
+                <a class="patched" href="https://github.com/apache/karaf/pull/1825">Issue 1825 (Patched)</a>
+                <br/>
+                <a class="patched" href="https://github.com/apache/karaf/pull/1826">Issue 1826 (Patched)</a>
+            </td>
         </tr>
         <tr>
             <td>Apache PDFBox</td>
-            <td><a href="https://github.com/apache/pdfbox/pull/178">Issue 178</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/apache/pdfbox/pull/178">Issue 178 (Patched)</a></td>
         </tr>
         <tr>
             <td>Apache TsFile</td>
-            <td><a href="https://github.com/apache/tsfile/pull/50">Issue 50</a></td>
-            <td class="open">Open</td>
+            <td><a class="open" href="https://github.com/apache/tsfile/pull/50">Issue 50 (Open)</a></td>
         </tr>
         <tr>
             <td>Feign</td>
-            <td><a href="https://github.com/OpenFeign/feign/pull/2304">Issue 2304</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/OpenFeign/feign/pull/2304">Issue 2304 (Patched)</a></td>
         </tr>
         <tr>
             <td>JSqlParser</td>
-            <td><a href="https://github.com/JSQLParser/JSqlParser/pull/1965">Issue 1965</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/JSQLParser/JSqlParser/pull/1965">Issue 1965 (Patched)</a></td>
         </tr>
         <tr>
             <td>Kubernetes Java Client</td>
-            <td><a href="https://github.com/kubernetes-client/java/pull/3081">Issue 3081</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/kubernetes-client/java/pull/3081">Issue 3081 (Patched)</a></td>
         </tr>
         <tr>
             <td>Nutz</td>
-            <td><a href="https://github.com/nutzam/nutz/pull/1613">Issue 1613</a></td>
-            <td class="open">Open</td>
+            <td><a class="open" href="https://github.com/nutzam/nutz/pull/1613">Issue 1613 (Open)</a></td>
         </tr>
         <tr>
             <td>OpenGrok</td>
-            <td><a href="https://github.com/oracle/opengrok/pull/4542">Issue 4542</a></td>
-            <td class="patched">Patched</td>
+            <td><a class="patched" href="https://github.com/oracle/opengrok/pull/4542">Issue 4542 (Patched)</a></td>
         </tr>
     </table>
 </div>

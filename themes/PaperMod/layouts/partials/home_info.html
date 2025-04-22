@@ -4,6 +4,9 @@
         <h1>{{ .Title | markdownify }}</h1>
     </header>
     <div class="entry-content">
+         {{ .Content | markdownify }}
+     </div>
+    <div class="entry-content">
         {{ partial "overview.html" }}
     </div>
     <div class="entry-content">
