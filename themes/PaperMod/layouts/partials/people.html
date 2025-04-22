@@ -1,39 +1,50 @@
 <style>
-    ul{
+    .people-ul {
         list-style: none;
         display: flex;
         justify-content: space-around;
     }
 
-    li {
+    .people-li {
         display: inline-block;
         text-align: center;
+    }
+
+    .homepage {
+        color: 	navy;
+    }
+
+    body.dark .homepage {
+        color: 	lightblue;
+    }
+    
+    a:hover {
+        text-decoration: underline;
+    }
+    
+    a:active {
+        text-decoration: underline;
     }
 </style>
 
 <div id="people">
-    <ul>
-        <li>
-            <a href="https://sujin0529.github.io/">Sujin Jang
-            </a>
+    <ul class="people-ul">
+        <li class="people-li">
+            <a class="homepage" href="https://sujin0529.github.io/">Sujin Jang</a>
         </li>
-        <li>
-            <a href="https://yeonhee-ryou.github.io/">Yeonhee Ryou
-            </a>
+        <li class="people-li">
+            <a class="homepage" href="https://yeonhee-ryou.github.io/">Yeonhee Ryou</a>
         </li>
-        <li>
+        <li class="people-li homepage">
             Heewon Lee
         </li>
-        <li>
-            <a href="https://kihongheo.kaist.ac.kr/">Kihong Heo
-            </a>
+        <li class="people-li">
+            <a class="homepage" href="https://kihongheo.kaist.ac.kr/">Kihong Heo</a>
         </li>
     </ul>
-    <ul>
-        <li>
-            <a href="https://prosys.kaist.ac.kr">
-                Prosys @ KAIST
-            </a>
+    <ul class="people-ul">
+        <li class="people-li">
+            <a class="homepage" href="https://prosys.kaist.ac.kr">Prosys @ KAIST</a>
         </li>
     </ul>
 </div>

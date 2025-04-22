@@ -65,19 +65,12 @@ p {
     margin-bottom: 0;
 }
 
-ul {
-    padding: 0;
-}
-
 a {
     text-decoration: none;
 }
 
 body,
 figure,
-ul {
-    margin: 0;
-}
 
 table {
     width: 100%;

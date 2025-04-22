@@ -10,7 +10,7 @@
 <meta name="description" content="">
 <meta name="author" content="">
 <link rel="canonical" href="https://prosys.kaist.ac.kr/unitcon/categories/">
-<link crossorigin="anonymous" href="/unitcon/assets/css/stylesheet.0927bf4cd2ad253d44baa876b96e30354ff2a0b0cfe3a1b22335aa57176fc500.css" integrity="sha256-CSe/TNKtJT1Euqh2uW4wNU/yoLDP46GyIzWqVxdvxQA=" rel="preload stylesheet" as="style">
+<link crossorigin="anonymous" href="/unitcon/assets/css/stylesheet.5395984790b0037bf62bbbbb8cd6b5f679204c90d3255bea18dc7b8250b33979.css" integrity="sha256-U5WYR5CwA3v2K7u7jNa19nkgTJDTJVvqGNx7glCzOXk=" rel="preload stylesheet" as="style">
 <link rel="icon" href="https://prosys.kaist.ac.kr/unitcon/favicon.ico">
 <link rel="icon" type="image/png" sizes="16x16" href="https://prosys.kaist.ac.kr/unitcon/favicon-16x16.png">
 <link rel="icon" type="image/png" sizes="32x32" href="https://prosys.kaist.ac.kr/unitcon/favicon-32x32.png">
@@ -118,7 +118,20 @@
 <ul class="terms-tags">
 </ul>
     </main>
-    
+    <style>
+  .image-row {
+    display: flex;
+    gap: 20px;
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .image-row img{
+    width: 100%;
+    height: auto;
+    max-width: 150px;
+  }
+</style>
 <footer class="footer">
         <span>© <a href="https://github.com/adityatelange/hugo-PaperMod/graphs/contributors">PaperMod Contributors</a></span> · 
 
@@ -127,7 +140,46 @@
         <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
         <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
     </span>
+    <br></br>
+    <div class="image-row">
+        <img id="prosys-long-logo" src="img/prosys-logo-long-blue.png" alt=""/>
+        <img id="kaist-long-logo" src="img/kaist-logo-blue.png" alt=""/>
+    </div>
+    <br></br>
 </footer>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const observer = new MutationObserver(() => {
+            updateLogo();
+        });
+        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        updateLogo();
+    });
+
+    function updateLogo() {
+        const isDarkMode = document.body.classList.contains('dark');
+        const prosys_long_logo = document.querySelector('#prosys-long-logo');
+        const kaist_long_logo = document.querySelector('#kaist-long-logo');
+        const zenodo_logo = document.querySelector('#zenodo-logo');
+
+        if (zenodo_logo) {
+            zenodo_logo.src = isDarkMode
+                ? 'https://about.zenodo.org/static/img/icons/zenodo-icon-white.svg'
+                : 'https://about.zenodo.org/static/img/icons/zenodo-icon-black.svg';
+        }
+        if (prosys_long_logo) {
+            prosys_long_logo.src = isDarkMode
+                ? 'img/prosys-logo-long-white.png'
+                : 'img/prosys-logo-long-blue.png';
+        }
+        if (kaist_long_logo) {
+            kaist_long_logo.src = isDarkMode
+                ? 'img/kaist-logo-white.png'
+                : 'img/kaist-logo-blue.png';
+        }
+    }
+</script>
 <a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
         <path d="M12 6H0l6-6z" />

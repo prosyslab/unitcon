@@ -1,3 +1,9 @@
+<style>
+  .overview-ul {
+    list-style: square;
+  }
+</style>
+
 <h1>Overview of UnitCon</h1>
 
 The overall structure of UnitCon is illustrated below.
@@ -18,19 +24,23 @@ Given a set of partial test cases, UnitCon enumerates new partial unit tests by 
 
 <h3>Pruning & Prioritization</h3>
 To improve the efficiency, we guide the search using static analysis results.
-<br></br>
-
-<h4>Pruning</h4>
-UnitCon effectively prunes the search space by comparing the semantics between partial test cases.
-If two partial test cases are deemed to be semantically equivalent by the static analyzer, UnitCon discards the larger one.
-<br></br>
-
-<h4>Prioritization</h4>
-UnitCon effectively prioritizes the partial test cases that are more likely to trigger the target error.
-For a given target program location, the static analyzer estimates sufficient conditions for the target error.
-During the synthesis, UnitCon checks if the partial test case can potentially satisfy the error conditions.
-If so, UnitCon prioritizes the partial test case.
-<br></br>
+<ul class="overview-ul">
+  <li>
+    <b>Pruning</b>
+    <br/>
+    UnitCon effectively prunes the search space by comparing the semantics between partial test cases.
+    If two partial test cases are deemed to be semantically equivalent by the static analyzer, UnitCon discards the larger one.
+  </li>
+  <li>
+    <b>Prioritization</b>
+    <br/>
+    UnitCon effectively prioritizes the partial test cases that are more likely to trigger the target error.
+    For a given target program location, the static analyzer estimates sufficient conditions for the target error.
+    During the synthesis, UnitCon checks if the partial test case can potentially satisfy the error conditions.
+    If so, UnitCon prioritizes the partial test case.
+  </li>
+</ul>
+<br/>
 
 <h3>Ground Checker</h3>
 It checks whether UnitCon has synthesized an executable test case.

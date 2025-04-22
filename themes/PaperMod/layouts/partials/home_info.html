@@ -1,12 +1,28 @@
 {{- with site.Params.homeInfoParams }}
+<style>
+    .header-with-icon {
+        display: flex;
+        gap: 5px;
+    }
+
+    .header-with-icon img {
+        width: 100px;
+        height: 100px;
+    }
+</style>
+
 <article class="first-entry home-info">
     <header class="entry-header">
-        <h1>{{ .Title | markdownify }}</h1>
+        <div class="header-with-icon">
+            <h1>{{ .Title | markdownify }}</h1>
+            <img src="img/unitcon.png"/>
+        </div>
     </header>
     <div class="entry-content">
         {{ partial "people.html" }}
     </div>
     <div class="entry-content">
+         <h1>Introduction</h1>
          {{ .Content | markdownify }}
      </div>
     <div class="entry-content">
@@ -18,8 +34,8 @@
     <div class="entry-content">
         {{ partial "social_icons.html" }}
     </div>
-    <footer class="entry-footer">
+    <div class="entry-content">
         {{ partial "acknowledgements.html" }}
-    </footer>
+    </div>
 </article>
 {{- end -}}
