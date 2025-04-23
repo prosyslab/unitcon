@@ -10,7 +10,6 @@ The overall structure of UnitCon is illustrated below.
 
 <img src="img/overview.svg" alt="overview of UnitCon" />
 
-The following explains the gray boxes in the figure above.
 <ul class="overview-ul">
   <li><b>Initialization</b>
     <br/>
@@ -18,35 +17,22 @@ The following explains the gray boxes in the figure above.
     Then UnitCon generates an initial set of partial test cases each of which calls an error entry methods.
     Such partial test cases are written in a domain-specific language that we designed for the synthesis.
   </li>
-  <li><b>Enumeration</b>
+  <li><b>Efficient Program Synthesis via Pruning & Prioritization</b>
     <br/>
     Given a set of partial test cases, UnitCon enumerates new partial unit tests by expanding the placeholders.
-  </li>
-  <li><b>Pruning & Prioritization</b>
-    <br/>
     To improve the efficiency, we guide the search using static analysis results.
-    <ul class="overview-ul">
-      <li>
-        <b>Pruning</b>
-        <br/>
-        UnitCon effectively prunes the search space by comparing the semantics between partial test cases.
-        If two partial test cases are deemed to be semantically equivalent by the static analyzer, UnitCon discards the larger one.
-      </li>
-      <li>
-        <b>Prioritization</b>
-        <br/>
-        UnitCon effectively prioritizes the partial test cases that are more likely to trigger the target error.
-        For a given target program location, the static analyzer estimates sufficient conditions for the target error.
-        During the synthesis, UnitCon checks if the partial test case can potentially satisfy the error conditions.
-        If so, UnitCon prioritizes the partial test case.
-      </li>
-    </ul>
+    UnitCon effectively prunes the search space by comparing the semantics between partial test cases.
+    If two partial test cases are deemed to be semantically equivalent by the static analyzer, UnitCon discards the larger one.
+    Furthermore, UnitCon effectively prioritizes the partial test cases that are more likely to trigger the target error.
+    For a given target program location, the static analyzer estimates sufficient conditions for the target error.
+    During the synthesis, UnitCon checks if the partial test case can potentially satisfy the error conditions.
+    If so, UnitCon prioritizes the partial test case.
   </li>
-  <li><b>Ground Checker</b>
+  <li><b>Tester</b>
     <br/>
     It checks whether UnitCon has synthesized an executable test case.
     If it fails to synthesize one, the synthesis process is repeated.
-    Otherwise, the synthesized test case is executed using the <b>Tester</b> to check whether the targeted exception is triggered.
+    Otherwise, the synthesized test case is executed using the Tester to check whether the targeted exception is triggered.
     If the targeted exception is successfully reproduced, the test case is returned; otherwise, it is discarded.
   </li>
 </ul>
