@@ -1,0 +1,23 @@
+<style>
+  .demo-video {
+    margin-left:auto;
+    margin-right:auto;
+    width: 100%;
+  }
+</style>
+
+<h1>Demo Video</h1>
+
+<video class="demo-video" autoplay muted loop>
+  <source src="video/unitcon-demo.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+This video demonstrates the process of running UnitCon on an example program.
+<br>
+The example program is the <b><em>Main</em></b> program inside the <b><em>test</em></b> directory.
+Line <b><em>11</em></b> of the <b><em>Main.java</em></b> file in this program is the target location.
+By executing UnitCon's <em>build</em>, <em>analyze</em>, and <em>synthesize</em> commands in order, you can synthesize a unit test case that triggers the target error.
+<br>
+If UnitCon successfully synthesizes a unit test case that triggers the target error, it returns the location of the generated test file and the command to run it.
+Then, you can run it!

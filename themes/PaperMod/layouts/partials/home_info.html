@@ -24,9 +24,12 @@
     <div class="entry-content">
          <h1>Introduction</h1>
          {{ .Content | markdownify }}
-     </div>
+    </div>
     <div class="entry-content">
         {{ partial "overview.html" }}
+    </div>
+    <div class="entry-content">
+        {{ partial "demo.html" }}
     </div>
     <div class="entry-content">
         {{ partial "bug_report.html" }}
