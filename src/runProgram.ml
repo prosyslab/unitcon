@@ -555,6 +555,19 @@ let get_test_path path base_name =
   if path = "" then base_name
   else Utils.dot_to_dir_sep path ^ Filename.dir_sep ^ base_name
 
+(* Print out the command so that the user can execute it using an absolute path. *)
+let absolute_execute_cmd info =
+  "java -cp "
+  ^ Filename.(!Cmdline.out_dir / "with-dependency.jar")
+  ^ ":"
+  ^ Filename.(!Cmdline.out_dir / "unitcon-tests")
+  ^ ":"
+  ^ Filename.(Utils.unitcon_path / "deps/junit-4.13.2.jar")
+  ^ ":"
+  ^ Filename.(Utils.unitcon_path / "deps/hamcrest-core-1.3.jar")
+  ^ ":" ^ info.program_dir ^ ":" ^ !Cmdline.out_dir ^ " "
+  ^ "org.junit.runner.JUnitCore"
+
 (* Relative path should be used instead of absolute path
    e.g., ./unitcon-tests *)
 let execute_cmd info =
@@ -676,9 +689,13 @@ let normal_exit curr_time =
   print_and_log "======================= Result =======================";
   print_and_log "Location of test: %s" !info.test_dir;
   if !first_success_tc <> "" then (
-    print_and_log "You can try running the test from %s" !Cmdline.out_dir;
-    print_and_log "Command: %s"
-      (modify_execute_command (execute_cmd !info) !first_success_tc))
+    print_and_log "You can try running the test with the following commands";
+    print_and_log "----------------------------------------------";
+    print_and_log "1. Command at %s: %s" !Cmdline.out_dir
+      (modify_execute_command (execute_cmd !info) !first_success_tc);
+    print_and_log "----------------------------------------------";
+    print_and_log "2. Command at Current Location: %s"
+      (modify_execute_command (absolute_execute_cmd !info) !first_success_tc))
   else print_and_log "UnitCon failed to synthesize test...";
   (* clean up useless files and directories *)
   if !Cmdline.save_temp then ()
