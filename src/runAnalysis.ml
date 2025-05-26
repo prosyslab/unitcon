@@ -1,5 +1,13 @@
 open Utils
 
+module Infer = struct
+  let path () =
+    Sys.getenv_opt "UNITCON_INFER_BIN"
+    |> Core.Option.value
+         ~default:
+           (Filename.concat Utils.unitcon_path "unitcon-infer/infer/bin/infer")
+end
+
 type analyzer_run_type =
   | Capture of (string * string)
   | Analyze of (string * string * (string * int))
@@ -104,9 +112,7 @@ let execute_summary_cmd p infer_bin out_dir =
   simple_compiler p (Summary (infer_bin, out_dir)) ""
 
 let run p out_dir =
-  let infer_bin =
-    Filename.concat Utils.unitcon_path "unitcon-infer/infer/bin/infer"
-  in
+  let infer_bin = Infer.path () in
   let infer_out_dir = Filename.(out_dir / "infer-out") in
   execute_build_cmd p infer_bin infer_out_dir;
   execute_analyze_cmd p infer_bin infer_out_dir !Cmdline.target;

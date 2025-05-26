@@ -3,6 +3,8 @@ DUNE=@dune
 LN=@ln -sf
 RM=@rm
 EXE=unitcon
+UNITCON_INFER_BIN=$(shell pwd)/unitcon-infer/infer/bin/infer
+export UNITCON_INFER_BIN
 
 all:
 	$(DUNE) build src/main.exe
@@ -11,8 +13,8 @@ all:
 fmt:
 	$(DUNE) build @fmt --auto-promote
 
-test-unitcon: all
-	./run.sh
+test: all
+	$(DUNE) runtest ./test
 
 profile:
 	$(DUNE) build --instrument-with landmarks src/main.exe

@@ -51,8 +51,8 @@ if [ ! -e $HAMCREST_FILE ]; then
 fi
 
 if [[ "$MODE" == "all" || "$MODE" == "" ]]; then
-  build_unitcon
   build_infer
+  build_unitcon
 elif [[ "$MODE" == "infer" ]]; then
   build_infer
 elif [[ "$MODE" == "unitcon" ]]; then

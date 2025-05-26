@@ -37,8 +37,9 @@ setup.log
 
 # executable
 constraint
-test/example1
-test/example2
+test/simple/unitcon-out
+test/mvn/example/target
+test/mvn/example/unitcon-out
 deps/*.jar
 deps/jazzer
 deps/jazzer-linux.tar.gz

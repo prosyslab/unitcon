@@ -12,12 +12,12 @@ $ ./setup.sh
 ```
 
 ## Running Unitcon on a Example Program
-You can run Unitcon on the `Main` program inside the `test` directory by executing the following command.  
-Suppose the target location is line **11** in [Main.java](test/Main/Main.java#L11).
+You can run Unitcon on the `simple` program inside the `test` directory by executing the following command.  
+Suppose the target location is line **11** in [Main.java](test/simple/Main.java#L11).
 ```sh
-./unitcon build test/Main
-./unitcon analyze test/Main --target Main.java:11
-./unitcon synthesize test/Main --target Main.java:11
+./unitcon build test/simple
+./unitcon analyze test/simple --target Main.java:11
+./unitcon synthesize test/simple --target Main.java:11
 ```
 
 ## Running Unitcon on Your Project

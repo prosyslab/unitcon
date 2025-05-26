@@ -1,0 +1,24 @@
+(rule
+ (alias runtest)
+ (deps
+  (source_tree ../../deps)
+  (source_tree example))
+ (action
+  (progn
+   (run ln -sf ../src/main.exe ../../unitcon)
+   (run ../../unitcon build example)
+   (run
+    ../../unitcon
+    analyze
+    example
+    --target
+    src/main/java/example/Checker.java:25)
+   (run
+    ../../unitcon
+    synthesize
+    example
+    --target
+    src/main/java/example/Checker.java:25
+    --batch-size
+    1)
+   (system "[ -e unitcon-out/unitcon-tests/UnitconTest1.java ]"))))

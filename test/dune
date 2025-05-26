@@ -2,13 +2,13 @@
  (alias runtest)
  (deps
   (source_tree ../deps)
-  (source_tree Main))
+  (source_tree simple))
  (action
   (progn
    (run ln -sf src/main.exe ../unitcon)
-   (run ../unitcon build Main)
-   (run ../unitcon analyze Main --target Main.java:11)
-   (run ../unitcon synthesize Main --target Main.java:11)
+   (run ../unitcon build simple)
+   (run ../unitcon analyze simple --target Main.java:11)
+   (run ../unitcon synthesize simple --target Main.java:11 --batch-size 1)
    (system "[ -e unitcon-out/unitcon-tests/UnitconTest1.java ]"))))
 
 (test
