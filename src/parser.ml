@@ -40,7 +40,7 @@ let rec get_type t =
       let typ = Regexp.first_rm Regexp.rm_array t |> get_type in
       Array typ
   | _ ->
-      let typ = Regexp.global_rm (Str.regexp "\\*.*$") t in
+      let typ = Regexp.global_rm Regexp.any_to_all t in
       Object typ
 
 let parse_param param =
@@ -63,6 +63,7 @@ let parse_boitv boitv =
   let check_relation head tail =
     match int_of_string_opt tail with
     | Some _ -> false
+    | None when tail = "" || tail = "+inf" || tail = "-inf" -> false
     | None -> if head = tail then false else true
   in
   let parse_relation rel mmap =
@@ -74,7 +75,9 @@ let parse_boitv boitv =
         let tail =
           Regexp.first_rm Regexp.max tail
           |> Regexp.first_rm Regexp.min
-          |> Regexp.global_rm Regexp.bk2
+          |> Regexp.first_rm Regexp.open_bk
+          |> Regexp.first_rm Regexp.end_bk
+          |> Regexp.global_rm Regexp.end_bk2
           |> Regexp.rm_space
         in
         if check_relation head tail then Relation.M.add head tail mmap else mmap)
@@ -147,7 +150,7 @@ let parse_between_value is_err sym value mmap =
 
 let parse_outside_value is_err sym value mmap =
   let values =
-    Regexp.first_rm Regexp.ots value
+    Regexp.first_rm Regexp.not_in_bk value
     |> Regexp.first_rm Regexp.end_bk
     |> String.split_on_char ' '
   in
@@ -216,7 +219,7 @@ let rec mk_ref_map ref_trace mmap =
   | hd :: tl -> (
       if Regexp.rm_space hd = "" then mmap
       else
-        let ref = Str.split (Str.regexp "->") hd in
+        let ref = Str.split Regexp.arrow hd in
         try
           let field = List.hd ref |> Regexp.rm_space |> mk_rh_type in
           let value = List.tl ref |> List.hd |> Regexp.rm_space |> mk_rh_type in

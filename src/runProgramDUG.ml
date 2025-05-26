@@ -117,7 +117,7 @@ let loop_value_to_tc rep_input loop_id_map tc =
       let real_input = str_to_primitive ast_id value in
       let input_code = DUG.exp_code real_input ast_id in
       let x = Str.replace_first (Str.regexp to_be_modified) input_code old_tc in
-      Str.global_replace (Str.regexp "\\") "\\\\\\\\" x)
+      Str.global_replace Regexp.backslash "\\\\\\\\" x)
     tc rep_input
 
 (* return: (testcase * list(partial testcase)) *)

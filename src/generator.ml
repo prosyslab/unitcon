@@ -398,7 +398,7 @@ let get_predef_value_list typ p_info =
 let get_extra_value_list typ import p_info =
   match PrimitiveInfo.TypeMap.find_opt typ p_info with
   | Some map -> (
-      let file = Regexp.first_rm (Str.regexp "\\$.*$") import in
+      let file = Regexp.first_rm Regexp.dollar_to_all import in
       match
         ( PrimitiveInfo.ClassMap.find_opt import map,
           PrimitiveInfo.ClassMap.find_opt file map )
@@ -1219,7 +1219,8 @@ let is_receiver id = if id = "con_recv" || id = "con_outer" then true else false
 
 let is_nested_class name = String.contains name '$'
 
-let is_test_file f_name = Str.string_match (Str.regexp ".*/test/.*") f_name 0
+let is_test_file f_name =
+  Utils.exist_regexp (Regexp.test_dir Filename.dir_sep) f_name
 
 let is_public_class class_name c_info =
   let is_public_class_type typ =
@@ -1268,8 +1269,8 @@ let is_static_class name (c_info, _) =
     | _ -> false
   in
   let name =
-    Regexp.global_rm (Str.regexp "\\.<.*>(.*)$") name
-    |> Regexp.global_rm (Str.regexp "(.*)$")
+    Regexp.global_rm Regexp.init_end name
+    |> Regexp.global_rm Regexp.method_params_end
   in
   match ClassInfo.M.find_opt name c_info with
   | Some typ -> is_static_class_type typ
@@ -1706,7 +1707,7 @@ let append l1 l2 =
 
 let add_import import set =
   (if is_nested_class import then
-     ImportSet.add (Str.replace_first (Str.regexp "\\$.*$") "" import) set
+     ImportSet.add (Str.replace_first Regexp.dollar_to_all "" import) set
    else set)
   |> ImportSet.add import
 

@@ -183,9 +183,7 @@ module AST = struct
 
   let is_file f =
     let fname = (get_func f).method_name in
-    if Str.string_match (Str.regexp "java\\.io\\.File\\.<init>") fname 0 then
-      true
-    else false
+    Str.string_match Regexp.java_file fname 0
 
   (* ************************************** *
      Checking for Synthesis Rules
@@ -532,12 +530,11 @@ module AST = struct
    * ************************************** *)
 
   let get_method_name m =
-    Regexp.first_rm (Str.regexp "(.*)") m
+    Regexp.first_rm Regexp.method_params m
     |> Str.split Regexp.dot |> List.rev |> List.hd
 
   let get_short_class_name c =
-    Regexp.first_rm (Str.regexp "\\.<init>(.*)") c
-    |> Str.split Regexp.dot |> List.rev |> List.hd
+    Regexp.first_rm Regexp.init c |> Str.split Regexp.dot |> List.rev |> List.hd
 
   let array_code dim content =
     let rec code d = if d = 0 then "" else "[" ^ content ^ "]" ^ code (d - 1) in
@@ -578,7 +575,7 @@ module AST = struct
         if is_array_init func then
           Utils.rm_object_array_import f.typ
           |> Str.split Regexp.dot |> List.rev |> List.hd
-          |> Regexp.first_rm (Str.regexp "Array[0-9]*")
+          |> Regexp.first_rm Regexp.modeling_array
           |> Utils.get_array_class_name |> String.cat "new "
         else if is_array_set func then ""
         else if Utils.is_init_method f.method_name then
@@ -661,9 +658,9 @@ module AST = struct
     | C c -> "\'" ^ String.make 1 c ^ "\'"
     | S s ->
         let replace s =
-          Str.global_replace (Str.regexp "\\") "\\\\\\\\" s
-          |> Str.global_replace (Str.regexp "\"") "\\\""
-          |> Str.global_replace (Str.regexp "\'") "\\\'"
+          Str.global_replace Regexp.backslash "\\\\\\\\" s
+          |> Str.global_replace Regexp.double_quote "\\\""
+          |> Str.global_replace Regexp.single_quote "\\\'"
         in
         "\"" ^ replace s ^ "\""
 

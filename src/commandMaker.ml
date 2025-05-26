@@ -69,7 +69,7 @@ let make_jar_with_dependencies p =
 let execute_build_cmd p =
   let build_cmd_file = Filename.(Filename.(p / input_path) / "build-command") in
   let ic = open_in build_cmd_file in
-  let cmds = read_all_string ic |> Str.split (Str.regexp "\n") in
+  let cmds = read_all_string ic |> Str.split Regexp.new_line in
   close_in ic;
   let rec execute cmds =
     match cmds with

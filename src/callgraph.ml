@@ -27,6 +27,10 @@ module G = struct
   let edge_attributes _ = []
 end
 
+let assoc_fold ~f ~init x = List.fold_left f init (JsonUtil.to_assoc x)
+
+let list_fold ~f ~init x = List.fold_left f init (JsonUtil.to_list x)
+
 let split_name name =
   if String.contains name ':' then Str.split Regexp.colon name |> List.hd
   else name
@@ -45,19 +49,18 @@ let add_missing_callee info cg =
   match JsonUtil.member "methods" info with
   | `Null -> cg
   | methods ->
-      List.fold_left
-        (fun cg caller_name ->
+      assoc_fold
+        ~f:(fun cg (caller_name, m_info) ->
           if Utils.is_lambda_method caller_name then cg
           else
-            let m_info = JsonUtil.member caller_name methods in
-            let callees = JsonUtil.member "callee" m_info |> JsonUtil.to_list in
-            List.fold_left
-              (fun g callee ->
+            list_fold
+              ~f:(fun g callee ->
                 let callee_name = JsonUtil.to_string callee in
                 if Utils.is_lambda_method callee_name then g
                 else G.add_edge g callee_name caller_name)
-              cg callees)
-        cg (JsonUtil.keys methods)
+              ~init:cg
+              (JsonUtil.member "callee" m_info))
+        ~init:cg methods
 
 let of_json json =
   let json = JsonUtil.to_list json in

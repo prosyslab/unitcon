@@ -53,7 +53,7 @@ let default_primitive =
     PrimitiveInfo.TypeMap.empty typ_list
 
 let expand_string_value m_name p_info =
-  let method_name = Regexp.first_rm ("(.*)" |> Str.regexp) m_name in
+  let method_name = Regexp.first_rm Regexp.method_params m_name in
   let default_map, default =
     match PrimitiveInfo.TypeMap.find_opt String p_info with
     | Some map -> (

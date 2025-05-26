@@ -9,17 +9,17 @@ let is_file f =
   with Unix.Unix_error (Unix.ENOENT, _, _) -> false
 
 let is_test_class name =
-  Str.string_match (Str.regexp "Test.*") name 0
-  || Str.string_match (Str.regexp ".*Test$") name 0
+  Str.string_match Regexp.test_start_class name 0
+  || Str.string_match Regexp.test_end_class name 0
 
 let is_lambda_class name =
-  match Str.search_forward (Str.regexp "\\$Lambda\\$[_0-9]+") name 0 with
+  match Str.search_forward Regexp.lambda_num name 0 with
   | exception Not_found -> false
   | _ -> true
 
 let is_anonymous name =
   let check_int name =
-    match Str.search_forward (Str.regexp "\\$[0-9]+") name 0 with
+    match Str.search_forward Regexp.anony_num name 0 with
     | exception Not_found -> false
     | _ -> true
   in

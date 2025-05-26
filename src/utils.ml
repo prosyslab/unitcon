@@ -88,36 +88,30 @@ let unitcon_path =
   let path = Filename.dirname Sys.argv.(0) in
   if Filename.is_relative path then Filename.(Filename.cwd / path) else path
 
-let dot_to_dir_sep path =
-  Str.global_replace (Str.regexp "\\.") Filename.dir_sep path
+let dot_to_dir_sep path = Str.global_replace Regexp.dot Filename.dir_sep path
 
-let get_class_name m_name = Regexp.first_rm (Str.regexp "\\.[^\\.]+(.*)") m_name
+let get_class_name m_name = Regexp.first_rm Regexp.method_to_param m_name
 
 let get_package_name c_name =
-  Regexp.first_rm (Str.regexp "\\$.*") c_name
-  |> Regexp.first_rm (Str.regexp "\\.[^\\.]+$")
+  Regexp.first_rm Regexp.dollar_to_all c_name
+  |> Regexp.first_rm Regexp.class_to_all
 
 let replace_nested_symbol str = Str.global_replace Regexp.dollar "." str
 
-let is_init_method m_name = Str.string_match (Str.regexp ".*\\.<init>") m_name 0
-
-let is_lambda_class name =
-  match Str.search_forward (Str.regexp "\\$Lambda\\$[_0-9]+") name 0 with
+let exist_regexp regexp str =
+  match Str.search_forward regexp str 0 with
   | exception Not_found -> false
   | _ -> true
 
-let is_lambda name =
-  match Str.search_forward (Str.regexp "\\.lambda\\$") name 0 with
-  | exception Not_found -> false
-  | _ -> true
+let is_init_method m_name = exist_regexp Regexp.only_init m_name
+
+let is_lambda_class name = exist_regexp Regexp.lambda_num name
+
+let is_lambda name = exist_regexp Regexp.lambda name
 
 let is_anonymous m_name =
-  let check_int name =
-    match Str.search_forward (Str.regexp "\\$[0-9]+") name 0 with
-    | exception Not_found -> false
-    | _ -> true
-  in
-  is_lambda_class m_name || check_int (get_class_name m_name)
+  is_lambda_class m_name
+  || exist_regexp Regexp.anony_num (get_class_name m_name)
 
 let get_array_class_name name =
   let arr = [ "Int"; "Long"; "Byte"; "Float"; "Double"; "Bool"; "Char" ] in
@@ -196,17 +190,16 @@ let is_array package =
   check arr
 
 let rm_object_array_import i =
-  if Str.string_match (Str.regexp "Object.+Array[0-9]*$") i 0 then
-    Regexp.first_rm (Str.regexp "^Object") i
-    |> Regexp.first_rm (Str.regexp "Array[0-9]*$")
+  if Str.string_match Regexp.object_array i 0 then
+    Regexp.first_rm Regexp.start_object i
+    |> Regexp.first_rm Regexp.modeling_array_end
   else i
 
 let get_array_dim_from_class_name f =
-  Regexp.first_rm (Str.regexp ".*Array") f |> int_of_string
+  Regexp.first_rm Regexp.all_to_array f |> int_of_string
 
 let is_modeling_set fname =
-  is_array_set fname
-  || Str.string_match (Str.regexp "java.util.Map.put") fname 0
+  is_array_set fname || Str.string_match Regexp.java_map_put fname 0
 
 let is_lambda_method m_name = is_lambda m_name || is_lambda_class m_name
 

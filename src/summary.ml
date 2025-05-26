@@ -114,9 +114,7 @@ let is_unnes_method fparam =
           false clist
     | _ -> false
   in
-  let check_lambda id =
-    if Str.string_match (Str.regexp "\\$bcvar") id 0 then true else false
-  in
+  let check_lambda id = Str.string_match Regexp.lambda_var id 0 in
   let check_unnes p =
     match p with
     | This _ -> false
@@ -153,16 +151,14 @@ let mapping_method_info method_info mmap =
     MethodInfo.{ modifier; is_static; formal_params; return; filename }
   in
   if
-    Str.string_match (Str.regexp ".*access\\$.*") method_name 0
-    || Str.string_match (Str.regexp ".*access_.*") method_name 0
-    || Str.string_match (Str.regexp ".*\\.clone()$") method_name 0
-    || Str.string_match
-         (Str.regexp ".*\\[specialized with aliases\\]")
-         method_name 0
+    Utils.exist_regexp Regexp.access_dollar method_name
+    || Utils.exist_regexp Regexp.access_underbar method_name
+    || Utils.exist_regexp Regexp.clone_method method_name
+    || Utils.exist_regexp Regexp.alias_sign method_name
     || is_unnes_method formal_params
     || List.mem method_name Utils.filter_list
     || !Cmdline.unknown_bug
-       && Str.string_match (Str.regexp "java\\.nio\\..*") method_name 0
+       && Str.string_match Regexp.java_nio_package method_name 0
   then mmap
   else MethodInfo.M.add method_name info mmap
 

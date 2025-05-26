@@ -159,7 +159,7 @@ let remove_all_test_classes test_dir = remove_files test_dir Regexp.test_class
 
 let remove_all_test_files test_dir = remove_files test_dir Regexp.test_file
 
-let remove_all_files dir = remove_files dir (Str.regexp ".*")
+let remove_all_files dir = remove_files dir Regexp.all
 
 let make_folder path = Filename.mkdir ~exists_ok:true path 0o755
 
@@ -251,9 +251,9 @@ let check_useless_npe error_trace =
   List.exists (fun ignored -> check_substring ignored error_trace) ignored_npes
 
 let run_type str =
-  if Str.string_match (Str.regexp "^javac") str 0 then Compile
-  else if Str.string_match (Str.regexp "^find") str 0 then Group
-  else if Str.string_match (Str.regexp "^java") str 0 then Test
+  if Str.string_match Regexp.javac str 0 then Compile
+  else if Str.string_match Regexp.find str 0 then Group
+  else if Str.string_match Regexp.java str 0 then Test
   else failwith "not supported build type"
 
 let string_of_expected_bug file =
@@ -263,7 +263,7 @@ let string_of_expected_bug file =
     let s = really_input_string ic (in_channel_length ic) in
     close_in ic;
     Str.global_replace Regexp.dollar "\\$" s
-    |> Str.global_replace (Str.regexp "\n") "[ \t\r\n]+"
+    |> Str.global_replace Regexp.new_line "[ \t\r\n]+"
 
 let get_index_of_substring substr str start =
   match Str.search_forward (Str.regexp substr) str start with
@@ -272,7 +272,7 @@ let get_index_of_substring substr str start =
 
 let get_log_input input =
   let name_value =
-    Str.replace_first (Str.regexp "Log=") "" input |> Str.split (Str.regexp "=")
+    Str.replace_first Regexp.log_eq "" input |> Str.split Regexp.eq
   in
   (name_value |> List.hd, try name_value |> List.tl |> List.hd with _ -> "")
 
@@ -298,7 +298,7 @@ let get_rep_input error_trace expected_bug =
         else get_input tl
     | _ -> []
   in
-  Str.split (Str.regexp "\n") trace_and_input |> get_input
+  Str.split Regexp.new_line trace_and_input |> get_input
 
 let execute_command command =
   let close_channel (stdout, stdin, stderr) =
@@ -331,7 +331,7 @@ let get_compilation_error_files data =
   let data = String.split_on_char '\n' data in
   List.fold_left
     (fun f_list line ->
-      if Str.string_match (Str.regexp ".*UnitconTest[0-9]+\\.java") line 0 then
+      if Utils.exist_regexp Regexp.test_file line then
         let file_name = get_f_name line in
         file_name :: f_list
       else f_list)
@@ -358,16 +358,12 @@ let modify_files test_dir data =
     error_files
 
 let checking_init_err data =
-  match
-    Str.search_forward
-      (Str.regexp "Error occurred during initialization of VM")
-      data 0
-  with
+  match Str.search_forward Regexp.init_err_msg data 0 with
   | exception Not_found -> false
   | _ -> true
 
 let checking_error_presence data =
-  match Str.search_forward (Str.regexp "[0-9]+:* error") data 0 with
+  match Str.search_forward Regexp.test_err_msg data 0 with
   | exception Not_found -> ()
   | _ -> raise Compilation_Error
 
@@ -412,12 +408,12 @@ let get_imports i_set =
   ImportSet.fold (fun i s -> s ^ i) str_set init
 
 let need_default_interface tc_body =
-  match Str.search_forward (Str.regexp "UnitconInterface") tc_body 0 with
+  match Str.search_forward Regexp.interface tc_body 0 with
   | exception _ -> ()
   | _ -> require_interface_class := true
 
 let need_default_enum tc_body =
-  match Str.search_forward (Str.regexp "UnitconEnum") tc_body 0 with
+  match Str.search_forward Regexp.enum tc_body 0 with
   | exception _ -> ()
   | _ -> require_enum_class := true
 
@@ -448,8 +444,7 @@ let insert_test oc (file_num, tc, time) =
 
 let print_stack_trace bug_type log =
   let bug =
-    try bug_type |> Str.split (Str.regexp "\\.") |> List.rev |> List.hd
-    with _ -> ""
+    try bug_type |> Str.split Regexp.dot |> List.rev |> List.hd with _ -> ""
   in
   let typ = if bug = "" then "Exception" else bug in
   let common =
@@ -779,7 +774,7 @@ let setup program_dir out_dir =
       (Unix.gettimeofday () -. !time);
   (* for unknown bug detection *)
   error_method_name :=
-    Regexp.first_rm (Str.regexp "(.*)") (fst error_method_info)
+    Regexp.first_rm Regexp.method_params (fst error_method_info)
     |> Str.split Regexp.dot |> List.rev |> List.hd;
   let data =
     {

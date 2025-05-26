@@ -79,7 +79,7 @@ let simple_compiler program_dir run_type command =
 let execute_build_cmd p infer_bin out_dir =
   let build_cmd_file = Filename.(Filename.(p / input_path) / "build-command") in
   let ic = open_in build_cmd_file in
-  let cmds = read_all_string ic |> Str.split (Str.regexp "\n") in
+  let cmds = read_all_string ic |> Str.split Regexp.new_line in
   close_in ic;
   let rec execute cmds =
     match cmds with
