@@ -62,6 +62,27 @@ let is_primitive = function
   | Int | Long | Short | Byte | Float | Double | Bool | Char | String -> true
   | _ -> false
 
+let is_special_primitive = function
+  | Object "java.lang.Integer"
+  | Object "java.lang.Long"
+  | Object "java.lang.Short"
+  | Object "java.lang.Byte"
+  | Object "java.lang.Float"
+  | Object "java.lang.Double"
+  | Object "java.lang.CharSequence" ->
+      true
+  | _ -> false
+
+let convert_special_primitive_type = function
+  | Object "java.lang.Integer" -> Int
+  | Object "java.lang.Long" -> Long
+  | Object "java.lang.Short" -> Short
+  | Object "java.lang.Byte" -> Byte
+  | Object "java.lang.Float" -> Float
+  | Object "java.lang.Double" -> Double
+  | Object "java.lang.CharSequence" -> String
+  | t -> t
+
 let rec get_array_typ typ =
   match typ with Array t -> get_array_typ t | _ -> typ
 

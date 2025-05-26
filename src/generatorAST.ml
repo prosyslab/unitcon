@@ -68,6 +68,9 @@ let is_primitive_from_id x = AST.get_vinfo x |> fst |> is_primitive
 
 let is_primitive_from_v v = get_type (fst v.ASTIR.variable) |> is_primitive
 
+let is_special_primitive_from_id x =
+  AST.get_vinfo x |> fst |> is_special_primitive
+
 let get_m_lst x0 m_info (c_info, ig) =
   let c_name = AST.get_vinfo x0 |> fst |> get_class_name in
   let c_to_find = get_subtypes c_name ig in
@@ -290,6 +293,7 @@ let calc_value id value default =
 
 let get_value v p_info =
   let typ, id = AST.get_vinfo v in
+  let typ = convert_special_primitive_type typ in
   let find_value1 = find_target_value id (AST.get_v v).summary in
   let find_value2 = find_target_value_from_this id (AST.get_v v).summary in
   let default = default_value_list typ (AST.get_v v).import p_info in
@@ -826,7 +830,7 @@ let get_r2_with_loop p { summary; inst_info; _ } x =
 let const_unroll_with_loop (p : ASTIR.t) ({ prim_info; _ } as info) =
   match p with
   | Const (x, _) -> (
-      if is_primitive_from_id x then
+      if is_primitive_from_id x || is_special_primitive_from_id x then
         get_loop_appl p x (get_value x prim_info |> sort_const)
       else
         match get_r2_with_loop p info x with
@@ -844,7 +848,7 @@ let const_unroll (p : ASTIR.t) ({ prim_info; _ } as info) =
   match p with
   | Const (x, _) -> (
       if !Cmdline.with_loop then const_unroll_with_loop p info
-      else if is_primitive_from_id x then
+      else if is_primitive_from_id x || is_special_primitive_from_id x then
         List.fold_left
           (fun lst x1 -> apply_rule1 p x1 :: lst)
           [] (get_value x prim_info)

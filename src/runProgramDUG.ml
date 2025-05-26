@@ -66,7 +66,7 @@ let insert_multi_test_log loop_id_map =
   let end_signal = "System.err.println(\"-----LogEnd-----\");\n" in
   let log lval =
     let id = snd lval in
-    if is_primitive (fst lval) then
+    if is_primitive (fst lval) || is_special_primitive (fst lval) then
       "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " ^ id ^ "_comb["
       ^ id ^ "_index" ^ "]" ^ ");\n"
     else
@@ -84,7 +84,7 @@ let get_code_for_loop loop_id_map =
   (arrays, loop_stmt, loop_cnt, loop_input_log)
 
 let str_to_primitive v value =
-  match DUG.get_vinfo v |> fst with
+  match DUG.get_vinfo v |> fst |> convert_special_primitive_type with
   | Int | Long | Short | Byte -> DUGIR.Primitive (Z (int_of_string value))
   | Float | Double -> DUGIR.Primitive (R (float_of_string value))
   | Bool -> DUGIR.Primitive (B (bool_of_string value))

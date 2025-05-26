@@ -725,7 +725,7 @@ module AST = struct
   let loop_id_code loop_id exp_list =
     let v = loop_id_lval_code loop_id in
     let lval =
-      match fst v with
+      match fst v |> convert_special_primitive_type with
       | Int -> "int[] " ^ snd v
       | Long -> "long[] " ^ snd v
       | Short -> "short[] " ^ snd v
@@ -760,11 +760,11 @@ module AST = struct
       | String -> "String"
       | _ -> ""
     in
-    if is_primitive (fst v) then
+    if is_primitive (fst v) || is_special_primitive (fst v) then
       lval ^ " = " ^ "{"
       ^ Regexp.rm_first_rest (rval loop_id exp_list)
       ^ "};\n" ^ lval ^ "_comb = UnitconCombinator.combine"
-      ^ comb_func_name (fst v)
+      ^ comb_func_name (fst v |> convert_special_primitive_type)
       ^ "(" ^ snd v ^ ");\n"
     else
       lval ^ "_comb = " ^ "{"
