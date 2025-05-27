@@ -134,44 +134,47 @@ and run_test_when_no_exn ~is_start info queue e_method_info p_data =
   let completion, tc, loop_id_map, tc_list =
     make_testcase ~is_start queue e_method_info p_data
   in
-  if completion = Need_Loop then (
-    (* clean before executing multi tests *)
-    remove_all_files info.multi_test_dir;
-    let _time = Unix.gettimeofday () -. !time in
-    incr num_of_multi_tc_files;
-    let loop_info = get_code_for_loop loop_id_map in
-    let check_duplicated =
-      if !Cmdline.unknown_bug then check_same_loop tc loop_id_map else false
-    in
-    let found_rep_input =
-      if check_duplicated then []
-      else (
-        add_multi_testcase info.multi_test_dir !num_of_multi_tc_files
-          (tc, loop_info, _time);
-        run_multi_testfile ())
-    in
-    if found_rep_input = [] then
-      run_test ~is_start:false info tc_list e_method_info p_data
-    else
-      (* found crash input with loop *)
-      let new_tc = loop_value_to_tc found_rep_input loop_id_map (tc |> snd) in
+  match completion with
+  | Need_Loop ->
+      (* clean before executing multi tests *)
+      remove_all_files info.multi_test_dir;
+      let _time = Unix.gettimeofday () -. !time in
+      incr num_of_multi_tc_files;
+      let loop_info = get_code_for_loop loop_id_map in
+      let check_duplicated =
+        if !Cmdline.unknown_bug then check_same_loop tc loop_id_map else false
+      in
+      let found_rep_input =
+        if check_duplicated then []
+        else (
+          add_multi_testcase info.multi_test_dir !num_of_multi_tc_files
+            (tc, loop_info, _time);
+          run_multi_testfile ())
+      in
+      if found_rep_input = [] then
+        run_test ~is_start:false info tc_list e_method_info p_data
+      else
+        (* found crash input with loop *)
+        let new_tc = loop_value_to_tc found_rep_input loop_id_map (tc |> snd) in
+        let _time = Unix.gettimeofday () -. !time in
+        incr num_of_tc_files;
+        add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
+        if
+          !num_of_tc_files mod !Cmdline.batch_size = 0 || !early_stop_keep_going
+        then run_testfile ()
+        else ();
+        run_test ~is_start:false info tc_list e_method_info p_data
+  | Incomplete ->
+      (* early stopping *)
+      if !num_of_last_exec_tc < !num_of_tc_files then run_testfile () else ();
+      raise Normal_Exit
+  | Complete ->
       let _time = Unix.gettimeofday () -. !time in
       incr num_of_tc_files;
-      add_testcase info.test_dir !num_of_tc_files ((tc |> fst, new_tc), _time);
-      if !num_of_tc_files mod !Cmdline.batch_size = 0 || !early_stop_keep_going
-      then run_testfile ()
+      add_testcase info.test_dir !num_of_tc_files (tc, _time);
+      if !num_of_tc_files mod !Cmdline.batch_size = 0 then run_testfile ()
       else ();
-      run_test ~is_start:false info tc_list e_method_info p_data)
-  else if completion = Incomplete then (
-    (* early stopping *)
-    if !num_of_last_exec_tc < !num_of_tc_files then run_testfile () else ();
-    raise Normal_Exit)
-  else
-    let _time = Unix.gettimeofday () -. !time in
-    incr num_of_tc_files;
-    add_testcase info.test_dir !num_of_tc_files (tc, _time);
-    if !num_of_tc_files mod !Cmdline.batch_size = 0 then run_testfile () else ();
-    run_test ~is_start:false info tc_list e_method_info p_data
+      run_test ~is_start:false info tc_list e_method_info p_data
 
 let run program_dir out_dir =
   try

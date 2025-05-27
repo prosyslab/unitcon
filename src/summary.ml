@@ -124,6 +124,13 @@ let is_unnes_method fparam =
     (fun check param -> if check_unnes param then true else check)
     false fparam
 
+let is_synthetic_method method_name formal_params =
+  Utils.exist_regexp Regexp.access_dollar method_name
+  || Utils.exist_regexp Regexp.access_underbar method_name
+  || Utils.exist_regexp Regexp.clone_method method_name
+  || Utils.exist_regexp Regexp.alias_sign method_name
+  || is_unnes_method formal_params
+
 let mapping_method_info method_info mmap =
   let method_name = get_method_name method_info in
   let return = get_return method_info in
@@ -149,11 +156,7 @@ let mapping_method_info method_info mmap =
   in
   let info = { modifier; is_static; formal_params; return; filename } in
   if
-    Utils.exist_regexp Regexp.access_dollar method_name
-    || Utils.exist_regexp Regexp.access_underbar method_name
-    || Utils.exist_regexp Regexp.clone_method method_name
-    || Utils.exist_regexp Regexp.alias_sign method_name
-    || is_unnes_method formal_params
+    is_synthetic_method method_name formal_params
     || List.mem method_name Utils.filter_list
     || !Cmdline.unknown_bug
        && Str.string_match Regexp.java_nio_package method_name 0

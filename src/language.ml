@@ -2,7 +2,7 @@ include Ppx_compare_lib.Builtin
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 
-type tc_completion = Complete | Need_Fuzzer | Need_Loop | Incomplete
+type tc_completion = Complete | Need_Loop | Incomplete
 
 type method_name = string [@@deriving compare, equal]
 
@@ -290,8 +290,7 @@ module Value = struct
     && String.contains str '<' |> not
 
   let is_between str =
-    Str.string_match (Str.regexp "in_N") str 0
-    || Str.string_match (Str.regexp "in\\[") str 0
+    Str.string_match Regexp.in_n str 0 || Str.string_match Regexp.in_bk str 0
 
   let is_outside str = Str.string_match (Str.regexp "not_in\\[") str 0
 end
