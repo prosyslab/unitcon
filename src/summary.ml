@@ -18,7 +18,7 @@ let contains_symbol symbol memory =
 
 let is_new_loc_field field summary =
   let is_null symbol =
-    match Value.M.find_opt symbol summary.value with
+    match ValueMap.find_opt symbol summary.value with
     | Some x when x.Value.value = Eq Null -> true
     | _ -> false
   in
@@ -147,9 +147,7 @@ let mapping_method_info method_info mmap =
     JsonUtil.member "filename" method_info
     |> JsonUtil.to_list |> List.hd |> JsonUtil.to_string
   in
-  let info =
-    MethodInfo.{ modifier; is_static; formal_params; return; filename }
-  in
+  let info = { modifier; is_static; formal_params; return; filename } in
   if
     Utils.exist_regexp Regexp.access_dollar method_name
     || Utils.exist_regexp Regexp.access_underbar method_name
@@ -160,7 +158,7 @@ let mapping_method_info method_info mmap =
     || !Cmdline.unknown_bug
        && Str.string_match Regexp.java_nio_package method_name 0
   then mmap
-  else MethodInfo.M.add method_name info mmap
+  else MethodInfoMap.add method_name info mmap
 
 let mapping_summary method_summaries minfo mmap =
   let method_name = get_method_name method_summaries in
@@ -174,7 +172,7 @@ let mapping_summary method_summaries minfo mmap =
     if summaries = [] then ([ empty_summary ], [])
     else (summaries, collect_new_loc_fields summaries)
   in
-  if MethodInfo.M.mem method_name minfo |> not then mmap
+  if MethodInfoMap.mem method_name minfo |> not then mmap
   else SummaryMap.M.add method_name summaries mmap
 
 (* reason to add modeling: array constructor and setter (e.g., new Long[], add(index,value) ) *)
@@ -182,30 +180,28 @@ let from_method_json json =
   let json = JsonUtil.to_list json in
   List.fold_left
     (fun mmap method_info -> mapping_method_info method_info mmap)
-    MethodInfo.M.empty json
+    MethodInfoMap.empty json
   |> Modeling.add_java_package_method
 
 let from_method_type minfo =
-  MethodInfo.M.fold
+  MethodInfoMap.fold
     (fun m_name info (rtype, mtype) ->
       let class_name = Utils.get_class_name m_name in
       let mtype =
-        match MethodType.M.find_opt class_name mtype with
-        | Some m -> MethodType.M.add class_name (m_name :: m) mtype
-        | _ -> MethodType.M.add class_name [ m_name ] mtype
+        match MethodTypeMap.find_opt class_name mtype with
+        | Some m -> MethodTypeMap.add class_name (m_name :: m) mtype
+        | _ -> MethodTypeMap.add class_name [ m_name ] mtype
       in
       let rtype =
-        if info.MethodInfo.return = "void" || info.MethodInfo.return = "" then
-          rtype
+        if info.return = "void" || info.return = "" then rtype
         else
-          match ReturnType.M.find_opt info.MethodInfo.return rtype with
-          | Some m ->
-              ReturnType.M.add info.MethodInfo.return (m_name :: m) rtype
-          | _ -> ReturnType.M.add info.MethodInfo.return [ m_name ] rtype
+          match ReturnTypeMap.find_opt info.return rtype with
+          | Some m -> ReturnTypeMap.add info.return (m_name :: m) rtype
+          | _ -> ReturnTypeMap.add info.return [ m_name ] rtype
       in
       (rtype, mtype))
     minfo
-    (ReturnType.M.empty, MethodType.M.empty)
+    (ReturnTypeMap.empty, MethodTypeMap.empty)
 
 (* reason to add modeling: array constructor and setter (e.g., new Long[], add(index,value) ) *)
 let from_summary_json minfo json =

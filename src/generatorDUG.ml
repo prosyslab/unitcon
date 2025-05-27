@@ -53,9 +53,9 @@ let mk_cost prev_p curr_tc curr_loop_id curr_obj_type prec =
     obj_types = curr_obj_type;
   }
 
-let empty_id_map = LoopIdMap.M.empty
+let empty_id_map = LoopIdMap.empty
 
-let empty_obj_type_map = ObjTypeMap.M.empty
+let empty_obj_type_map = ObjTypeMap.empty
 
 let empty_p =
   {
@@ -80,7 +80,7 @@ let is_special_primitive_from_id x =
 let get_m_lst x0 m_info (c_info, ig) =
   let c_name = DUG.get_vinfo x0 |> fst |> get_class_name in
   let c_to_find = get_subtypes c_name ig in
-  MethodInfo.M.fold
+  MethodInfoMap.fold
     (fun m_name _ method_list ->
       if IgnoredMethods.mem m_name !ignored_methods then method_list
       else if !Cmdline.debug && List.mem m_name !Cmdline.ignore then method_list
@@ -317,7 +317,7 @@ let get_value v p_info =
 
 let mk_new_set summary params p =
   let get_type p = match p with Var (t, _) -> t | _ -> NonType in
-  let equal_value (v1 : Value.v) (v2 : Value.v) =
+  let equal_value (v1 : Value.t) (v2 : Value.t) =
     if not_found_value v1 || not_found_value v2 then true else v1 = v2
   in
   let is_same_precond p op_p =
@@ -352,7 +352,7 @@ let find_class_file =
 let mk_gvar c_name var = (0, DUGIR.GlobalConstant (c_name ^ "." ^ var))
 
 let find_all_global_var_list c_name i_info =
-  match InstanceInfo.M.find_opt c_name i_info with
+  match InstanceInfoMap.find_opt c_name i_info with
   | None -> []
   | Some info ->
       List.fold_left
@@ -695,9 +695,9 @@ let get_inner_func f arg =
   (n_recv, n_f, DUGIR.Arg (try DUG.get_arg arg |> List.tl with _ -> []))
 
 let cname_condition m_name m_info c_info =
-  match MethodInfo.M.find_opt m_name m_info with
+  match MethodInfoMap.find_opt m_name m_info with
   | Some info ->
-      info.MethodInfo.return <> ""
+      info.return <> ""
       && (is_static m_name m_info || is_static_class m_name c_info)
       || Utils.is_init_method m_name
   | _ -> Utils.is_init_method m_name
@@ -787,7 +787,7 @@ let mk_arg_seq arg prev_num class_name s tc =
        [] (DUG.get_arg arg))
 
 let loop_id_merge old_ids new_ids =
-  LoopIdMap.M.merge
+  LoopIdMap.merge
     (fun _ v1 v2 ->
       match (v1, v2) with
       | None, None -> None
@@ -804,7 +804,7 @@ let comparable_const s p =
     ( 0,
       DUG.const_rule2 s (DUGIR.GlobalConstant "java.math.BigDecimal.ONE") p.tc,
       empty_id_map,
-      ObjTypeMap.M.add "java.lang.Comparable" "java.math.BigDecimal"
+      ObjTypeMap.add "java.lang.Comparable" "java.math.BigDecimal"
         empty_obj_type_map );
   ]
 
@@ -818,8 +818,7 @@ let object_const s p =
     ( 0,
       DUG.const_rule2_1 s f param p.tc,
       empty_id_map,
-      ObjTypeMap.M.add "java.lang.Object" "java.lang.Object" empty_obj_type_map
-    );
+      ObjTypeMap.add "java.lang.Object" "java.lang.Object" empty_obj_type_map );
   ]
 
 let list_const s p =
@@ -832,7 +831,7 @@ let list_const s p =
     ( 0,
       DUG.const_rule2_1 s f param p.tc,
       empty_id_map,
-      ObjTypeMap.M.add "java.util.List" "java.util.ArrayList" empty_obj_type_map
+      ObjTypeMap.add "java.util.List" "java.util.ArrayList" empty_obj_type_map
     );
   ]
 
@@ -841,7 +840,7 @@ let number_const s p =
     ( 0,
       DUG.const_rule2 s (DUGIR.GlobalConstant "java.math.BigDecimal.ONE") p.tc,
       empty_id_map,
-      ObjTypeMap.M.add "java.lang.Number" "java.math.BigDecimal"
+      ObjTypeMap.add "java.lang.Number" "java.math.BigDecimal"
         empty_obj_type_map );
   ]
 
@@ -857,7 +856,7 @@ let apply_rule3 s p x =
 let apply_loop s p x exps prec =
   ( prec,
     DUG.const_rule_loop s p.tc,
-    LoopIdMap.M.add x exps empty_id_map,
+    LoopIdMap.add x exps empty_id_map,
     empty_obj_type_map )
 
 let get_loop_appl s p x values =
@@ -952,10 +951,10 @@ let fcall_in_assign_unroll (s : DUGIR.t) p obj_types
       obj_map )
   in
   let set_object_type class_name child_name obj_types =
-    match ObjTypeMap.M.find_opt class_name obj_types with
+    match ObjTypeMap.find_opt class_name obj_types with
     | Some child when child = child_name -> Some obj_types
     | Some _ -> None
-    | None -> Some (ObjTypeMap.M.add class_name child_name obj_types)
+    | None -> Some (ObjTypeMap.add class_name child_name obj_types)
   in
   let apply_rule_for_all class_name field_set c_list =
     List.fold_left
@@ -1334,8 +1333,10 @@ and propagation e_method e_summary caller_method caller_preconds call_prop
     ErrorEntrySet.union caller_preconds (find_ee caller_method call_prop p_data)
   else if check_match then
     let new_call_prop =
-      new_value_summary new_value call_prop
-      |> new_mem_summary new_mem |> new_uf_summary new_uf
+      {
+        (new_value_summary new_value call_prop |> new_mem_summary new_mem) with
+        use_field = new_uf;
+      }
     in
     ErrorEntrySet.union caller_preconds
       (find_ee caller_method new_call_prop p_data)
@@ -1379,11 +1380,10 @@ let rec mk_testcase p_data queue =
     if !Cmdline.basic_mode || !Cmdline.pruning_mode then queue
     else priority_q queue
   in
-  if !Cmdline.debug then Logger.info "# of test cases: %d" (List.length queue);
+  Logger.debug "# of test cases: %d" (List.length queue);
   match queue with
   | p :: tl ->
-      if !Cmdline.debug then
-        Logger.info "current tc:\n%s" (pretty_format p.tc |> snd);
+      Logger.debug "current tc:\n%s" (pretty_format p.tc |> snd);
       if !Cmdline.with_loop && DUG.ground p.tc && DUG.with_withloop p.tc then
         [ (Need_Loop, pretty_format p.tc, p.loop_ids, tl) ]
       else if DUG.ground p.tc then
@@ -1394,19 +1394,16 @@ let rec mk_testcase p_data queue =
              p_data StmtMap.M.empty
          with
         | exception Not_found_setter ->
-            if !Cmdline.debug then
-              Logger.info "Exception: not found setter in %s"
-                (pretty_format p.tc |> snd);
+            Logger.debug "Exception: not found setter in %s"
+              (pretty_format p.tc |> snd);
             tl
         | exception Not_found_get_object ->
-            if !Cmdline.debug then
-              Logger.info "Exception: not found get object in %s"
-                (pretty_format p.tc |> snd);
+            Logger.debug "Exception: not found get object in %s"
+              (pretty_format p.tc |> snd);
             tl
         | exception Not_found_global_constant ->
-            if !Cmdline.debug then
-              Logger.info "Exception: not found global constant in %s"
-                (pretty_format p.tc |> snd);
+            Logger.debug "Exception: not found global constant in %s"
+              (pretty_format p.tc |> snd);
             tl
         | x ->
             List.fold_left
@@ -1437,7 +1434,7 @@ let mk_testcases ~is_start queue (e_method, error_summary) p_data =
       set_methods_to_ignore p_data.m_info p_data.c_info p_data.cp_map;
       ErrorEntrySet.fold
         (fun (ee, ee_s) (p_info_init, init_list) ->
-          if !Cmdline.debug then Logger.info "error entry method: %s" ee;
+          Logger.debug "error entry method: %s" ee;
           ( Constant.expand_string_value ee p_info_init,
             apply_init_rule (get_void_func DUGIR.Id ~ee ~es:ee_s p_data)
             |> init_cost |> List.rev_append init_list ))

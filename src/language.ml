@@ -56,6 +56,16 @@ type params = variable list [@@deriving compare, equal]
 
 type symbol = string (* e.g. v1 *) [@@deriving compare, equal]
 
+type method_info = {
+  modifier : modifier;
+  is_static : bool;
+  formal_params : params;
+  return : string;
+  filename : file_name;
+}
+
+type class_info = { class_type : class_type }
+
 let is_string = function String -> true | _ -> false
 
 let is_primitive = function
@@ -146,36 +156,91 @@ let modifier_of_json json : modifier =
   | "Default" -> Default
   | s -> failwith ("Unknown modifier " ^ s)
 
-module MethodInfo = struct
+module MethodInfoMap = struct
   module M = Map.Make (String)
 
-  type info = {
-    modifier : modifier;
-    is_static : bool;
-    formal_params : params;
-    return : string;
-    filename : file_name;
-  }
+  type t = method_info M.t
 
-  type t = info M.t
+  let empty = M.empty
+
+  let add = M.add
+
+  let remove = M.remove
+
+  let mem = M.mem
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let iter = M.iter
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
-module ReturnType = struct
+module StrToStrMap = struct
   module M = Map.Make (String)
 
-  type t = method_name list M.t
+  type t = string M.t [@@deriving compare, equal]
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let remove = M.remove
+
+  let mem = M.mem
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let iter = M.iter
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
-module MethodType = struct
+module StrToStrsMap = struct
   module M = Map.Make (String)
 
-  type t = method_name list M.t
+  type t = string list M.t [@@deriving compare, equal]
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let remove = M.remove
+
+  let mem = M.mem
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let iter = M.iter
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
-module Relation = struct
-  module M = Map.Make (String)
+module ReturnTypeMap = struct
+  (* type -> methods list *)
+  include StrToStrsMap
+end
 
-  type t = symbol M.t [@@deriving compare, equal]
+module MethodTypeMap = struct
+  (* type -> methods list *)
+  include StrToStrsMap
+end
+
+module RelationMap = struct
+  (* symbol -> symbol *)
+  include StrToStrMap
 end
 
 module Value = struct
@@ -206,11 +271,7 @@ module Value = struct
     | Outside of const * const
   [@@deriving compare, equal]
 
-  module M = Map.Make (String)
-
-  type v = { from_error : bool; value : op } [@@deriving compare, equal]
-
-  type t = v M.t [@@deriving compare, equal]
+  type t = { from_error : bool; value : op } [@@deriving compare, equal]
 
   let is_le str = String.contains str '<' && String.contains str '='
 
@@ -233,6 +294,24 @@ module Value = struct
     || Str.string_match (Str.regexp "in\\[") str 0
 
   let is_outside str = Str.string_match (Str.regexp "not_in\\[") str 0
+end
+
+module ValueMap = struct
+  module M = Map.Make (String)
+
+  type t = Value.t M.t [@@deriving compare, equal]
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
 module Condition = struct
@@ -262,11 +341,23 @@ module UseFieldMap = struct
   end)
 
   type t = FieldSet.t M.t [@@deriving compare, equal]
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
 type summary = {
-  relation : Relation.t;
-  value : Value.t;
+  relation : RelationMap.t;
+  value : ValueMap.t;
   use_field : UseFieldMap.t;
   precond : Condition.t;
   postcond : Condition.t;
@@ -276,9 +367,9 @@ type summary = {
 
 let empty_summary =
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
-    use_field = UseFieldMap.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
+    use_field = UseFieldMap.empty;
     precond = (Condition.M.empty, Condition.M.empty);
     postcond = (Condition.M.empty, Condition.M.empty);
     args = [];
@@ -289,6 +380,18 @@ module SummaryMap = struct
 
   (* list of summaries * list of fields with memory effects *)
   type t = (summary list * string list) M.t
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
 module CallPropMap = struct
@@ -298,14 +401,38 @@ module CallPropMap = struct
   end)
 
   type t = summary list M.t
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
-module ClassInfo = struct
+module ClassInfoMap = struct
   module M = Map.Make (String)
 
-  type info = { class_type : class_type }
+  type t = class_info M.t
 
-  type t = info M.t
+  let empty = M.empty
+
+  let add = M.add
+
+  let mem = M.mem
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
 module SetterMap = struct
@@ -314,15 +441,39 @@ module SetterMap = struct
   type setter = method_name * FieldSet.t
 
   type t = setter list M.t
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
-module InstanceInfo = struct
+module InstanceInfoMap = struct
   module M = Map.Make (String)
 
   type const = string
 
   (* enum name -> enum const list || class name -> pre-created instance list*)
   type t = const list M.t
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
 module PrimitiveInfo = struct
@@ -370,7 +521,7 @@ let rec get_tail_symbol field_name symbol memory =
           | None -> symbol))
   | None -> symbol
 
-let get_index_value (v : Value.v) : Field.t =
+let get_index_value (v : Value.t) : Field.t =
   match v.value with
   | Value.Eq (Int i) -> { used_in_error = v.from_error; name = string_of_int i }
   | Value.Ge (Int i) -> { used_in_error = v.from_error; name = string_of_int i }
@@ -396,7 +547,7 @@ let get_array_index array summary =
   let array_symbol = org_symbol array summary in
   let values = summary.value in
   let find_value s =
-    Value.M.fold
+    ValueMap.fold
       (fun symbol value find_value -> if symbol = s then value else find_value)
       values
       { from_error = false; value = Value.Eq NonValue }

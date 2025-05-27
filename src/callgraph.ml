@@ -1,7 +1,5 @@
 module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
-module MethodInfo = Language.MethodInfo
-module ExtraCalleeSet = Set.Make (String)
 
 module Node = struct
   include String
@@ -26,6 +24,8 @@ module G = struct
 
   let edge_attributes _ = []
 end
+
+type t = G.t
 
 let assoc_fold ~f ~init x = List.fold_left f init (JsonUtil.to_assoc x)
 
@@ -72,11 +72,4 @@ let of_json json =
     G.empty json
 
 let of_extra_json cg json =
-  List.fold_left
-    (fun g class_name ->
-      let info = JsonUtil.member class_name json in
-      add_missing_callee info g)
-    cg (JsonUtil.keys json)
-
-module Graphviz = Graph.Graphviz.Dot (G)
-include G
+  assoc_fold ~f:(fun g (_, info) -> add_missing_callee info g) ~init:cg json

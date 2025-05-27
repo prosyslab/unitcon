@@ -44,7 +44,7 @@ let equal_value v1 v2 =
   | _ -> false
 
 let get_value symbol vmap =
-  match Value.M.find_opt (get_rh_name symbol) vmap with
+  match ValueMap.find_opt (get_rh_name symbol) vmap with
   | Some v -> v.Value.value
   | _ -> Value.Eq NonValue
 
@@ -101,9 +101,9 @@ let find_setter m_name m_summaries m_infos mmap =
         get_change_fields summary |> FieldSet.union field_set)
       FieldSet.empty m_summaries
   in
-  match MethodInfo.M.find_opt m_name m_infos with
+  match MethodInfoMap.find_opt m_name m_infos with
   | Some i ->
-      if i.MethodInfo.return = "" || i.MethodInfo.return <> "void" then mmap
+      if i.return = "" || i.return <> "void" then mmap
       else if SetterMap.M.mem class_name mmap then
         let setter_list =
           SetterMap.M.find class_name mmap |> List.cons (m_name, change_fields)

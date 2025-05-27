@@ -1,6 +1,6 @@
 open Language
 module IG = Inheritance.G
-module CI = ClassInfo
+module CI = ClassInfoMap
 
 (* ************************************** *
    Method Summary
@@ -114,8 +114,8 @@ let three_postmem p1 p2 p3 =
 let map_put_summary =
   let map_put_var = two_var "key" "value" in
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (map_put_var, two_premem "key" "value");
     postcond = (map_put_var, two_postmem "key" "value");
@@ -124,8 +124,8 @@ let map_put_summary =
 
 let array_list_summary =
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (zero_var, zero_mem);
     postcond = (zero_var, zero_mem);
@@ -135,8 +135,8 @@ let array_list_summary =
 let file_summary =
   let file_var = one_var "file" in
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (file_var, one_premem "file");
     postcond = (file_var, one_postmem "file");
@@ -146,8 +146,8 @@ let file_summary =
 let image_summary =
   let image_var = three_var "w" "h" "t" in
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (image_var, three_premem "w" "h" "t");
     postcond = (image_var, three_postmem "w" "h" "t");
@@ -156,8 +156,8 @@ let image_summary =
 
 let image_create_summary =
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (zero_var, zero_mem);
     postcond = (zero_var, zero_mem);
@@ -166,8 +166,8 @@ let image_create_summary =
 
 let class_get_summary =
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (zero_var, zero_mem);
     postcond = (zero_var, zero_mem);
@@ -177,8 +177,8 @@ let class_get_summary =
 let print_summary =
   let print_var = one_var "file" in
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (print_var, one_premem "file");
     postcond = (print_var, one_postmem "file");
@@ -188,8 +188,8 @@ let print_summary =
 let file_input_summary =
   let file_input_var = one_var "file" in
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (file_input_var, one_premem "file");
     postcond = (file_input_var, one_postmem "file");
@@ -198,8 +198,8 @@ let file_input_summary =
 
 let ba_output_summary =
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (zero_var, zero_mem);
     postcond = (zero_var, zero_mem);
@@ -208,8 +208,8 @@ let ba_output_summary =
 
 let obj_summary =
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (zero_var, zero_mem);
     postcond = (zero_var, zero_mem);
@@ -218,8 +218,8 @@ let obj_summary =
 
 let throwable_summary =
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (zero_var, zero_mem);
     postcond = (zero_var, zero_mem);
@@ -228,8 +228,8 @@ let throwable_summary =
 
 let random_summary =
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (zero_var, zero_mem);
     postcond = (zero_var, zero_mem);
@@ -238,8 +238,8 @@ let random_summary =
 
 let stringwriter_summary =
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (zero_var, zero_mem);
     postcond = (zero_var, zero_mem);
@@ -249,8 +249,8 @@ let stringwriter_summary =
 let parseposition_summary =
   let parseposition_var = one_var "index" in
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (parseposition_var, one_premem "index");
     postcond = (parseposition_var, one_postmem "index");
@@ -260,8 +260,8 @@ let parseposition_summary =
 let bigdecimal_summary =
   let bigdecimal_var = one_var "val" in
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (bigdecimal_var, one_premem "val");
     postcond = (bigdecimal_var, one_postmem "val");
@@ -271,8 +271,8 @@ let bigdecimal_summary =
 let string_summary =
   let string_var = one_var "s" in
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (string_var, one_premem "s");
     postcond = (string_var, one_postmem "s");
@@ -282,11 +282,11 @@ let string_summary =
 let array_summary =
   let array_var = one_var "size" in
   let array_value =
-    Value.M.empty
-    |> Value.M.add "v4" Value.{ from_error = false; value = Value.Ge (Int 1) }
+    ValueMap.empty
+    |> ValueMap.add "v4" Value.{ from_error = false; value = Value.Ge (Int 1) }
   in
   {
-    relation = Relation.M.empty;
+    relation = RelationMap.empty;
     value = array_value;
     use_field = UseFieldMap.M.empty;
     precond = (array_var, one_premem "size");
@@ -297,11 +297,11 @@ let array_summary =
 let array_set_summary =
   let array_set_var = two_var "index" "elem" in
   let array_set_value =
-    Value.M.empty
-    |> Value.M.add "v5" Value.{ from_error = false; value = Value.Ge (Int 0) }
+    ValueMap.empty
+    |> ValueMap.add "v5" Value.{ from_error = false; value = Value.Ge (Int 0) }
   in
   {
-    relation = Relation.M.empty;
+    relation = RelationMap.empty;
     value = array_set_value;
     use_field = UseFieldMap.M.empty;
     precond = (array_set_var, two_premem "index" "elem");
@@ -312,8 +312,8 @@ let array_set_summary =
 let point_summary =
   let point_var = two_var "x" "y" in
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (point_var, two_premem "x" "y");
     postcond = (point_var, two_postmem "x" "y");
@@ -329,308 +329,282 @@ let map_put_info =
   let arg_typ = Object "java.lang.Object" in
   let arg1 = Var (arg_typ, "key") in
   let arg2 = Var (arg_typ, "value") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let array_list_info =
   let this = This (Object "java.util.ArrayList") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this ];
+    return = "";
+    filename = "";
+  }
 
 let file_info =
   let this = This (Object "java.io.File") in
   let arg = Var (String, "file") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let image_info =
   let this = This (Object "java.awt.image.BufferedImage") in
   let arg1 = Var (Int, "w") in
   let arg2 = Var (Int, "h") in
   let arg3 = Var (Int, "t") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2; arg3 ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2; arg3 ];
+    return = "";
+    filename = "";
+  }
 
 let image_create_info =
   let this = This (Object "java.awt.image.BufferedImage") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this ];
-      return = "java.awt.Graphics2D";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this ];
+    return = "java.awt.Graphics2D";
+    filename = "";
+  }
 
 let class_get_info =
   let this = This (Object "java.lang.Object") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this ];
-      return = "java.lang.Class";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this ];
+    return = "java.lang.Class";
+    filename = "";
+  }
 
 let print_info =
   let this = This (Object "java.io.PrintStream") in
   let arg = Var (Object "java.io.File", "file") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let file_input_info =
   let this = This (Object "java.io.FileInputStream") in
   let arg = Var (Object "java.io.File", "file") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let ba_output_info =
   let this = This (Object "java.io.ByteArrayOutputStream") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this ];
+    return = "";
+    filename = "";
+  }
 
 let obj_info =
   let this = This (Object "java.lang.Object") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this ];
+    return = "";
+    filename = "";
+  }
 
 let throwable_info =
   let this = This (Object "java.lang.Throwable") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this ];
+    return = "";
+    filename = "";
+  }
 
 let random_info =
   let this = This (Object "java.util.Random") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this ];
+    return = "";
+    filename = "";
+  }
 
 let stringwriter_info =
   let this = This (Object "java.io.StringWriter") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this ];
+    return = "";
+    filename = "";
+  }
 
 let parseposition_info =
   let this = This (Object "java.text.ParsePosition") in
   let arg = Var (Int, "index") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let bigdecimal_info =
   let this = This (Object "java.math.BigDecimal") in
   let arg = Var (Int, "val") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let string_info =
   let this = This String in
   let arg = Var (String, "s") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let int_array_info =
   let this = This (Array Int) in
   let arg = Var (Int, "size") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let long_array_info =
   let this = This (Array Long) in
   let arg = Var (Int, "size") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let short_array_info =
   let this = This (Array Short) in
   let arg = Var (Int, "size") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let byte_array_info =
   let this = This (Array Byte) in
   let arg = Var (Int, "size") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let float_array_info =
   let this = This (Array Float) in
   let arg = Var (Int, "size") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let double_array_info =
   let this = This (Array Double) in
   let arg = Var (Int, "size") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let bool_array_info =
   let this = This (Array Bool) in
   let arg = Var (Int, "size") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let char_array_info =
   let this = This (Array Char) in
   let arg = Var (Int, "size") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let string_array_info =
   let this = This (Array String) in
   let arg = Var (Int, "size") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 let object_array_info =
   let this = This (Array (Object "java.lang.Object")) in
   let arg = Var (Int, "size") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg ];
+    return = "";
+    filename = "";
+  }
 
 (*TODO: array_array_info *)
 
@@ -638,144 +612,133 @@ let int_array_set_info =
   let this = This (Array Int) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Int, "elem") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let long_array_set_info =
   let this = This (Array Long) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Long, "elem") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let short_array_set_info =
   let this = This (Array Short) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Short, "elem") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let byte_array_set_info =
   let this = This (Array Char) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Byte, "elem") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let float_array_set_info =
   let this = This (Array Float) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Float, "elem") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let double_array_set_info =
   let this = This (Array Double) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Double, "elem") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let bool_array_set_info =
   let this = This (Array Bool) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Bool, "elem") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let char_array_set_info =
   let this = This (Array Char) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Char, "elem") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let string_array_set_info =
   let this = This (Array String) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (String, "elem") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let object_array_set_info =
   let this = This (Array (Object "java.lang.Object")) in
   let arg1 = Var (Int, "index") in
   let arg2 = Var (Object "java.lang.Object", "elem") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "void";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "void";
+    filename = "";
+  }
 
 let point_info =
   let this = This (Object "java.awt.Point") in
   let arg1 = Var (Int, "x") in
   let arg2 = Var (Int, "y") in
-  MethodInfo.
-    {
-      modifier = Public;
-      is_static = false;
-      formal_params = [ this; arg1; arg2 ];
-      return = "";
-      filename = "";
-    }
+  {
+    modifier = Public;
+    is_static = false;
+    formal_params = [ this; arg1; arg2 ];
+    return = "";
+    filename = "";
+  }
 
 let add_java_package_summary mmap =
   SummaryMap.M.add "java.util.Map.put(java.lang.Object,java.lang.Object)"
@@ -830,49 +793,49 @@ let add_java_package_summary mmap =
   |> SummaryMap.M.add "java.awt.Point.<init>(int,int)" ([ point_summary ], [])
 
 let add_java_package_method mmap =
-  MethodInfo.M.add "java.util.Map.put(java.lang.Object,java.lang.Object)"
+  MethodInfoMap.add "java.util.Map.put(java.lang.Object,java.lang.Object)"
     map_put_info mmap
-  |> MethodInfo.M.add "java.util.ArrayList.<init>()" array_list_info
-  |> MethodInfo.M.add "java.io.File.<init>(java.lang.String)" file_info
-  |> MethodInfo.M.add "java.awt.image.BufferedImage.<init>(int,int,int)"
+  |> MethodInfoMap.add "java.util.ArrayList.<init>()" array_list_info
+  |> MethodInfoMap.add "java.io.File.<init>(java.lang.String)" file_info
+  |> MethodInfoMap.add "java.awt.image.BufferedImage.<init>(int,int,int)"
        image_info
-  |> MethodInfo.M.add "java.awt.image.BufferedImage.createGraphics()"
+  |> MethodInfoMap.add "java.awt.image.BufferedImage.createGraphics()"
        image_create_info
-  |> MethodInfo.M.add "java.lang.Object.getClass()" class_get_info
-  |> MethodInfo.M.add "java.io.PrintStream.<init>(java.io.File)" print_info
-  |> MethodInfo.M.add "java.io.FileInputStream.<init>(java.io.File)"
+  |> MethodInfoMap.add "java.lang.Object.getClass()" class_get_info
+  |> MethodInfoMap.add "java.io.PrintStream.<init>(java.io.File)" print_info
+  |> MethodInfoMap.add "java.io.FileInputStream.<init>(java.io.File)"
        file_input_info
-  |> MethodInfo.M.add "java.io.ByteArrayOutputStream.<init>()" ba_output_info
-  |> MethodInfo.M.add "java.lang.Object.<init>()" obj_info
-  |> MethodInfo.M.add "java.lang.Throwable.<init>()" throwable_info
-  |> MethodInfo.M.add "java.util.Random.<init>()" random_info
-  |> MethodInfo.M.add "java.io.StringWriter.<init>()" stringwriter_info
-  |> MethodInfo.M.add "java.text.ParsePosition.<init>(int)" parseposition_info
-  |> MethodInfo.M.add "java.math.BigDecimal.<init>(int)" bigdecimal_info
-  |> MethodInfo.M.add "java.lang.String.<init>(java.lang.String)" string_info
-  |> MethodInfo.M.add "IntArray.<init>(int)" int_array_info
-  |> MethodInfo.M.add "LongArray.<init>(int)" long_array_info
-  |> MethodInfo.M.add "ShortArray.<init>(int)" short_array_info
-  |> MethodInfo.M.add "ByteArray.<init>(int)" byte_array_info
-  |> MethodInfo.M.add "FloatArray.<init>(int)" float_array_info
-  |> MethodInfo.M.add "DoubleArray.<init>(int)" double_array_info
-  |> MethodInfo.M.add "BoolArray.<init>(int)" bool_array_info
-  |> MethodInfo.M.add "CharArray.<init>(int)" char_array_info
-  |> MethodInfo.M.add "StringArray.<init>(int)" string_array_info
-  |> MethodInfo.M.add "ObjectArray.<init>(int)" object_array_info
-  |> MethodInfo.M.add "IntArray.set(int,int)" int_array_set_info
-  |> MethodInfo.M.add "LongArray.set(int,long)" long_array_set_info
-  |> MethodInfo.M.add "ShortArray.set(int,short)" short_array_set_info
-  |> MethodInfo.M.add "ByteArray.set(int,byte)" byte_array_set_info
-  |> MethodInfo.M.add "FloatArray.set(int,float)" float_array_set_info
-  |> MethodInfo.M.add "DoubleArray.set(int,double)" double_array_set_info
-  |> MethodInfo.M.add "BoolArray.set(int,boolean)" bool_array_set_info
-  |> MethodInfo.M.add "CharArray.set(int,char)" char_array_set_info
-  |> MethodInfo.M.add "StringArray.set(int,java.lang.String)"
+  |> MethodInfoMap.add "java.io.ByteArrayOutputStream.<init>()" ba_output_info
+  |> MethodInfoMap.add "java.lang.Object.<init>()" obj_info
+  |> MethodInfoMap.add "java.lang.Throwable.<init>()" throwable_info
+  |> MethodInfoMap.add "java.util.Random.<init>()" random_info
+  |> MethodInfoMap.add "java.io.StringWriter.<init>()" stringwriter_info
+  |> MethodInfoMap.add "java.text.ParsePosition.<init>(int)" parseposition_info
+  |> MethodInfoMap.add "java.math.BigDecimal.<init>(int)" bigdecimal_info
+  |> MethodInfoMap.add "java.lang.String.<init>(java.lang.String)" string_info
+  |> MethodInfoMap.add "IntArray.<init>(int)" int_array_info
+  |> MethodInfoMap.add "LongArray.<init>(int)" long_array_info
+  |> MethodInfoMap.add "ShortArray.<init>(int)" short_array_info
+  |> MethodInfoMap.add "ByteArray.<init>(int)" byte_array_info
+  |> MethodInfoMap.add "FloatArray.<init>(int)" float_array_info
+  |> MethodInfoMap.add "DoubleArray.<init>(int)" double_array_info
+  |> MethodInfoMap.add "BoolArray.<init>(int)" bool_array_info
+  |> MethodInfoMap.add "CharArray.<init>(int)" char_array_info
+  |> MethodInfoMap.add "StringArray.<init>(int)" string_array_info
+  |> MethodInfoMap.add "ObjectArray.<init>(int)" object_array_info
+  |> MethodInfoMap.add "IntArray.set(int,int)" int_array_set_info
+  |> MethodInfoMap.add "LongArray.set(int,long)" long_array_set_info
+  |> MethodInfoMap.add "ShortArray.set(int,short)" short_array_set_info
+  |> MethodInfoMap.add "ByteArray.set(int,byte)" byte_array_set_info
+  |> MethodInfoMap.add "FloatArray.set(int,float)" float_array_set_info
+  |> MethodInfoMap.add "DoubleArray.set(int,double)" double_array_set_info
+  |> MethodInfoMap.add "BoolArray.set(int,boolean)" bool_array_set_info
+  |> MethodInfoMap.add "CharArray.set(int,char)" char_array_set_info
+  |> MethodInfoMap.add "StringArray.set(int,java.lang.String)"
        string_array_set_info
-  |> MethodInfo.M.add "ObjectArray.set(int,java.lang.Object)"
+  |> MethodInfoMap.add "ObjectArray.set(int,java.lang.Object)"
        object_array_set_info
-  |> MethodInfo.M.add "java.awt.Point.<init>(int,int)" point_info
+  |> MethodInfoMap.add "java.awt.Point.<init>(int,int)" point_info
 
 let add_java_package_inheritance ig =
   let add_inheritance super child ig = IG.add_edge ig super child in
@@ -891,15 +854,15 @@ let add_java_package_inheritance ig =
   |> add_inheritance "java.io.OutputStream" "java.io.ByteArrayOutputStream"
 
 let add_java_package_classinfo ci =
-  let add_classinfo name info ci = CI.M.add name info ci in
-  add_classinfo "java.io.Writer" CI.{ class_type = Public_Abstract } ci
-  |> add_classinfo "java.io.Reader" CI.{ class_type = Public_Abstract }
-  |> add_classinfo "java.io.OutputStream" CI.{ class_type = Public_Abstract }
-  |> add_classinfo "java.io.InputStream" CI.{ class_type = Public_Abstract }
-  |> add_classinfo "java.lang.Number" CI.{ class_type = Public_Abstract }
-  |> add_classinfo "java.text.Format" CI.{ class_type = Public_Abstract }
-  |> add_classinfo "java.text.DateFormat" CI.{ class_type = Public_Abstract }
-  |> add_classinfo "java.text.NumberFormat" CI.{ class_type = Public_Abstract }
-  |> add_classinfo "java.util.Collection" CI.{ class_type = Public_Interface }
-  |> add_classinfo "java.util.List" CI.{ class_type = Public_Interface }
-  |> add_classinfo "java.util.Map" CI.{ class_type = Public_Interface }
+  let add_classinfo name info ci = CI.add name info ci in
+  add_classinfo "java.io.Writer" { class_type = Public_Abstract } ci
+  |> add_classinfo "java.io.Reader" { class_type = Public_Abstract }
+  |> add_classinfo "java.io.OutputStream" { class_type = Public_Abstract }
+  |> add_classinfo "java.io.InputStream" { class_type = Public_Abstract }
+  |> add_classinfo "java.lang.Number" { class_type = Public_Abstract }
+  |> add_classinfo "java.text.Format" { class_type = Public_Abstract }
+  |> add_classinfo "java.text.DateFormat" { class_type = Public_Abstract }
+  |> add_classinfo "java.text.NumberFormat" { class_type = Public_Abstract }
+  |> add_classinfo "java.util.Collection" { class_type = Public_Interface }
+  |> add_classinfo "java.util.List" { class_type = Public_Interface }
+  |> add_classinfo "java.util.Map" { class_type = Public_Interface }

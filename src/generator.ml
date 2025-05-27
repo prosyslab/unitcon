@@ -13,11 +13,11 @@ type data = {
   cg : Callgraph.t;
   summary : SummaryMap.t;
   cp_map : CallPropMap.t;
-  m_info : MethodInfo.t;
-  t_info : ReturnType.t * MethodType.t;
-  c_info : ClassInfo.t * Inheritance.t;
+  m_info : MethodInfoMap.t;
+  t_info : ReturnTypeMap.t * MethodTypeMap.t;
+  c_info : ClassInfoMap.t * Inheritance.t;
   setter_map : SetterMap.t;
-  inst_info : InstanceInfo.t;
+  inst_info : InstanceInfoMap.t;
   prim_info : PrimitiveInfo.t;
 }
 
@@ -38,10 +38,20 @@ module ObjTypeMap = struct
   module M = Map.Make (String)
 
   type t = string M.t
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let merge = M.merge
 end
 
 let obj_type_merge old_types new_types =
-  ObjTypeMap.M.merge
+  ObjTypeMap.merge
     (fun _ v1 v2 ->
       match (v1, v2) with
       | None, None -> None
@@ -104,18 +114,18 @@ let get_fields m_name map =
   | None -> []
 
 let get_formal_params m_name map =
-  match MethodInfo.M.find_opt m_name map with
-  | Some info -> info.MethodInfo.formal_params
+  match MethodInfoMap.find_opt m_name map with
+  | Some info -> info.formal_params
   | None -> []
 
 let get_setters c_name map =
   match SetterMap.M.find_opt c_name map with Some lst -> lst | None -> []
 
 let get_ret_methods typ map =
-  match ReturnType.M.find_opt typ map with Some lst -> lst | None -> []
+  match ReturnTypeMap.find_opt typ map with Some lst -> lst | None -> []
 
 let get_methods_of_class c_name map =
-  match MethodType.M.find_opt c_name map with Some lst -> lst | None -> []
+  match MethodTypeMap.find_opt c_name map with Some lst -> lst | None -> []
 
 let get_subtypes typ ig =
   try IG.succ ig typ |> List.cons typ with Invalid_argument _ -> [ typ ]
@@ -163,7 +173,7 @@ let special_class_list =
   ]
 
 let rec find_relation given_symbol relation =
-  match Relation.M.find_opt given_symbol relation with
+  match RelationMap.find_opt given_symbol relation with
   | Some find_symbol -> find_relation find_symbol relation
   | None -> given_symbol
 
@@ -193,7 +203,7 @@ let more_find_head_symbol head_symbol _ memory =
   Condition.M.exists is_head_symbol memory
 
 let get_symbol_list values =
-  Value.M.fold (fun symbol _ symbol_list -> symbol :: symbol_list) values []
+  ValueMap.fold (fun symbol _ symbol_list -> symbol :: symbol_list) values []
 
 let rec find_real_head head_symbol memory =
   let exist_head_symbol =
@@ -289,19 +299,19 @@ let get_caller_value_symbol_list caller_prop callee_param_index_list =
 
 let mk_new_uf method_name from_s to_s m_info =
   let params =
-    match MethodInfo.M.find_opt method_name m_info with
-    | Some p -> p.MethodInfo.formal_params
+    match MethodInfoMap.find_opt method_name m_info with
+    | Some p -> p.formal_params
     | _ -> []
   in
-  UseFieldMap.M.fold
+  UseFieldMap.fold
     (fun sym field_set new_ufset ->
       let idx = get_param_index (get_rh_name sym) (fst from_s.precond) params in
       if idx = -1 then new_ufset
       else
         let head_symbol = List.nth to_s.args idx in
         let head = find_real_head head_symbol (snd to_s.precond) |> mk_symbol in
-        UseFieldMap.M.add head field_set new_ufset)
-    from_s.use_field UseFieldMap.M.empty
+        UseFieldMap.add head field_set new_ufset)
+    from_s.use_field UseFieldMap.empty
 
 let get_field_symbol id symbol mem =
   get_tail_symbol (get_rh_name ~is_var:true id) symbol mem
@@ -364,7 +374,7 @@ let get_value_symbol_list ~is_init t_summary c_summary vs_list =
   else vs_list
 
 let is_from_error from_func summary =
-  Value.M.fold
+  ValueMap.fold
     (fun _ v check ->
       if v.Value.from_error then if from_func then 3 else 2 else check)
     summary.value 0
@@ -377,8 +387,10 @@ let contains_used_in_error base_set target_set =
     target_set false
 
 let vmap_maker symbol target_vmap from_error =
-  let value = Value.M.find symbol target_vmap in
-  Value.M.add symbol Value.{ from_error; value = value.Value.value } target_vmap
+  let value = ValueMap.find symbol target_vmap in
+  ValueMap.add symbol
+    Value.{ from_error; value = value.Value.value }
+    target_vmap
 
 let get_array_size array summary =
   let _, memory = summary.precond in
@@ -823,7 +835,7 @@ let find_value_from_variable memory value target_variable =
         else find_variable)
       memory target_variable
   in
-  Value.M.fold
+  ValueMap.fold
     (fun symbol value find_value ->
       if symbol = target_variable then value else find_value)
     value
@@ -894,7 +906,7 @@ let n_forward n start start_map =
 
 let exist_field_value field value vmap memory =
   match
-    Value.M.find_opt (get_field_symbol field value memory |> get_rh_name) vmap
+    ValueMap.find_opt (get_field_symbol field value memory |> get_rh_name) vmap
   with
   | Some _ -> true
   | _ -> false
@@ -912,87 +924,84 @@ let check_new_value symbol vmap memory =
   | _ -> false
 
 let check_intersect_one caller_sym callee_sym caller_prop callee_summary =
-  try
-    let caller_value = Value.M.find caller_sym caller_prop.value in
-    let callee_value = Value.M.find callee_sym callee_summary.value in
-    let return_caller check =
-      if check then
-        ( (caller_value.Value.from_error || callee_value.Value.from_error)
-          |> vmap_maker caller_sym caller_prop.value,
-          check )
-      else (caller_prop.value, check)
-    in
-    let get_result check_opt =
-      match check_opt with
-      | Some check -> return_caller check
-      | _ -> (Value.M.empty, false)
-    in
-    match (caller_value.Value.value, callee_value.Value.value) with
-    | Eq eq_v1, Eq eq_v2 ->
-        if eq_v1 = eq_v2 then return_caller true else return_caller false
-    | Eq eq_v, Neq neq_v | Neq neq_v, Eq eq_v ->
-        if eq_v = neq_v then return_caller false else return_caller true
-    | Eq eq_v, Le le_v | Le le_v, Eq eq_v ->
-        check_eq_l_one ~is_le:true eq_v le_v |> get_result
-    | Eq eq_v, Lt lt_v | Lt lt_v, Eq eq_v ->
-        check_eq_l_one ~is_le:false eq_v lt_v |> get_result
-    | Eq eq_v, Ge ge_v | Ge ge_v, Eq eq_v ->
-        check_eq_g_one ~is_ge:true eq_v ge_v |> get_result
-    | Eq eq_v, Gt gt_v | Gt gt_v, Eq eq_v ->
-        check_eq_g_one ~is_ge:false eq_v gt_v |> get_result
-    | Eq eq_v, Between (btw_min, btw_max) | Between (btw_min, btw_max), Eq eq_v
-      ->
-        check_eq_btw_one eq_v btw_min btw_max |> get_result
-    | Eq eq_v, Outside (out_min, out_max) | Outside (out_min, out_max), Eq eq_v
-      ->
-        check_eq_out_one eq_v out_min out_max |> get_result
-    | Le le_v, Ge ge_v | Ge ge_v, Le le_v ->
-        check_l_g_one ~is_e:true le_v ge_v |> get_result
-    | Le l_v, Gt g_v
-    | Lt l_v, Ge g_v
-    | Lt l_v, Gt g_v
-    | Ge g_v, Lt l_v
-    | Gt g_v, Le l_v
-    | Gt g_v, Lt l_v ->
-        check_l_g_one ~is_e:false l_v g_v |> get_result
-    | Le le_v, Between (btw_min, _) | Between (btw_min, _), Le le_v ->
-        check_l_btw_one ~is_le:true le_v btw_min |> get_result
-    | Lt lt_v, Between (btw_min, _) | Between (btw_min, _), Lt lt_v ->
-        check_l_btw_one ~is_le:false lt_v btw_min |> get_result
-    | Ge ge_v, Between (_, btw_max) | Between (_, btw_max), Ge ge_v ->
-        check_g_btw_one ~is_ge:true ge_v btw_max |> get_result
-    | Gt gt_v, Between (_, btw_max) | Between (_, btw_max), Gt gt_v ->
-        check_g_btw_one ~is_ge:false gt_v btw_max |> get_result
-    | Between (r_min, r_max), Between (e_min, e_max) ->
-        check_btw_btw_one r_min r_max e_min e_max |> get_result
-    | Between (btw_min, btw_max), Outside (out_min, out_max)
-    | Outside (out_min, out_max), Between (btw_min, btw_max) ->
-        check_btw_out_one btw_min btw_max out_min out_max |> get_result
-    | _, Outside _
-    | Outside _, _
-    | Lt _, Le _
-    | Lt _, Lt _
-    | Le _, Le _
-    | Le _, Lt _
-    | Gt _, Ge _
-    | Gt _, Gt _
-    | Ge _, Ge _
-    | Ge _, Gt _
-    | Neq _, _
-    | _, Neq _ ->
-        return_caller true
-  with Not_found -> (
-    try
-      let callee_value = Value.M.find callee_sym callee_summary.value in
-      ( Value.M.add caller_sym callee_value caller_prop.value
-        |> Value.M.add callee_sym callee_value,
+  let caller_value_opt = ValueMap.find_opt caller_sym caller_prop.value in
+  let callee_value_opt = ValueMap.find_opt callee_sym callee_summary.value in
+  match (caller_value_opt, callee_value_opt) with
+  | Some caller_value, Some callee_value -> (
+      let return_caller check =
+        if check then
+          ( (caller_value.Value.from_error || callee_value.Value.from_error)
+            |> vmap_maker caller_sym caller_prop.value,
+            check )
+        else (caller_prop.value, check)
+      in
+      let get_result check_opt =
+        match check_opt with
+        | Some check -> return_caller check
+        | _ -> (ValueMap.empty, false)
+      in
+      match (caller_value.Value.value, callee_value.Value.value) with
+      | Eq eq_v1, Eq eq_v2 ->
+          if eq_v1 = eq_v2 then return_caller true else return_caller false
+      | Eq eq_v, Neq neq_v | Neq neq_v, Eq eq_v ->
+          if eq_v = neq_v then return_caller false else return_caller true
+      | Eq eq_v, Le le_v | Le le_v, Eq eq_v ->
+          check_eq_l_one ~is_le:true eq_v le_v |> get_result
+      | Eq eq_v, Lt lt_v | Lt lt_v, Eq eq_v ->
+          check_eq_l_one ~is_le:false eq_v lt_v |> get_result
+      | Eq eq_v, Ge ge_v | Ge ge_v, Eq eq_v ->
+          check_eq_g_one ~is_ge:true eq_v ge_v |> get_result
+      | Eq eq_v, Gt gt_v | Gt gt_v, Eq eq_v ->
+          check_eq_g_one ~is_ge:false eq_v gt_v |> get_result
+      | Eq eq_v, Between (btw_min, btw_max)
+      | Between (btw_min, btw_max), Eq eq_v ->
+          check_eq_btw_one eq_v btw_min btw_max |> get_result
+      | Eq eq_v, Outside (out_min, out_max)
+      | Outside (out_min, out_max), Eq eq_v ->
+          check_eq_out_one eq_v out_min out_max |> get_result
+      | Le le_v, Ge ge_v | Ge ge_v, Le le_v ->
+          check_l_g_one ~is_e:true le_v ge_v |> get_result
+      | Le l_v, Gt g_v
+      | Lt l_v, Ge g_v
+      | Lt l_v, Gt g_v
+      | Ge g_v, Lt l_v
+      | Gt g_v, Le l_v
+      | Gt g_v, Lt l_v ->
+          check_l_g_one ~is_e:false l_v g_v |> get_result
+      | Le le_v, Between (btw_min, _) | Between (btw_min, _), Le le_v ->
+          check_l_btw_one ~is_le:true le_v btw_min |> get_result
+      | Lt lt_v, Between (btw_min, _) | Between (btw_min, _), Lt lt_v ->
+          check_l_btw_one ~is_le:false lt_v btw_min |> get_result
+      | Ge ge_v, Between (_, btw_max) | Between (_, btw_max), Ge ge_v ->
+          check_g_btw_one ~is_ge:true ge_v btw_max |> get_result
+      | Gt gt_v, Between (_, btw_max) | Between (_, btw_max), Gt gt_v ->
+          check_g_btw_one ~is_ge:false gt_v btw_max |> get_result
+      | Between (r_min, r_max), Between (e_min, e_max) ->
+          check_btw_btw_one r_min r_max e_min e_max |> get_result
+      | Between (btw_min, btw_max), Outside (out_min, out_max)
+      | Outside (out_min, out_max), Between (btw_min, btw_max) ->
+          check_btw_out_one btw_min btw_max out_min out_max |> get_result
+      | _, Outside _
+      | Outside _, _
+      | Lt _, Le _
+      | Lt _, Lt _
+      | Le _, Le _
+      | Le _, Lt _
+      | Gt _, Ge _
+      | Gt _, Gt _
+      | Ge _, Ge _
+      | Ge _, Gt _
+      | Neq _, _
+      | _, Neq _ ->
+          return_caller true)
+  | None, Some callee_value ->
+      ( ValueMap.add caller_sym callee_value caller_prop.value
+        |> ValueMap.add callee_sym callee_value,
         true )
-    with Not_found -> (
-      try
-        (* constructor prop propagation *)
-        let caller_value = Value.M.find caller_sym caller_prop.value in
-        (Value.M.add callee_sym caller_value callee_summary.value, true)
-      with Not_found -> (caller_prop.value, true)))
+  | Some caller_value, None ->
+      (* constructor prop propagation *)
+      (ValueMap.add callee_sym caller_value callee_summary.value, true)
+  | None, None -> (caller_prop.value, true)
 
 let check_intersect ~is_init caller_prop callee_summary vs_list =
   let vs_list =
@@ -1039,7 +1048,7 @@ let combine_value base_value vc_list =
   in
   List.fold_left
     (fun prop_values (prop_value, _) ->
-      Value.M.merge merge_f prop_values prop_value)
+      ValueMap.merge merge_f prop_values prop_value)
     base_value vc_list
 
 let satisfy callee_method callee_summary call_prop m_info =
@@ -1048,7 +1057,7 @@ let satisfy callee_method callee_summary call_prop m_info =
     |> get_head_symbol_list callee_summary.precond
   in
   let value_symbol_list =
-    (MethodInfo.M.find callee_method m_info).MethodInfo.formal_params
+    (MethodInfoMap.find callee_method m_info).formal_params
     |> get_param_index_list callee_head_symbols callee_summary.precond
     |> get_caller_value_symbol_list call_prop
   in
@@ -1085,16 +1094,6 @@ let new_mem_summary new_mem old_summary =
     args = old_summary.args;
   }
 
-let new_uf_summary new_uf old_summary =
-  {
-    relation = old_summary.relation;
-    value = old_summary.value;
-    use_field = new_uf;
-    precond = old_summary.precond;
-    postcond = old_summary.postcond;
-    args = old_summary.args;
-  }
-
 let add_new_mmap f1 f2 org_key field map =
   match Condition.M.find_opt org_key map with
   | Some x ->
@@ -1121,7 +1120,7 @@ let mk_new_memory org_key t_key_lst t_summary new_mem =
       let fv2 = string_of_int fn2 |> String.cat "u" |> mk_symbol in
       let new_value =
         let s = get_tail_symbol "" key (snd t_summary.precond) |> get_rh_name in
-        match Value.M.find_opt s t_summary.value with
+        match ValueMap.find_opt s t_summary.value with
         | Some v -> v
         | None -> value
       in
@@ -1164,7 +1163,7 @@ let modify_summary id t_summary c_summary =
       relation = c_summary.relation;
       value =
         (if value = default_value then c_summary.value
-         else Value.M.add (get_rh_name symbol) value c_summary.value);
+         else ValueMap.add (get_rh_name symbol) value c_summary.value);
       use_field = c_summary.use_field;
       precond = (fst c_summary.precond, pre_mem);
       postcond = (fst c_summary.postcond, post_mem);
@@ -1184,8 +1183,8 @@ let new_this_summary old_summary values =
   {
     relation = old_summary.relation;
     value =
-      Value.M.add (fst values |> fst) (fst values |> snd) old_summary.value
-      |> Value.M.add (snd values |> fst) (snd values |> snd);
+      ValueMap.add (fst values |> fst) (fst values |> snd) old_summary.value
+      |> ValueMap.add (snd values |> fst) (snd values |> snd);
     use_field = old_summary.use_field;
     precond =
       ( fst old_summary.precond,
@@ -1199,7 +1198,7 @@ let new_this_summary old_summary values =
 let modify_array_summary id t_summary a_summary =
   let from_error, value = get_array_size id t_summary in
   let new_value =
-    Value.M.add
+    ValueMap.add
       (org_symbol "size" a_summary)
       Value.{ from_error; value = Value.Ge (Int value) }
       a_summary.value
@@ -1224,29 +1223,29 @@ let is_test_file f_name =
 
 let is_public_class class_name c_info =
   let is_public_class_type typ =
-    match typ.ClassInfo.class_type with
+    match typ.class_type with
     | Public | Public_Static | Public_Static_Abstract | Public_Abstract -> true
     | _ -> false
   in
-  match ClassInfo.M.find_opt class_name c_info with
+  match ClassInfoMap.find_opt class_name c_info with
   | Some typ -> is_public_class_type typ
   | None -> true (* modeling class *)
 
 let is_abstract_class class_name (c_info, _) =
   let is_abstract_class_type typ =
-    match typ.ClassInfo.class_type with
+    match typ.class_type with
     | Public_Abstract | Public_Static_Abstract | Private_Abstract
     | Private_Static_Abstract | Default_Abstract | Default_Static_Abstract ->
         true
     | _ -> false
   in
-  match ClassInfo.M.find_opt class_name c_info with
+  match ClassInfoMap.find_opt class_name c_info with
   | Some typ -> is_abstract_class_type typ
   | _ -> false
 
 let is_usable_default_class class_name c_info =
   let is_usable_default_class_type typ =
-    match typ.ClassInfo.class_type with
+    match typ.class_type with
     | (Default | Default_Static | Default_Static_Abstract | Default_Abstract)
       when !Cmdline.extension = Utils.get_package_name class_name ->
         true
@@ -1254,13 +1253,13 @@ let is_usable_default_class class_name c_info =
   in
   if !Cmdline.extension = "" then false
   else
-    match ClassInfo.M.find_opt class_name c_info with
+    match ClassInfoMap.find_opt class_name c_info with
     | Some typ -> is_usable_default_class_type typ
     | None -> false
 
 let is_static_class name (c_info, _) =
   let is_static_class_type typ =
-    match typ.ClassInfo.class_type with
+    match typ.class_type with
     | Public_Static | Public_Static_Abstract -> true
     | (Default_Static | Default_Static_Abstract)
       when !Cmdline.extension <> ""
@@ -1272,74 +1271,68 @@ let is_static_class name (c_info, _) =
     Regexp.global_rm Regexp.init_end name
     |> Regexp.global_rm Regexp.method_params_end
   in
-  match ClassInfo.M.find_opt name c_info with
+  match ClassInfoMap.find_opt name c_info with
   | Some typ -> is_static_class_type typ
   | None -> false
 
 let is_private_class class_package c_info =
   let is_private_class_type typ =
-    match typ.ClassInfo.class_type with
+    match typ.class_type with
     | Private | Private_Static | Private_Abstract | Private_Static_Abstract ->
         true
     | _ -> false
   in
-  match ClassInfo.M.find_opt class_package (fst c_info) with
+  match ClassInfoMap.find_opt class_package (fst c_info) with
   | Some typ -> is_private_class_type typ
   | None -> false
 
 let is_available_class name c_info =
   let is_available_class_type typ =
-    match typ.ClassInfo.class_type with
-    | Public | Public_Static -> true
-    | _ -> false
+    match typ.class_type with Public | Public_Static -> true | _ -> false
   in
-  match ClassInfo.M.find_opt name c_info with
+  match ClassInfoMap.find_opt name c_info with
   | Some typ -> is_available_class_type typ
   | _ -> true
 
 let is_static m_name m_info =
-  match MethodInfo.M.find_opt m_name m_info with
+  match MethodInfoMap.find_opt m_name m_info with
   | None -> false
-  | Some info -> info.MethodInfo.is_static
+  | Some info -> info.is_static
 
 let is_private m_name m_info =
   let is_private_method info =
-    match info.MethodInfo.modifier with Private -> true | _ -> false
+    match info.modifier with Private -> true | _ -> false
   in
-  match MethodInfo.M.find_opt m_name m_info with
+  match MethodInfoMap.find_opt m_name m_info with
   | None -> false
   | Some info -> is_private_method info
 
 let is_public m_name m_info =
   let is_public_method ?(is_test = false) info =
-    match info.MethodInfo.modifier with
-    | Public when not is_test -> true
-    | _ -> false
+    match info.modifier with Public when not is_test -> true | _ -> false
   in
-  match MethodInfo.M.find_opt m_name m_info with
+  match MethodInfoMap.find_opt m_name m_info with
   | None -> false
   | Some info ->
       (* If this method is a method in the test file,
          don't use it even if the modifier is public *)
-      is_public_method ~is_test:(is_test_file info.MethodInfo.filename) info
+      is_public_method ~is_test:(is_test_file info.filename) info
 
 let is_usable_default m_name m_info =
   let is_usable_default_method ?(is_test = false) info =
     let pkg = Utils.get_class_name m_name |> Utils.get_package_name in
-    match info.MethodInfo.modifier with
+    match info.modifier with
     | (Default | Protected) when !Cmdline.extension = pkg && not is_test -> true
     | _ -> false
   in
   if !Cmdline.extension = "" then false
   else
-    match MethodInfo.M.find_opt m_name m_info with
+    match MethodInfoMap.find_opt m_name m_info with
     | None -> false
     | Some info ->
         (* If this method is a method in the test file,
            don't use it even if the modifier is public or usable default *)
-        is_usable_default_method
-          ~is_test:(is_test_file info.MethodInfo.filename)
-          info
+        is_usable_default_method ~is_test:(is_test_file info.filename) info
 
 let is_abstract m_name class_name_list m_info c_info =
   let target_class = Utils.get_class_name m_name in
@@ -1353,7 +1346,7 @@ let is_abstract m_name class_name_list m_info c_info =
     List.fold_left
       (fun check class_name ->
         if class_name = target_class then check
-        else if MethodInfo.M.mem (class_name ^ m_name) m_info then
+        else if MethodInfoMap.mem (class_name ^ m_name) m_info then
           (* When the method is in an abstract class and child classes implement the method,
              this method is likely an abstract *)
           true
@@ -1365,8 +1358,8 @@ let match_constructor_name class_name method_name =
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
 
 let match_return_object class_name method_name m_info =
-  let info = MethodInfo.M.find method_name m_info in
-  let return = info.MethodInfo.return in
+  let info = MethodInfoMap.find method_name m_info in
+  let return = info.return in
   let cname_of_method = Utils.get_class_name method_name in
   let is_recursive_obj =
     String.equal cname_of_method return && not (is_static method_name m_info)
@@ -1429,19 +1422,21 @@ and check_one_var v1 v2 =
   | _, _ -> false
 
 let is_same_param_type c1 c2 m_info =
-  let c1_info = MethodInfo.M.find c1 m_info in
-  let c2_info = MethodInfo.M.find c2 m_info in
-  check_param c1_info.MethodInfo.formal_params c2_info.MethodInfo.formal_params
+  let c1_info = MethodInfoMap.find c1 m_info in
+  let c2_info = MethodInfoMap.find c2 m_info in
+  check_param c1_info.formal_params c2_info.formal_params
+
+let add_dup_setter std list acc =
+  let _, _, h = std in
+  List.fold_left
+    (fun acc_set (name, fx, x) ->
+      if is_same_summary h x then DuplicatedSetter.add (name, fx, x) acc_set
+      else acc_set)
+    acc list
 
 let rec collect_dup_setter lst set =
   match lst with
-  | (_, _, h) :: t ->
-      List.fold_left
-        (fun acc_set (name, fx, x) ->
-          if is_same_summary h x then DuplicatedSetter.add (name, fx, x) acc_set
-          else acc_set)
-        set t
-      |> collect_dup_setter t
+  | std_setter :: t -> add_dup_setter std_setter t set |> collect_dup_setter t
   | _ -> set
 
 let prune_dup_summary_setter lst =
@@ -1452,16 +1447,19 @@ let prune_dup_summary_setter lst =
       (fun l s -> if DuplicatedSetter.mem s dup_set then l else s :: l)
       [] lst
 
+let add_dup_summaries m_info std list acc =
+  let _, ch, h = std in
+  List.fold_left
+    (fun acc_set (cost, cx, x) ->
+      if is_same_param_type ch cx m_info && is_same_summary h x then
+        DuplicatedSummaries.add (cost, cx, x) acc_set
+      else acc_set)
+    acc list
+
 let rec collect_dup m_info lst set =
   match lst with
-  | (_, ch, h) :: t ->
-      List.fold_left
-        (fun acc_set (cost, cx, x) ->
-          if is_same_param_type ch cx m_info && is_same_summary h x then
-            DuplicatedSummaries.add (cost, cx, x) acc_set
-          else acc_set)
-        set t
-      |> collect_dup m_info t
+  | std_summary :: t ->
+      add_dup_summaries m_info std_summary t set |> collect_dup m_info t
   | _ -> set
 
 let check_unique_class target_method methods =
@@ -1499,12 +1497,12 @@ let get_package_from_v v =
   get_package (get_type v)
 
 let is_recursive_param parent_class method_name m_info =
-  let info = MethodInfo.M.find method_name m_info in
+  let info = MethodInfoMap.find method_name m_info in
   let this = Object parent_class in
   List.fold_left
     (fun check var ->
       match var with Var (typ, _) when typ = this -> true | _ -> check)
-    false info.MethodInfo.formal_params
+    false info.formal_params
 
 let contains_symbol symbol memory =
   let inner_contains_symbol mem =
@@ -1541,7 +1539,7 @@ let get_setter_list summary s_lst =
   |> List.rev |> prune_dup_summary_setter
 
 let is_null symbol summary =
-  match Value.M.find_opt symbol summary.value with
+  match ValueMap.find_opt symbol summary.value with
   | Some x when x.Value.value = Eq Null -> true
   | _ -> false
 
@@ -1602,8 +1600,8 @@ let is_getter_with_memory_effect m_summary fld_name =
 
 let is_ret_recv_mem_effect fld_name subtypes summary m_info ret_recv_methods =
   let check_ret_recv fld_name subtypes m_name effect_fld_lst =
-    let info = MethodInfo.M.find m_name m_info in
-    List.mem info.MethodInfo.return subtypes && List.mem fld_name effect_fld_lst
+    let info = MethodInfoMap.find m_name m_info in
+    List.mem info.return subtypes && List.mem fld_name effect_fld_lst
   in
   List.fold_left
     (fun check m_name ->
@@ -1721,7 +1719,7 @@ let is_op_constant op =
   match op with Value.Eq const -> is_constant const | _ -> false
 
 let is_arg_constant symbol value =
-  match Value.M.find_opt symbol value with
+  match ValueMap.find_opt symbol value with
   | Some op -> is_op_constant op.Value.value
   | None -> false
 
@@ -1797,6 +1795,6 @@ let set_methods_to_ignore m_info c_info cp_map =
   CallPropMap.M.iter
     (fun ((caller : string), _) _ ->
       if not (List.mem caller not_ignore) then (
-        if !Cmdline.debug then Logger.info "Ignore method: %s" caller;
+        Logger.debug "Ignore method: %s" caller;
         ignored_methods := IgnoredMethods.add caller !ignored_methods))
     cp_map

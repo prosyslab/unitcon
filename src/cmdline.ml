@@ -7,7 +7,13 @@ module Term = C.Term
 
 type command = Build | Analyze | Synthesize
 
+type ir = AST | DUG
+
+type synthesis_mode = Basic | Pruning | Priority | Full
+
 let command = ref Synthesize
+
+let ir_type = ref DUG
 
 let debug = ref false
 
@@ -43,8 +49,6 @@ let basic_mode = ref false
 let pruning_mode = ref false
 
 let priority_mode = ref false
-
-let test_case_ast = ref false
 
 let time_out = ref (10 * 60) (* total synthesis running time *)
 
@@ -130,11 +134,11 @@ let _priority_mode =
   let doc = "Run with only prioritization (default: false)" in
   Arg.(value & flag & info [ "priority-mode" ] ~doc)
 
-let _test_case_ast =
+let _ast =
   let doc =
     "Set structure of test case to AST (default structure: def-use-graph)"
   in
-  Arg.(value & flag & info [ "test-case-ast" ] ~doc)
+  Arg.(value & flag & info [ "ast" ] ~doc)
 
 let _time_out =
   let doc = "Time Budget except Static Analysis (default: 10m)" in
@@ -222,14 +226,15 @@ module Analyze = struct
 end
 
 module Synthesize = struct
-  let opt _copt _target _basic_mode _pruning_mode _priority_mode _test_case_ast
-      _time_out _unknown_bug _mock _extension _batch_size _save_temp _ignore =
+  let opt _copt _target _basic_mode _pruning_mode _priority_mode _ast _time_out
+      _unknown_bug _mock _extension _batch_size _save_temp _ignore =
     command := Synthesize;
     target := _target;
     basic_mode := _basic_mode;
     pruning_mode := _pruning_mode;
     priority_mode := _priority_mode;
-    test_case_ast := _test_case_ast;
+    ir_type := if _ast then AST else !ir_type;
+
     time_out := _time_out;
     margin := if _time_out / 60 >= 10 then 10 else _time_out / 60;
     unknown_bug := _unknown_bug;
@@ -247,8 +252,8 @@ module Synthesize = struct
     Cmd.v info
       Term.(
         const opt $ common_opt $ _target $ _basic_mode $ _pruning_mode
-        $ _priority_mode $ _test_case_ast $ _time_out $ _unknown_bug $ _mock
-        $ _extension $ _batch_size $ _save_temp $ _ignore)
+        $ _priority_mode $ _ast $ _time_out $ _unknown_bug $ _mock $ _extension
+        $ _batch_size $ _save_temp $ _ignore)
 end
 
 let main_cmd =

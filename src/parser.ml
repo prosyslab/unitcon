@@ -80,53 +80,54 @@ let parse_boitv boitv =
           |> Regexp.global_rm Regexp.end_bk2
           |> Regexp.rm_space
         in
-        if check_relation head tail then Relation.M.add head tail mmap else mmap)
+        if check_relation head tail then RelationMap.add head tail mmap
+        else mmap)
       mmap value_list
   in
   let relation_list = Regexp.remove_bk boitv |> Str.split Regexp.bm in
-  if relation_list = [] then Relation.M.empty
+  if relation_list = [] then RelationMap.empty
   else
     List.fold_left
       (fun mmap relation -> parse_relation relation mmap)
-      Relation.M.empty relation_list
+      RelationMap.empty relation_list
 
 let parse_eq_value is_err sym value mmap =
   let v = Regexp.first_rm Regexp.eq value in
   match int_of_string_opt v with
-  | Some v -> Value.M.add sym (Value.Eq (Int v) |> value_maker is_err) mmap
+  | Some v -> ValueMap.add sym (Value.Eq (Int v) |> value_maker is_err) mmap
   | None ->
       if v = "null" then
-        Value.M.add sym (Value.Eq Null |> value_maker is_err) mmap
-      else Value.M.add sym (Value.Eq (String v) |> value_maker is_err) mmap
+        ValueMap.add sym (Value.Eq Null |> value_maker is_err) mmap
+      else ValueMap.add sym (Value.Eq (String v) |> value_maker is_err) mmap
 
 let parse_neq_value is_err sym value mmap =
   let v = Regexp.first_rm Regexp.neq value in
   match int_of_string_opt v with
-  | Some v -> Value.M.add sym (Value.Neq (Int v) |> value_maker is_err) mmap
+  | Some v -> ValueMap.add sym (Value.Neq (Int v) |> value_maker is_err) mmap
   | None ->
       if v = "null" then
-        Value.M.add sym (Value.Neq Null |> value_maker is_err) mmap
-      else Value.M.add sym (Value.Neq (String v) |> value_maker is_err) mmap
+        ValueMap.add sym (Value.Neq Null |> value_maker is_err) mmap
+      else ValueMap.add sym (Value.Neq (String v) |> value_maker is_err) mmap
 
 let parse_ge_value is_err sym value mmap =
   match Regexp.first_rm Regexp.ge value |> int_of_string_opt with
-  | Some v -> Value.M.add sym (Value.Ge (Int v) |> value_maker is_err) mmap
-  | None -> Value.M.add sym (Value.Ge MinusInf |> value_maker is_err) mmap
+  | Some v -> ValueMap.add sym (Value.Ge (Int v) |> value_maker is_err) mmap
+  | None -> ValueMap.add sym (Value.Ge MinusInf |> value_maker is_err) mmap
 
 let parse_gt_value is_err sym value mmap =
   match Regexp.first_rm Regexp.gt value |> int_of_string_opt with
-  | Some v -> Value.M.add sym (Value.Gt (Int v) |> value_maker is_err) mmap
-  | None -> Value.M.add sym (Value.Gt MinusInf |> value_maker is_err) mmap
+  | Some v -> ValueMap.add sym (Value.Gt (Int v) |> value_maker is_err) mmap
+  | None -> ValueMap.add sym (Value.Gt MinusInf |> value_maker is_err) mmap
 
 let parse_le_value is_err sym value mmap =
   match Regexp.first_rm Regexp.le value |> int_of_string_opt with
-  | Some v -> Value.M.add sym (Value.Le (Int v) |> value_maker is_err) mmap
-  | None -> Value.M.add sym (Value.Le PlusInf |> value_maker is_err) mmap
+  | Some v -> ValueMap.add sym (Value.Le (Int v) |> value_maker is_err) mmap
+  | None -> ValueMap.add sym (Value.Le PlusInf |> value_maker is_err) mmap
 
 let parse_lt_value is_err sym value mmap =
   match Regexp.first_rm Regexp.lt value |> int_of_string_opt with
-  | Some v -> Value.M.add sym (Value.Lt (Int v) |> value_maker is_err) mmap
-  | None -> Value.M.add sym (Value.Lt PlusInf |> value_maker is_err) mmap
+  | Some v -> ValueMap.add sym (Value.Lt (Int v) |> value_maker is_err) mmap
+  | None -> ValueMap.add sym (Value.Lt PlusInf |> value_maker is_err) mmap
 
 let parse_between_value is_err sym value mmap =
   let values =
@@ -136,13 +137,13 @@ let parse_between_value is_err sym value mmap =
     |> String.split_on_char ' '
   in
   if List.length values = 1 then
-    Value.M.add sym
+    ValueMap.add sym
       (Value.Between (MinusInf, PlusInf) |> value_maker is_err)
       mmap
   else
     let min_value = List.hd values in
     let max_value = List.tl values |> List.hd in
-    Value.M.add sym
+    ValueMap.add sym
       (Value.Between
          (normalize_null false min_value, normalize_null true max_value)
       |> value_maker is_err)
@@ -156,7 +157,7 @@ let parse_outside_value is_err sym value mmap =
   in
   let min_value = List.hd values in
   let max_value = List.tl values |> List.hd in
-  Value.M.add sym
+  ValueMap.add sym
     (Value.Outside
        (normalize_null false min_value, normalize_null true max_value)
     |> value_maker is_err)
@@ -182,11 +183,11 @@ let parse_citv is_err mem citv =
     Condition.M.fold
       (fun head tail val_map ->
         if Condition.M.cardinal tail > 1 then
-          Value.M.add (get_rh_name head)
+          ValueMap.add (get_rh_name head)
             (Value.Neq Null |> value_maker is_err)
             val_map
         else val_map)
-      mem Value.M.empty
+      mem ValueMap.empty
   in
   if value_list = [] then init_value
   else

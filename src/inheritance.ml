@@ -27,7 +27,10 @@ module G = struct
 end
 
 module GraphUtils = Graph.Oper.P (G)
-include G
+
+type t = G.t
+
+let class_info = Hashtbl.create 65535
 
 let assoc_fold ~f ~init x = List.fold_left f init (JsonUtil.to_assoc x)
 
@@ -112,8 +115,8 @@ let make_summary arg_ids =
   let premem = make_premem arg_ids in
   let postmem = make_postmem arg_ids premem in
   {
-    relation = Relation.M.empty;
-    value = Value.M.empty;
+    relation = RelationMap.empty;
+    value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
     precond = (var, premem);
     postcond = (var, postmem);
@@ -162,17 +165,15 @@ let get_method_info class_name method_name args arg_ids m_info =
       args arg_ids
   in
   let is_static = JsonUtil.to_bool (JsonUtil.member "is_static" m_info) in
-  MethodInfo.
-    {
-      modifier = get_modifier (JsonUtil.member "access" m_info);
-      is_static;
-      formal_params =
-        (if is_static then formal_params else this :: formal_params);
-      return =
-        (if Utils.is_init_method method_name then ""
-         else JsonUtil.member "rtype" m_info |> JsonUtil.to_string);
-      filename = "";
-    }
+  {
+    modifier = get_modifier (JsonUtil.member "access" m_info);
+    is_static;
+    formal_params = (if is_static then formal_params else this :: formal_params);
+    return =
+      (if Utils.is_init_method method_name then ""
+       else JsonUtil.member "rtype" m_info |> JsonUtil.to_string);
+    filename = "";
+  }
 
 let filter_class_name ?(is_stdlib = false) class_name =
   if not is_stdlib then false
@@ -185,6 +186,11 @@ let filter_class_name ?(is_stdlib = false) class_name =
   then true
   else false
 
+let filter_method_name m_name method_map =
+  MethodInfoMap.mem m_name method_map
+  || List.mem m_name Utils.filter_list
+  || Utils.is_lambda_method m_name
+
 let add_missing_methods ?(is_stdlib = false) class_name info summary_map
     method_map =
   match JsonUtil.member "methods" info with
@@ -193,16 +199,14 @@ let add_missing_methods ?(is_stdlib = false) class_name info summary_map
       assoc_fold
         ~f:(fun (s_map, m_map) (m_name, m_info) ->
           if
-            MethodInfo.M.mem m_name method_map
-            || List.mem m_name Utils.filter_list
+            filter_method_name m_name method_map
             || filter_class_name ~is_stdlib class_name
-            || Utils.is_lambda_method m_name
           then (s_map, m_map)
           else
             let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in
             let arg_ids = make_arg_id args in
             ( SummaryMap.M.add m_name ([ make_summary arg_ids ], []) s_map,
-              MethodInfo.M.add m_name
+              MethodInfoMap.add m_name
                 (get_method_info class_name m_name args arg_ids m_info)
                 m_map ))
         ~init:(summary_map, method_map) methods
@@ -246,16 +250,14 @@ let make_type ?(is_static = false) assoc =
   else if is_abstract then Default_Abstract
   else Default
 
-let get_inner_class_type ic_name is_static json =
-  match JsonUtil.member ic_name json with
-  | `Null when is_static -> ClassInfo.{ class_type = Private_Static }
-  | `Null -> ClassInfo.{ class_type = Private }
-  | _ ->
-      let info = JsonUtil.member ic_name json in
-      ClassInfo.{ class_type = make_type ~is_static info }
+let get_inner_class_type ic_name is_static : class_info =
+  match Hashtbl.find class_info ic_name with
+  | `Null when is_static -> { class_type = Private_Static }
+  | `Null -> { class_type = Private }
+  | info -> { class_type = make_type ~is_static info }
 
-let mapping_class_type_info class_name info json mmap =
-  if ClassInfo.M.mem class_name mmap then mmap
+let mapping_class_type_info class_name info mmap =
+  if ClassInfoMap.mem class_name mmap then mmap
   else
     match JsonUtil.member "inner_class" info with
     | `Null -> (* maybe parsing error *) mmap
@@ -263,24 +265,32 @@ let mapping_class_type_info class_name info json mmap =
         assoc_fold
           ~f:(fun mmap (ic_name, is_static) ->
             let is_static = JsonUtil.to_bool is_static in
-            let class_type = get_inner_class_type ic_name is_static json in
-            ClassInfo.M.add ic_name class_type mmap)
+            let class_type = get_inner_class_type ic_name is_static in
+            ClassInfoMap.add ic_name class_type mmap)
           ~init:mmap ic
-        |> ClassInfo.M.add class_name ClassInfo.{ class_type = make_type info }
+        |> ClassInfoMap.add class_name { class_type = make_type info }
+
+let init_class_info json =
+  Hashtbl.reset class_info;
+  List.iter
+    (fun (class_name, info) -> Hashtbl.add class_info class_name info)
+    (JsonUtil.to_assoc json)
 
 let of_json summary_map method_map json =
+  init_class_info json;
   let ctype_info, i_info, (summary_map, method_map) =
     assoc_fold
       ~f:(fun (ctype_info, i_info, (s_map, m_map)) (class_name, info) ->
-        ( mapping_class_type_info class_name info json ctype_info,
+        ( mapping_class_type_info class_name info ctype_info,
           mapping_inheritance_info class_name info i_info,
           add_missing_methods class_name info s_map m_map ))
-      ~init:(ClassInfo.M.empty, G.empty, (summary_map, method_map))
+      ~init:(ClassInfoMap.empty, G.empty, (summary_map, method_map))
       json
   in
   ((ctype_info, GraphUtils.transitive_closure i_info), summary_map, method_map)
 
 let of_stdlib_json ctype_info i_info smap mmap json =
+  init_class_info json;
   let ctype_info, i_info, (smap, mmap) =
     assoc_fold
       ~f:(fun (ct_info, i_info, (s_map, m_map)) (class_name, info) ->
@@ -288,7 +298,7 @@ let of_stdlib_json ctype_info i_info smap mmap json =
         if filter_class_name ~is_stdlib:true class_name then
           (ct_info, i_info, (s_map, m_map))
         else
-          ( mapping_class_type_info class_name info json ct_info,
+          ( mapping_class_type_info class_name info ct_info,
             mapping_inheritance_info class_name info i_info,
             add_missing_methods ~is_stdlib:true class_name info s_map m_map ))
       ~init:(ctype_info, i_info, (smap, mmap))

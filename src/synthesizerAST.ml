@@ -16,12 +16,12 @@ let insert_loop loop_id =
   "for(int " ^ init ^ cond ^ incr ^ ") {\n"
 
 let insert_loops loop_id_map =
-  LoopIdMap.M.fold
+  LoopIdMap.fold
     (fun id _ (code, count) -> (code ^ insert_loop id, count + 1))
     loop_id_map ("", 0)
 
 let array_for_loop loop_id_map =
-  LoopIdMap.M.fold
+  LoopIdMap.fold
     (fun id exps code -> code ^ AST.loop_id_code id exps)
     loop_id_map ""
 
@@ -36,7 +36,7 @@ let insert_multi_test_log loop_id_map =
       "System.err.println(\"Log=\" + \"" ^ id ^ "\" + \"=\" + " ^ id
       ^ "_string_comb[" ^ id ^ "_index" ^ "]" ^ ");\n"
   in
-  LoopIdMap.M.fold
+  LoopIdMap.fold
     (fun id _ code -> log (AST.loop_id_lval_code id) ^ code)
     loop_id_map end_signal
 
@@ -67,7 +67,7 @@ let get_id_to_be_modified v id =
 
 let loop_value_to_tc rep_input loop_id_map tc =
   let find_id str_id =
-    LoopIdMap.M.fold
+    LoopIdMap.fold
       (fun id _ found ->
         if str_id = (AST.loop_id_lval_code id |> snd) then id else found)
       loop_id_map Id

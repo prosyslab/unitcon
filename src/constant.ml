@@ -81,12 +81,12 @@ let add_gconst cname assoc mmap =
   if is_enum |> not && val_type <> "Object" then mmap
   else
     let new_gc =
-      match InstanceInfo.M.find_opt cname mmap with
+      match InstanceInfoMap.find_opt cname mmap with
       | Some old_gc when List.mem value old_gc |> not -> value :: old_gc
       | Some old_gc -> old_gc
       | None -> [ value ]
     in
-    InstanceInfo.M.add cname new_gc mmap
+    InstanceInfoMap.add cname new_gc mmap
 
 let add_constant c_or_m_name assoc cmap =
   let value = JsonUtil.member "value" assoc |> JsonUtil.to_string in
@@ -102,7 +102,7 @@ let of_gconst_json json =
   let json = JsonUtil.to_assoc json in
   List.fold_left
     (fun mmap (cname, assoc) -> add_gconst cname assoc mmap)
-    InstanceInfo.M.empty json
+    InstanceInfoMap.empty json
 
 let of_primitive_json mmap json =
   let json = JsonUtil.to_assoc json in

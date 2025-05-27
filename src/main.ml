@@ -17,13 +17,13 @@ let build () =
 
 let analyze () =
   L.info "Start analyzing for %s" !Cmdline.target_program;
-  RunAnalysis.run !Cmdline.target_program !Cmdline.out_dir
+  Analyzer.run !Cmdline.target_program !Cmdline.out_dir
 
 let synthesize () =
   L.info "Start synthesizing for %s" !Cmdline.target_program;
-  if !Cmdline.test_case_ast then
-    RunProgramAST.run !Cmdline.target_program !Cmdline.out_dir
-  else RunProgramDUG.run !Cmdline.target_program !Cmdline.out_dir
+  match !Cmdline.ir_type with
+  | Cmdline.AST -> SynthesizerAST.run !Cmdline.target_program !Cmdline.out_dir
+  | Cmdline.DUG -> SynthesizerDUG.run !Cmdline.target_program !Cmdline.out_dir
 
 let finalize t0 =
   L.info "Unitcon completes: %fs" (Unix.gettimeofday () -. t0);

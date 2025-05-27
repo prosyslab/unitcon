@@ -266,7 +266,7 @@ let fold_class acc ioc : (string * Yojson.Safe.t) list =
   let simple_name = JBasics.cn_simple_name name in
   let full_name = JBasics.cn_name name in
   if is_ignore_class simple_name || UsedClasses.mem full_name !used_classes then (
-    if !Cmdline.debug then Logger.info "ignore class: %s" full_name;
+    L.debug "ignore class: %s" full_name;
     acc)
   else (
     used_classes := UsedClasses.add full_name !used_classes;

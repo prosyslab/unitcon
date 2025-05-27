@@ -62,6 +62,14 @@ module LoopIdMap = struct
   end)
 
   type t = ASTIR.exp list M.t
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let fold = M.fold
+
+  let merge = M.merge
 end
 
 module AST = struct
@@ -93,6 +101,13 @@ module AST = struct
   let get_arg arg = match arg with Arg a -> a | _ -> []
 
   let get_param arg = match arg with Param p -> p | _ -> []
+
+  let get_type_from_func func = match func with Func -> "" | F f -> f.typ
+
+  let get_import_from_func func = match func with Func -> "" | F f -> f.import
+
+  let get_summary_from_func func =
+    match func with Func -> empty_summary | F f -> f.summary
 
   let is_stmt = function Stmt -> true | _ -> false
 
@@ -257,11 +272,10 @@ module AST = struct
   let const_rule2_2 s f arg =
     match s with
     | Const (x, _) ->
-        Assign
-          ( x,
-            ClassName ((get_func f).method_name |> Utils.get_class_name),
-            f,
-            arg )
+        let class_name =
+          ClassName ((get_func f).method_name |> Utils.get_class_name)
+        in
+        Assign (x, class_name, f, arg)
     | _ -> s
 
   let const_rule3 s = match s with Const (x, _) -> Const (x, Null) | _ -> s
@@ -273,15 +287,7 @@ module AST = struct
   let fcall_in_assign_rule s field f arg =
     match s with
     | Assign (x0, x1, _, _) ->
-        let new_x0 =
-          Variable
-            {
-              import = (get_v x0).import;
-              variable = (get_v x0).variable;
-              field;
-              summary = (get_v x0).summary;
-            }
-        in
+        let new_x0 = Variable { (get_v x0) with field } in
         Assign (new_x0, x1, f, arg)
     | _ -> s
 
@@ -290,26 +296,9 @@ module AST = struct
     | Assign (x0, _, _, _) ->
         let class_name = get_vinfo x0 |> fst |> get_class_name in
         let x1 = ClassName "Mockito" in
-        let f =
-          F
-            {
-              typ = "";
-              method_name = "mock";
-              import = "";
-              summary = empty_summary;
-            }
-        in
-        let arg =
-          Param
-            [
-              {
-                import = "";
-                variable = (Var (NonType, class_name), None);
-                field = FieldSet.empty;
-                summary = empty_summary;
-              };
-            ]
-        in
+        let f = mk_f "" "mock" "" empty_summary in
+        let variable = (Var (NonType, class_name), None) in
+        let arg = Param [ mk_var "" variable FieldSet.empty empty_summary ] in
         Assign (x0, x1, f, arg)
     | _ -> s
 
@@ -325,6 +314,12 @@ module AST = struct
     | Some f -> f
     | _ -> FieldSet.empty
 
+  let get_field_from_func func =
+    match func with
+    | Func -> FieldSet.empty
+    | F f ->
+        get_field_from_ufmap "this" (fst f.summary.precond) f.summary.use_field
+
   let recv_in_assign_rule1 s c =
     match s with
     | Assign (x0, _, func, arg) -> Assign (x0, c, func, arg)
@@ -333,44 +328,24 @@ module AST = struct
   let recv_in_assign_rule2 s id idx =
     match s with
     | Assign (x0, _, func, arg) ->
-        let typ = match func with Func -> "" | F f -> f.typ in
-        let x1 =
-          Variable
-            {
-              import = (match func with Func -> "" | F f -> f.import);
-              variable = (Var (Object typ, id), Some idx);
-              field =
-                (match func with
-                | Func -> FieldSet.empty
-                | F f ->
-                    get_field_from_ufmap "this" (fst f.summary.precond)
-                      f.summary.use_field);
-              summary =
-                (match func with Func -> empty_summary | F f -> f.summary);
-            }
-        in
+        let typ = get_type_from_func func in
+        let import = get_import_from_func func in
+        let x1_var = (Var (Object typ, id), Some idx) in
+        let x1_field = get_field_from_func func in
+        let x1_summary = get_summary_from_func func in
+        let x1 = mk_var import x1_var x1_field x1_summary |> mk_variable in
         Seq (Const (x1, Exp), Assign (x0, x1, func, arg))
     | _ -> s
 
   let recv_in_assign_rule3 s id idx =
     match s with
     | Assign (x0, _, func, arg) ->
-        let typ = match func with Func -> "" | F f -> f.typ in
-        let x1 =
-          Variable
-            {
-              import = (match func with Func -> "" | F f -> f.import);
-              variable = (Var (Object typ, id), Some idx);
-              field =
-                (match func with
-                | Func -> FieldSet.empty
-                | F f ->
-                    get_field_from_ufmap "this" (fst f.summary.precond)
-                      f.summary.use_field);
-              summary =
-                (match func with Func -> empty_summary | F f -> f.summary);
-            }
-        in
+        let typ = get_type_from_func func in
+        let import = get_import_from_func func in
+        let x1_var = (Var (Object typ, id), Some idx) in
+        let x1_field = get_field_from_func func in
+        let x1_summary = get_summary_from_func func in
+        let x1 = mk_var import x1_var x1_field x1_summary |> mk_variable in
         Seq
           (Seq (Assign (x1, Id, Func, Arg []), Stmt), Assign (x0, x1, func, arg))
     | _ -> s
@@ -405,24 +380,6 @@ module AST = struct
 
   let new_seq assign void = Seq (Seq (assign, Stmt), void)
 
-  let new_id id summary =
-    Variable
-      {
-        import = (get_v id).import;
-        variable = (get_v id).variable;
-        field = (get_v id).field;
-        summary;
-      }
-
-  let new_field id field =
-    Variable
-      {
-        import = (get_v id).import;
-        variable = (get_v id).variable;
-        field;
-        summary = (get_v id).summary;
-      }
-
   (* 5 *)
   let void_rule1 s = match s with Seq (s1, _) -> Seq (s1, Skip) | _ -> s
 
@@ -444,21 +401,13 @@ module AST = struct
           (array_field_var (get_v x0).summary (new_idx, new_elem))
           (array_current_mem (get_v x0).summary (new_idx, new_elem))
       in
-      [
-        new_seq
-          (Assign (new_id (new_field x0 nfield) new_next_summary, x1, f, arg))
-          (Void (new_id x0 new_current_summary, Func, Arg []));
-      ]
-
-  (* let void_rule2_normal x0 x1 f arg =
-     let remove = FieldSet.remove in
-     FieldSet.fold
-       (fun field lst ->
-         new_seq
-           (Assign (new_field x0 (remove field (x0 |> get_v).field), x1, f, arg))
-           (Void (new_field x0 (FieldSet.singleton field), Func, Arg []))
-         :: lst)
-       (x0 |> get_v).field [] *)
+      let next_x0 =
+        Variable { (get_v x0) with field = nfield; summary = new_next_summary }
+      in
+      let curr_x0 =
+        Variable { (get_v x0) with summary = new_current_summary }
+      in
+      [ new_seq (Assign (next_x0, x1, f, arg)) (Void (curr_x0, Func, Arg [])) ]
 
   let void_rule2_normal x0 x1 f arg =
     [ new_seq (Assign (x0, x1, f, arg)) (Void (x0, Func, Arg [])) ]
@@ -484,44 +433,24 @@ module AST = struct
   let recv_in_void_rule2 s id idx =
     match s with
     | Void (_, func, arg) ->
-        let typ = match func with Func -> "" | F f -> f.typ in
-        let x =
-          Variable
-            {
-              import = (match func with Func -> "" | F f -> f.import);
-              variable = (Var (Object typ, id), Some idx);
-              field =
-                (match func with
-                | Func -> FieldSet.empty
-                | F f ->
-                    get_field_from_ufmap "this" (fst f.summary.precond)
-                      f.summary.use_field);
-              summary =
-                (match func with Func -> empty_summary | F f -> f.summary);
-            }
-        in
+        let typ = get_type_from_func func in
+        let import = get_import_from_func func in
+        let x_var = (Var (Object typ, id), Some idx) in
+        let x_field = get_field_from_func func in
+        let x_summary = get_summary_from_func func in
+        let x = mk_var import x_var x_field x_summary |> mk_variable in
         Seq (Const (x, Exp), Void (x, func, arg))
     | _ -> s
 
   let recv_in_void_rule3 s id idx =
     match s with
     | Void (_, func, arg) ->
-        let typ = match func with Func -> "" | F f -> f.typ in
-        let x =
-          Variable
-            {
-              import = (match func with Func -> "" | F f -> f.import);
-              variable = (Var (Object typ, id), Some idx);
-              field =
-                (match func with
-                | Func -> FieldSet.empty
-                | F f ->
-                    get_field_from_ufmap "this" (fst f.summary.precond)
-                      f.summary.use_field);
-              summary =
-                (match func with Func -> empty_summary | F f -> f.summary);
-            }
-        in
+        let typ = get_type_from_func func in
+        let import = get_import_from_func func in
+        let x_var = (Var (Object typ, id), Some idx) in
+        let x_field = get_field_from_func func in
+        let x_summary = get_summary_from_func func in
+        let x = mk_var import x_var x_field x_summary |> mk_variable in
         Seq (Seq (Assign (x, Id, Func, Arg []), Stmt), Void (x, func, arg))
     | _ -> s
 
@@ -542,19 +471,19 @@ module AST = struct
 
   let arg_code f arg =
     let cc code x idx = code ^ ", " ^ x ^ string_of_int idx in
+    let variable_code var code =
+      match var with
+      | Var (_, id), None -> (id |> get_short_class_name) ^ ".class" (* mock *)
+      | Var (_, id), Some idx -> cc code id idx
+      | _ -> code
+    in
+    let param_code p =
+      List.fold_left (fun pc p -> variable_code p.variable pc) "" p
+      |> Regexp.rm_first_rest
+    in
     match arg with
     | Param p ->
-        let param =
-          List.fold_left
-            (fun pc p ->
-              match p.variable with
-              | Var (_, id), None ->
-                  (id |> get_short_class_name) ^ ".class" (* mock *)
-              | Var (_, id), Some idx -> cc pc id idx
-              | _ -> pc)
-            "" p
-          |> Regexp.rm_first_rest
-        in
+        let param = param_code p in
         if is_array_init f then
           array_code
             (Utils.get_array_dim_from_class_name (get_func f).typ)
@@ -719,42 +648,43 @@ module AST = struct
     | Skip -> ""
     | Stmt -> "Stmt"
 
+  let get_loop_lval v =
+    match fst v |> convert_special_primitive_type with
+    | Int -> "int[] " ^ snd v
+    | Long -> "long[] " ^ snd v
+    | Short -> "short[] " ^ snd v
+    | Byte -> "byte[] " ^ snd v
+    | Float -> "float[] " ^ snd v
+    | Double -> "double[] " ^ snd v
+    | Bool -> "boolean[] " ^ snd v
+    | Char -> "char[] " ^ snd v
+    | String -> "String[] " ^ snd v
+    | Object name ->
+        (get_short_class_name name |> Utils.replace_nested_symbol)
+        ^ "[] " ^ snd v
+    | _ -> ""
+
+  let comb_func_name = function
+    | Int -> "Int"
+    | Long -> "Long"
+    | Short -> "Short"
+    | Byte -> "Byte"
+    | Float -> "Float"
+    | Double -> "Double"
+    | Char -> "Char"
+    | Bool -> "Bool"
+    | String -> "String"
+    | _ -> ""
+
   let loop_id_code loop_id exp_list =
     let v = loop_id_lval_code loop_id in
-    let lval =
-      match fst v |> convert_special_primitive_type with
-      | Int -> "int[] " ^ snd v
-      | Long -> "long[] " ^ snd v
-      | Short -> "short[] " ^ snd v
-      | Byte -> "byte[] " ^ snd v
-      | Float -> "float[] " ^ snd v
-      | Double -> "double[] " ^ snd v
-      | Bool -> "boolean[] " ^ snd v
-      | Char -> "char[] " ^ snd v
-      | String -> "String[] " ^ snd v
-      | Object name ->
-          (get_short_class_name name |> Utils.replace_nested_symbol)
-          ^ "[] " ^ snd v
-      | _ -> ""
-    in
+    let lval = get_loop_lval v in
     let rec rval id exps =
       match exps with hd :: tl -> ", " ^ exp_code hd id ^ rval id tl | _ -> ""
     in
     let rec string_rval id exps =
       match exps with
       | hd :: tl -> ", \"" ^ exp_code hd id ^ "\"" ^ string_rval id tl
-      | _ -> ""
-    in
-    let comb_func_name = function
-      | Int -> "Int"
-      | Long -> "Long"
-      | Short -> "Short"
-      | Byte -> "Byte"
-      | Float -> "Float"
-      | Double -> "Double"
-      | Char -> "Char"
-      | Bool -> "Bool"
-      | String -> "String"
       | _ -> ""
     in
     if is_primitive (fst v) || is_special_primitive (fst v) then
