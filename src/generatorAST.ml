@@ -546,10 +546,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary)
     if class_name = "" || class_name = "String" then []
     else
       get_setters class_name setter_map
-      |> List.filter (fun (s, _) ->
-             (not (IgnoredMethods.mem s !ignored_methods))
-             && (not (!Cmdline.debug && List.mem s !Cmdline.ignore))
-             && is_available_method s m_info)
+      |> List.filter (fun (s, _) -> is_not_filtered_method s m_info)
       |> get_setter_list summary
       |> mk_void_func var id class_name m_info
 
@@ -692,7 +689,7 @@ let get_arg_seq (args : ASTIR.id list) =
 
 let mk_arg_seq arg class_name =
   let modified_x x =
-    if is_primitive_from_v x then AST.modify_import class_name x else x
+    if is_primitive_from_v x then { x with import = class_name } else x
   in
   get_arg_seq
     (List.fold_left
@@ -905,9 +902,8 @@ let recv_in_assign_unroll (prec, (p : ASTIR.t), loop_ids, obj_types)
   match p with
   | Assign (_, _, f, arg) when AST.recv_in_assign p ->
       if
-        is_nested_class (AST.get_func f).import
-        && is_static_class (AST.get_func f).import c_info |> not
-        && Utils.is_init_method (AST.get_func f).method_name
+        is_need_outer_variable (AST.get_func f).method_name
+          (AST.get_func f).import c_info
       then (
         let recv, f, arg = get_inner_func f arg in
         if (AST.get_v recv).import = "" then

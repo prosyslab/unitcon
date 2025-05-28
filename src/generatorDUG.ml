@@ -577,10 +577,7 @@ let get_void_func id ?(ee = "") ?(es = empty_summary)
     if class_name = "" || class_name = "String" then []
     else
       get_setters class_name setter_map
-      |> List.filter (fun (s, _) ->
-             (not (IgnoredMethods.mem s !ignored_methods))
-             && (not (!Cmdline.debug && List.mem s !Cmdline.ignore))
-             && is_available_method s m_info)
+      |> List.filter (fun (s, _) -> is_not_filtered_method s m_info)
       |> get_setter_list summary
       |> mk_void_func var id class_name m_info
 
@@ -779,7 +776,7 @@ let get_arg_seq prev_num stmt tc (args : DUGIR.id list) =
 
 let mk_arg_seq arg prev_num class_name s tc =
   let modified_x x =
-    if is_primitive_from_v x then DUG.modify_import class_name x else x
+    if is_primitive_from_v x then { x with import = class_name } else x
   in
   get_arg_seq prev_num s tc
     (List.fold_left
@@ -988,9 +985,8 @@ let recv_in_assign_unroll (prec, ((s : DUGIR.t), tc), loop_ids, obj_types)
   match s with
   | Assign (_, _, (x0, _, f, arg)) when DUG.recv_in_assign s ->
       if
-        is_nested_class (DUG.get_func f).import
-        && is_static_class (DUG.get_func f).import c_info |> not
-        && Utils.is_init_method (DUG.get_func f).method_name
+        is_need_outer_variable (DUG.get_func f).method_name
+          (DUG.get_func f).import c_info
       then (
         let recv, f, arg = get_inner_func f arg in
         if (DUG.get_v recv).import = "" then

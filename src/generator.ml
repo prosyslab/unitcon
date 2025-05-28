@@ -1353,6 +1353,11 @@ let is_abstract m_name class_name_list m_info c_info =
         else check)
       false class_name_list
 
+let is_need_outer_variable m_name class_name c_info =
+  is_nested_class class_name
+  && is_static_class class_name c_info |> not
+  && Utils.is_init_method m_name
+
 let match_constructor_name class_name method_name =
   let class_name = Str.global_replace Regexp.dollar "\\$" class_name in
   Str.string_match (class_name ^ "\\.<init>" |> Str.regexp) method_name 0
@@ -1376,6 +1381,11 @@ let is_available_method m_name m_info =
 let is_usable_method m_name m_info c_info =
   (is_public_class (Utils.get_class_name m_name) c_info
   || is_usable_default_class (Utils.get_class_name m_name) c_info)
+  && is_available_method m_name m_info
+
+let is_not_filtered_method m_name m_info =
+  (not (IgnoredMethods.mem m_name !ignored_methods))
+  && (not (!Cmdline.debug && List.mem m_name !Cmdline.ignore))
   && is_available_method m_name m_info
 
 let is_usable_constructor c_name m_name c_info ig =

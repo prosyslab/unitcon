@@ -147,9 +147,6 @@ module AST = struct
     | Skip -> false
     | Stmt -> false
 
-  let modify_import import v =
-    { import; variable = v.variable; field = v.field; summary = v.summary }
-
   let rec last_code p = match p with Seq (_, s) -> last_code s | _ -> p
 
   let rec modify_last_assign p =
@@ -517,6 +514,22 @@ module AST = struct
 
   and is_cn = function ClassName _ -> true | _ -> false
 
+  let array_var_code typ v =
+    match get_array_typ typ with
+    | Int -> "int" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+    | Long -> "long" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+    | Short -> "short" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+    | Byte -> "byte" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+    | Float -> "float" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+    | Double -> "double" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+    | Char -> "char" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+    | String -> "String" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
+    | Object name ->
+        (get_short_class_name name |> Utils.replace_nested_symbol)
+        ^ array_code (get_array_dim typ) ""
+        ^ " " ^ snd v
+    | _ -> ""
+
   let var_code v =
     let v =
       match v.variable with
@@ -536,21 +549,7 @@ module AST = struct
     | String -> "String " ^ snd v
     | Object name ->
         (get_short_class_name name |> Utils.replace_nested_symbol) ^ " " ^ snd v
-    | Array typ -> (
-        match get_array_typ typ with
-        | Int -> "int" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
-        | Long -> "long" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
-        | Short -> "short" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
-        | Byte -> "byte" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
-        | Float -> "float" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
-        | Double -> "double" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
-        | Char -> "char" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
-        | String -> "String" ^ array_code (get_array_dim typ) "" ^ " " ^ snd v
-        | Object name ->
-            (get_short_class_name name |> Utils.replace_nested_symbol)
-            ^ array_code (get_array_dim typ) ""
-            ^ " " ^ snd v
-        | _ -> "")
+    | Array typ -> array_var_code typ v
     | _ -> ""
 
   let recv_name_code recv func =

@@ -20,31 +20,31 @@ let insert_loops loop_id_map =
     (fun id _ (code, count) -> (code ^ insert_loop id, count + 1))
     loop_id_map ("", 0)
 
+let found_id id line =
+  match Str.search_forward (Str.regexp ("[( ]" ^ id ^ "[^0-9]")) line 0 with
+  | exception Not_found -> false
+  | _ -> true
+
+let found_id_pair typ id_code exps prev_ids acc =
+  List.fold_left
+    (fun ids (o_typ, o_id_code, o_exps) ->
+      if o_typ = typ && o_exps = exps then (id_code, o_id_code) :: ids else ids)
+    acc prev_ids
+
+let get_duplicated_ids loop_id_map =
+  LoopIdMap.fold
+    (fun id exps (ids, prev_ids) ->
+      let typ, id_code = DUG.loop_id_lval_for_check id in
+      if typ = NonType || id_code = "" then (ids, prev_ids)
+      else
+        let ids = found_id_pair typ id_code exps prev_ids ids in
+        (ids, (typ, id_code, exps) :: prev_ids))
+    loop_id_map ([], [])
+  |> fst
+
 let check_same_loop (_, tc) loop_id_map =
   let tc_list = String.split_on_char '\n' tc in
-  let found_id id line =
-    match Str.search_forward (Str.regexp ("[( ]" ^ id ^ "[^0-9]")) line 0 with
-    | exception Not_found -> false
-    | _ -> true
-  in
-  let found_id_pair typ id_code exps prev_ids acc =
-    List.fold_left
-      (fun ids (o_typ, o_id_code, o_exps) ->
-        if o_typ = typ && o_exps = exps then (id_code, o_id_code) :: ids
-        else ids)
-      acc prev_ids
-  in
-  let duplicated_list =
-    LoopIdMap.fold
-      (fun id exps (ids, prev_ids) ->
-        let typ, id_code = DUG.loop_id_lval_for_check id in
-        if typ = NonType || id_code = "" then (ids, prev_ids)
-        else
-          let ids = found_id_pair typ id_code exps prev_ids ids in
-          (ids, (typ, id_code, exps) :: prev_ids))
-      loop_id_map ([], [])
-    |> fst
-  in
+  let duplicated_list = get_duplicated_ids loop_id_map in
   if duplicated_list = [] then false
   else
     List.fold_left
