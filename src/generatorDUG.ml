@@ -626,29 +626,31 @@ let get_recv_type c_info summary_lst =
 
 let memory_effect_filtering summary m_info type_info c_info s_map smy_lst =
   let smy_lst = List.rev smy_lst in
-  if !Cmdline.basic_mode || !Cmdline.priority_mode then List.rev smy_lst
-  else
-    let recv_type = get_recv_type c_info smy_lst in
-    let ret_recv_methods, set_recv_methods =
-      collect_recv m_info type_info c_info s_map recv_type
-    in
-    List.fold_left
-      (fun lst (i, c, c_smy) ->
-        let fld_name = ret_fld_name_of c_smy in
-        let recv_type = Utils.get_class_name c in
-        let subtypes =
-          if is_static c m_info then [] else get_subtypes recv_type (snd c_info)
-        in
-        let check_getter = is_getter_with_memory_effect c_smy fld_name in
-        if subtypes = [] && check_getter then (i, c, c_smy) :: lst
-        else if
-          check_getter
-          || is_ret_recv_mem_effect fld_name subtypes summary m_info
-               ret_recv_methods
-          || is_set_recv_mem_effect fld_name summary m_info set_recv_methods
-        then (i, c, c_smy) :: lst
-        else lst)
-      [] smy_lst
+  match !Cmdline.synthesis_mode with
+  | Cmdline.Basic | Cmdline.Priority -> List.rev smy_lst
+  | Cmdline.Pruning | Cmdline.Full ->
+      let recv_type = get_recv_type c_info smy_lst in
+      let ret_recv_methods, set_recv_methods =
+        collect_recv m_info type_info c_info s_map recv_type
+      in
+      List.fold_left
+        (fun lst (i, c, c_smy) ->
+          let fld_name = ret_fld_name_of c_smy in
+          let recv_type = Utils.get_class_name c in
+          let subtypes =
+            if is_static c m_info then []
+            else get_subtypes recv_type (snd c_info)
+          in
+          let check_getter = is_getter_with_memory_effect c_smy fld_name in
+          if subtypes = [] && check_getter then (i, c, c_smy) :: lst
+          else if
+            check_getter
+            || is_ret_recv_mem_effect fld_name subtypes summary m_info
+                 ret_recv_methods
+            || is_set_recv_mem_effect fld_name summary m_info set_recv_methods
+          then (i, c, c_smy) :: lst
+          else lst)
+        [] smy_lst
 
 let get_ret_c ret ret_obj_lst summary m_info type_info c_info s_map =
   let class_name = DUG.get_vinfo ret |> fst |> get_class_name in
@@ -1322,21 +1324,24 @@ and propagation e_method e_summary caller_method caller_preconds call_prop
       (tmp_summary.value, snd tmp_summary.precond, use_summary)
   in
   let new_uf = mk_new_uf e_method e_summary call_prop p_data.m_info in
-  if !Cmdline.basic_mode then
-    ErrorEntrySet.union caller_preconds
-      (find_ee caller_method empty_summary p_data)
-  else if !Cmdline.pruning_mode then
-    ErrorEntrySet.union caller_preconds (find_ee caller_method call_prop p_data)
-  else if check_match then
-    let new_call_prop =
-      {
-        (new_value_summary new_value call_prop |> new_mem_summary new_mem) with
-        use_field = new_uf;
-      }
-    in
-    ErrorEntrySet.union caller_preconds
-      (find_ee caller_method new_call_prop p_data)
-  else caller_preconds
+  match !Cmdline.synthesis_mode with
+  | Cmdline.Basic ->
+      ErrorEntrySet.union caller_preconds
+        (find_ee caller_method empty_summary p_data)
+  | Cmdline.Pruning ->
+      ErrorEntrySet.union caller_preconds
+        (find_ee caller_method call_prop p_data)
+  | Cmdline.Priority | Cmdline.Full ->
+      if check_match then
+        let new_call_prop =
+          {
+            (new_value_summary new_value call_prop |> new_mem_summary new_mem) with
+            use_field = new_uf;
+          }
+        in
+        ErrorEntrySet.union caller_preconds
+          (find_ee caller_method new_call_prop p_data)
+      else caller_preconds
 
 let stmt_import (s : DUGIR.t) set =
   match s with
@@ -1373,8 +1378,9 @@ let priority_q queue =
 
 let rec mk_testcase p_data queue =
   let queue =
-    if !Cmdline.basic_mode || !Cmdline.pruning_mode then queue
-    else priority_q queue
+    match !Cmdline.synthesis_mode with
+    | Cmdline.Basic | Cmdline.Pruning -> queue
+    | Cmdline.Priority | Cmdline.Full -> priority_q queue
   in
   Logger.debug "# of test cases: %d" (List.length queue);
   match queue with

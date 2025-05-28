@@ -21,7 +21,7 @@ let analyze () =
 
 let synthesize () =
   L.info "Start synthesizing for %s" !Cmdline.target_program;
-  match !Cmdline.ir_type with
+  match !Cmdline.ir with
   | Cmdline.AST -> SynthesizerAST.run !Cmdline.target_program !Cmdline.out_dir
   | Cmdline.DUG -> SynthesizerDUG.run !Cmdline.target_program !Cmdline.out_dir
 

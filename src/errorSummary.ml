@@ -87,8 +87,9 @@ let is_target_error (t_file, t_line) assoc =
   else false
 
 let find_error assoc =
-  if !Cmdline.basic_mode then (get_method_name assoc, empty_summary)
-  else (get_method_name assoc, parse_summary assoc)
+  match !Cmdline.synthesis_mode with
+  | Cmdline.Basic -> (get_method_name assoc, empty_summary)
+  | _ -> (get_method_name assoc, parse_summary assoc)
 
 let from_error_summary_json json =
   let target_loc = target_loc !Cmdline.target in

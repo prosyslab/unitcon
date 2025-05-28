@@ -1450,12 +1450,13 @@ let rec collect_dup_setter lst set =
   | _ -> set
 
 let prune_dup_summary_setter lst =
-  if !Cmdline.basic_mode || !Cmdline.priority_mode then List.rev lst
-  else
-    let dup_set = collect_dup_setter lst DuplicatedSetter.empty in
-    List.fold_left
-      (fun l s -> if DuplicatedSetter.mem s dup_set then l else s :: l)
-      [] lst
+  match !Cmdline.synthesis_mode with
+  | Cmdline.Basic | Cmdline.Priority -> List.rev lst
+  | Cmdline.Pruning | Cmdline.Full ->
+      let dup_set = collect_dup_setter lst DuplicatedSetter.empty in
+      List.fold_left
+        (fun l s -> if DuplicatedSetter.mem s dup_set then l else s :: l)
+        [] lst
 
 let add_dup_summaries m_info std list acc =
   let _, ch, h = std in
@@ -1481,18 +1482,19 @@ let check_unique_class target_method methods =
     true methods
 
 let prune_dup_summary ?(is_constructor = false) m_info lst =
-  if !Cmdline.basic_mode || !Cmdline.priority_mode then List.rev lst
-  else
-    let dup_set = collect_dup m_info lst DuplicatedSummaries.empty in
-    List.fold_left
-      (fun l s ->
-        if DuplicatedSummaries.mem s dup_set then
-          if !Cmdline.unknown_bug && is_constructor then
-            let _, m_name, _ = s in
-            if check_unique_class m_name lst then s :: l else l
-          else l
-        else s :: l)
-      [] lst
+  match !Cmdline.synthesis_mode with
+  | Cmdline.Basic | Cmdline.Priority -> List.rev lst
+  | Cmdline.Pruning | Cmdline.Full ->
+      let dup_set = collect_dup m_info lst DuplicatedSummaries.empty in
+      List.fold_left
+        (fun l s ->
+          if DuplicatedSummaries.mem s dup_set then
+            if !Cmdline.unknown_bug && is_constructor then
+              let _, m_name, _ = s in
+              if check_unique_class m_name lst then s :: l else l
+            else l
+          else s :: l)
+        [] lst
 
 let get_package_from_v v =
   let rec get_object_from_array array =
@@ -1682,27 +1684,28 @@ let check_satisfied_c id const_name t_summary init sat_lst =
     init sat_lst
 
 let satisfied_c_list id t_summary summary method_list =
-  if !Cmdline.basic_mode then
-    List.fold_left
-      (fun list constructor -> (0, constructor, empty_summary) :: list)
-      [] method_list
-    |> List.rev
-  else if !Cmdline.pruning_mode then
-    List.fold_left
-      (fun list constructor ->
-        let c_summaries = get_summaries constructor summary in
-        (0, constructor, List.hd c_summaries) :: list)
-      [] method_list
-    |> List.rev
-  else
-    List.fold_left
-      (fun list constructor ->
-        let lst = satisfied_c t_summary id constructor summary in
-        let init = (0, "", empty_summary) in
-        let pick = check_satisfied_c id constructor t_summary init lst in
-        if pick = init then list else pick :: list)
-      [] method_list
-    |> List.rev
+  match !Cmdline.synthesis_mode with
+  | Cmdline.Basic ->
+      List.fold_left
+        (fun list constructor -> (0, constructor, empty_summary) :: list)
+        [] method_list
+      |> List.rev
+  | Cmdline.Pruning ->
+      List.fold_left
+        (fun list constructor ->
+          let c_summaries = get_summaries constructor summary in
+          (0, constructor, List.hd c_summaries) :: list)
+        [] method_list
+      |> List.rev
+  | Cmdline.Priority | Cmdline.Full ->
+      List.fold_left
+        (fun list constructor ->
+          let lst = satisfied_c t_summary id constructor summary in
+          let init = (0, "", empty_summary) in
+          let pick = check_satisfied_c id constructor t_summary init lst in
+          if pick = init then list else pick :: list)
+        [] method_list
+      |> List.rev
 
 let append l1 l2 =
   let rec iter accu ll1 ll2 =
