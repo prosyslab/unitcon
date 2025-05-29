@@ -20,6 +20,13 @@ Suppose the target location is line **11** in [Main.java](test/simple/Main.java#
 ./unitcon synthesize test/simple --target Main.java:11
 ```
 
+If you want to check the test case more quickly, you can run Unitcon as follows.
+```sh
+./unitcon build test/simple
+./unitcon analyze test/simple --target Main.java:11
+./unitcon synthesize test/simple --target Main.java:11 --batch-size 1
+```
+
 ## Running Unitcon on an Example Maven Program
 You can run Unitcon for Java programs executed through the Maven build automation tool.  
 Let's run Unitcon on the `example` program inside the `test/mvn` directory by executing the following command.  
@@ -28,6 +35,13 @@ Suppose the target location is line **25** in [Checker.java](test/mvn/example/sr
 ./unitcon build test/mvn/example
 ./unitcon analyze test/mvn/example --target src/main/java/example/Checker.java:25
 ./unitcon synthesize test/mvn/example --target src/main/java/example/Checker.java:25 
+```
+
+If you want to check the test case more quickly, you can run Unitcon as follows.
+```sh
+./unitcon build test/mvn/example
+./unitcon analyze test/mvn/example --target src/main/java/example/Checker.java:25
+./unitcon synthesize test/mvn/example --target src/main/java/example/Checker.java:25 --batch-size 1
 ```
 
 ## Running Unitcon on Your Project
