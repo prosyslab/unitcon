@@ -102,14 +102,14 @@ let mk_index x = Condition.RH_Index x
 let get_type v = match v with This typ -> typ | Var (typ, _) -> typ
 
 let get_summaries m_name map =
-  match SummaryMap.M.find_opt m_name map with
+  match SummaryMap.find_opt m_name map with
   | Some (s, _) -> s
   | None -> [ empty_summary ]
 
 let get_first_summary m_name map = get_summaries m_name map |> List.hd
 
 let get_fields m_name map =
-  match SummaryMap.M.find_opt m_name map with
+  match SummaryMap.find_opt m_name map with
   | Some (_, fields) -> fields
   | None -> []
 
@@ -1793,7 +1793,7 @@ let is_eligible_for_check caller callee m_info c_info =
        || is_usable_method_for_check overriding_method m_info c_info)
 
 let get_methods_to_do_not_ignore m_info c_info cp_map =
-  CallPropMap.M.fold
+  CallPropMap.fold
     (fun ((caller : string), callee) props methods ->
       if
         List.mem caller methods
@@ -1805,7 +1805,7 @@ let get_methods_to_do_not_ignore m_info c_info cp_map =
 
 let set_methods_to_ignore m_info c_info cp_map =
   let not_ignore = get_methods_to_do_not_ignore m_info c_info cp_map in
-  CallPropMap.M.iter
+  CallPropMap.iter
     (fun ((caller : string), _) _ ->
       if not (List.mem caller not_ignore) then (
         Logger.debug "Ignore method: %s" caller;

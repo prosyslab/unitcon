@@ -377,7 +377,7 @@ let find_target_global_var c_name t_var mem summary commons_gvs =
       mem None
   in
   let get_target_global_var var =
-    match SummaryMap.M.find_opt (c_name ^ ".<clinit>()") summary with
+    match SummaryMap.find_opt (c_name ^ ".<clinit>()") summary with
     | Some (init_summary, _) -> get_compared_global_var var init_summary
     | None -> None
   in
@@ -1197,9 +1197,7 @@ let rec find_ee e_method e_summary p_data =
   else
     List.fold_left
       (fun set caller_method ->
-        (match
-           CallPropMap.M.find_opt (caller_method, e_method) p_data.cp_map
-         with
+        (match CallPropMap.find_opt (caller_method, e_method) p_data.cp_map with
         | None ->
             (* It is possible without any specific conditions *)
             find_ee caller_method empty_summary p_data

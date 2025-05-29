@@ -411,6 +411,8 @@ module CallPropMap = struct
 
   let fold = M.fold
 
+  let iter = M.iter
+
   let merge = M.merge
 end
 
