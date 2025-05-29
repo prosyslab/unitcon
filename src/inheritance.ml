@@ -205,7 +205,7 @@ let add_missing_methods ?(is_stdlib = false) class_name info summary_map
           else
             let args = JsonUtil.member "args" m_info |> JsonUtil.to_list in
             let arg_ids = make_arg_id args in
-            ( SummaryMap.M.add m_name ([ make_summary arg_ids ], []) s_map,
+            ( SummaryMap.add m_name ([ make_summary arg_ids ], []) s_map,
               MethodInfoMap.add m_name
                 (get_method_info class_name m_name args arg_ids m_info)
                 m_map ))
@@ -251,10 +251,10 @@ let make_type ?(is_static = false) assoc =
   else Default
 
 let get_inner_class_type ic_name is_static : class_info =
-  match Hashtbl.find class_info ic_name with
-  | `Null when is_static -> { class_type = Private_Static }
-  | `Null -> { class_type = Private }
-  | info -> { class_type = make_type ~is_static info }
+  match Hashtbl.find_opt class_info ic_name with
+  | None when is_static -> { class_type = Private_Static }
+  | None -> { class_type = Private }
+  | Some info -> { class_type = make_type ~is_static info }
 
 let mapping_class_type_info class_name info mmap =
   if ClassInfoMap.mem class_name mmap then mmap
