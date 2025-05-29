@@ -462,7 +462,9 @@ let rec close_bracket count =
 let insert_multi_test oc
     (file_num, tc, (arrays, loop_stmt, loop_cnt, loop_input_log), time) =
   let insert oc (i_set, m_bodies) =
-    let time = "/* Duration of synthesis: " ^ string_of_float time ^ " */\n" in
+    let time =
+      "/* Synthesis completed in " ^ string_of_float time ^ " s */\n"
+    in
     let start = "@Test\npublic void test() {\n" in
     let bug_type =
       (* ref: get_bug_type, nested exception can not catch ... *)
