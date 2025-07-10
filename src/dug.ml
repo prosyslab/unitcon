@@ -9,7 +9,15 @@ module DUGIR = struct
         (* if var is primitive type then import is class of method *)
     variable : variable * int option;
     field : FieldSet.t;
+    required_assigns : RequiredMethodSet.t;
+    required_sets : RequiredMethodSet.t;
     summary : summary;
+  }
+  [@@deriving compare, equal]
+
+  type nt_id = {
+    required_assigns : RequiredMethodSet.t;
+    required_sets : RequiredMethodSet.t;
   }
   [@@deriving compare, equal]
 
@@ -25,7 +33,7 @@ module DUGIR = struct
 
   type func = F of f | Func [@@deriving compare, equal]
 
-  type id = Variable of var | ClassName of string | Id
+  type id = Variable of var | ClassName of string | Id of nt_id
   [@@deriving compare, equal]
 
   type primitive = Z of int | R of float | B of bool | C of char | S of string
@@ -48,7 +56,15 @@ module DUGIR = struct
   [@@deriving compare, equal]
 
   let mk_var of_error_method import variable field summary =
-    { of_error_method; import; variable; field; summary }
+    {
+      of_error_method;
+      import;
+      variable;
+      field;
+      required_assigns = RequiredMethodSet.empty;
+      required_sets = RequiredMethodSet.empty;
+      summary;
+    }
 
   let mk_variable var = Variable var
 
@@ -110,8 +126,20 @@ module DUG = struct
       import = "";
       variable = (This NonType, None);
       field = FieldSet.empty;
+      required_assigns = RequiredMethodSet.empty;
+      required_sets = RequiredMethodSet.empty;
       summary = empty_summary;
     }
+
+  let empty_id =
+    Id
+      {
+        required_assigns = RequiredMethodSet.empty;
+        required_sets = RequiredMethodSet.empty;
+      }
+
+  let get_nt_id id =
+    match id with Id id -> id | _ -> failwith "get_nt_id: not supported"
 
   (* id -> var *)
   let rec get_v id =
@@ -145,7 +173,7 @@ module DUG = struct
 
   and is_func = function Func -> true | _ -> false
 
-  and is_id = function Id -> true | _ -> false
+  and is_id = function Id _ -> true | _ -> false
 
   and is_exp = function Exp -> true | _ -> false
 
@@ -192,7 +220,7 @@ module DUG = struct
 
   and count_func = function Func -> 1 | _ -> 0
 
-  and count_id = function Id -> 1 | _ -> 0
+  and count_id = function Id _ -> 1 | _ -> 0
 
   and count_exp = function Exp -> 1 | _ -> 0
 
@@ -207,7 +235,7 @@ module DUG = struct
 
   and count_tf = function Func -> 0 | _ -> 1
 
-  and count_tid = function Id -> 0 | _ -> 1
+  and count_tid = function Id _ -> 0 | _ -> 1
 
   and count_texp = function Exp -> 0 | _ -> 1
 
@@ -390,7 +418,7 @@ module DUG = struct
     match n with
     | Const (_, _, (id, _)) -> id
     | Assign (_, _, (id, _, _, _)) -> id
-    | _ -> Id
+    | _ -> empty_id
 
   let get_var n =
     match n with
@@ -512,6 +540,17 @@ module DUG = struct
         (s', add_vertex s' G.empty)
     | _ -> (s, graph)
 
+  (* 3: To get getter & setter to make "not null x0", set required_methods *)
+  let fcall_in_assign_rule_2 s field required_assigns required_sets f arg graph
+      =
+    match s with
+    | Assign (num, var, (x0, _, _, _)) ->
+        let new_x0 = Variable { (get_v x0) with field } in
+        let new_x1 = Id { required_assigns; required_sets } in
+        let s' = Assign (num, var, (new_x0, new_x1, f, arg)) in
+        (s', add_vertex s' G.empty)
+    | _ -> (s, graph)
+
   (* TODO: change function name to fcall_in_assign_rule_mock *)
   let mk_mock_statement s graph =
     match s with
@@ -593,7 +632,7 @@ module DUG = struct
         let s' = Assign (num, var, (x0, x1, func, arg)) in
         let s'' = Stmt (num + 2, (get_v x1).variable) in
         let s''' =
-          Assign (num + 1, (get_v x1).variable, (x1, Id, Func, Arg []))
+          Assign (num + 1, (get_v x1).variable, (x1, empty_id, Func, Arg []))
         in
         (s', replace s s' graph |> add s'' s' |> add s''' s'')
     | _ -> (s, graph)
@@ -606,7 +645,7 @@ module DUG = struct
         let s' = Assign (num, var, (x0, x1, f, arg)) in
         let s'' = Stmt (num + 2, (get_v x1).variable) in
         let s''' =
-          Assign (num + 1, (get_v x1).variable, (x1, Id, Func, Arg []))
+          Assign (num + 1, (get_v x1).variable, (x1, empty_id, Func, Arg []))
         in
         (s', replace s s' graph |> add s'' s' |> add s''' s'')
     | _ -> (s, graph)
@@ -628,7 +667,9 @@ module DUG = struct
 
   let mk_assign_arg arg num graph =
     let s' = Stmt (num + 1, (get_v arg).variable) in
-    let s'' = Assign (num, (get_v arg).variable, (arg, Id, Func, Arg [])) in
+    let s'' =
+      Assign (num, (get_v arg).variable, (arg, empty_id, Func, Arg []))
+    in
     add s'' s' graph
 
   let mk_already_arg x_node x_var graph arg_graph =
@@ -715,10 +756,20 @@ module DUG = struct
       (s', add_vertex assign g |> add assign s'' |> add s'' s')
 
   (* 7 *)
-  let fcall_in_void_rule s f arg graph =
+  let fcall_in_void_rule_init s f arg graph =
     match s with
     | Void (num, var, (x0, _, _)) ->
         let s' = Void (num, var, (x0, f, arg)) in
+        (s', add_vertex s' G.empty)
+    | _ -> (s, graph)
+
+  let fcall_in_void_rule s f arg graph =
+    match s with
+    | Void (num, var, (x0, _, _)) ->
+        let new_x0 =
+          Variable { (get_v x0) with required_sets = RequiredMethodSet.empty }
+        in
+        let s' = Void (num, var, (new_x0, f, arg)) in
         (s', add_vertex s' G.empty)
     | _ -> (s, graph)
 
@@ -760,7 +811,7 @@ module DUG = struct
         let s' = Void (num, var, (x, func, arg)) in
         let s'' = Stmt (num + 2, (get_v x).variable) in
         let s''' =
-          Assign (num + 1, (get_v x).variable, (x, Id, Func, Arg []))
+          Assign (num + 1, (get_v x).variable, (x, empty_id, Func, Arg []))
         in
         (s', replace s s' graph |> add s''' s'' |> add s'' s')
     | _ -> (s, graph)
@@ -881,7 +932,7 @@ module DUG = struct
   let id_code = function
     | Variable v -> var_code v
     | ClassName c -> c
-    | Id -> "ID"
+    | Id _ -> "ID"
 
   let primitive_code p x =
     match p with

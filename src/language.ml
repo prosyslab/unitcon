@@ -408,6 +408,7 @@ module Field = struct
 end
 
 module FieldSet = Set.Make (Field)
+module RequiredMethodSet = Set.Make (String)
 
 module UseFieldMap = struct
   module M = Map.Make (struct

@@ -94,10 +94,15 @@ let is_lowest_rank ~is_error_entry prev_rank var used_args =
 let get_m_lst x0 m_info (c_info, ig) =
   let c_name = DUG.get_vinfo x0 |> fst |> get_class_name in
   let c_to_find = get_subtypes c_name ig in
+  let required_assigns = (DUG.get_v x0).required_assigns in
   MethodInfoMap.fold
     (fun m_name _ method_list ->
       if IgnoredMethods.mem m_name !ignored_methods then method_list
       else if !Cmdline.debug && List.mem m_name !Cmdline.ignore then method_list
+      else if
+        (not (RequiredMethodSet.is_empty required_assigns))
+        && not (RequiredMethodSet.mem m_name required_assigns)
+      then method_list
       else
         List.fold_left
           (fun lst_tuple c_name_to_find ->
@@ -466,6 +471,8 @@ let get_param ~is_s ?(is_error_entry = false) v summary =
         import = get_package_from_v v;
         variable = (v, mk_some !new_var);
         field = get_field id;
+        required_assigns = RequiredMethodSet.empty;
+        required_sets = RequiredMethodSet.empty;
         summary =
           {
             summary with
@@ -632,10 +639,16 @@ let get_void_func id ?(ee = "") ?(es = empty_summary)
   else
     let var = DUG.get_v id in
     let class_name = DUG.get_vinfo id |> fst |> get_class_name in
+    let required_sets = var.required_sets in
+    Logger.debug "required_set_method of id: %s!" (DUG.id_code id);
+    RequiredMethodSet.iter (fun m -> Logger.debug "%s" m) required_sets;
     if class_name = "" || class_name = "String" then []
     else
       get_setters class_name setter_map
       |> List.filter (fun (s, _) -> is_not_filtered_method s m_info)
+      |> List.filter (fun (s, _) ->
+             RequiredMethodSet.is_empty required_sets
+             || RequiredMethodSet.mem s required_sets)
       |> get_setter_list summary
       |> mk_void_func var id class_name m_info
 
@@ -659,7 +672,7 @@ let get_cfunc id constructor m_info =
       [] arg_list
 
 let get_ret_cfunc id constructor m_info =
-  let cost, c, s = constructor in
+  let cost, c, s, required_assigns, required_sets = constructor in
   let t = Utils.get_class_name c in
   let t =
     if Utils.is_array t then DUG.get_vinfo id |> fst |> get_array_class_name
@@ -671,10 +684,17 @@ let get_ret_cfunc id constructor m_info =
       (get_formal_params c m_info)
       s
   in
-  if arg_list = [] then [ (cost, (func, DUGIR.Arg [])) ]
+  if arg_list = [] then
+    [
+      ( cost,
+        (func, DUGIR.Arg []),
+        RequiredMethodSet.empty,
+        RequiredMethodSet.empty );
+    ]
   else
     List.fold_left
-      (fun cfuncs arg -> (cost, (func, DUGIR.Arg arg)) :: cfuncs)
+      (fun cfuncs arg ->
+        (cost, (func, DUGIR.Arg arg), required_assigns, required_sets) :: cfuncs)
       [] arg_list
 
 let get_cfuncs id list m_info =
@@ -713,7 +733,11 @@ let get_recv_type c_info summary_lst =
 let memory_effect_filtering summary m_info type_info c_info s_map smy_lst =
   let smy_lst = List.rev smy_lst in
   match !Cmdline.synthesis_mode with
-  | Cmdline.Basic | Cmdline.Priority -> List.rev smy_lst
+  | Cmdline.Basic | Cmdline.Priority ->
+      List.fold_left
+        (fun acc (i, c, c_smy) ->
+          (i, c, c_smy, RequiredMethodSet.empty, RequiredMethodSet.empty) :: acc)
+        [] smy_lst
   | Cmdline.Pruning | Cmdline.Full ->
       let recv_type = get_recv_type c_info smy_lst in
       let ret_recv_methods, set_recv_methods =
@@ -727,19 +751,23 @@ let memory_effect_filtering summary m_info type_info c_info s_map smy_lst =
             if is_static c m_info then []
             else get_subtypes recv_type (snd c_info)
           in
+          required_assigns := RequiredMethodSet.empty;
+          required_sets := RequiredMethodSet.empty;
           Logger.debug "memory effect of c: %s" c;
           let check_getter = is_getter_with_memory_effect c_smy fld_name in
           if subtypes = [] && check_getter then (
             Logger.debug "subtypes empty && check_getter true";
-            (i, c, c_smy) :: lst)
+            (i, c, c_smy, RequiredMethodSet.empty, RequiredMethodSet.empty)
+            :: lst)
           else if check_getter then (
             Logger.debug "check_getter true";
-            (i, c, c_smy) :: lst)
+            (i, c, c_smy, RequiredMethodSet.empty, RequiredMethodSet.empty)
+            :: lst)
           else if
             is_ret_recv_mem_effect fld_name subtypes summary m_info
               ret_recv_methods
             || is_set_recv_mem_effect fld_name summary m_info set_recv_methods
-          then (i, c, c_smy) :: lst
+          then (i, c, c_smy, !required_assigns, !required_sets) :: lst
           else lst)
         [] smy_lst
 
@@ -1074,35 +1102,62 @@ let const_unroll (s : DUGIR.t) p used_args ({ prim_info; _ } as info) =
             else List.rev_append (get_r3 s p prim_info x) r2)
   | _ -> failwith "Fail: const_unroll"
 
+let set_object_type class_name child_name obj_types =
+  match ObjTypeMap.find_opt class_name obj_types with
+  | Some child when child = child_name -> Some obj_types
+  | Some _ -> None
+  | None -> Some (ObjTypeMap.add class_name child_name obj_types)
+
 let fcall_in_assign_unroll (s : DUGIR.t) p used_args obj_types
     { summary; m_info; t_info; c_info; setter_map; _ } =
-  let apply_rule f arg field_set obj_map prec rank =
+  let apply_c_rule f arg field_set obj_map prec rank =
     ( prec,
       rank,
       DUG.fcall_in_assign_rule s field_set f arg p.tc,
       empty_id_map,
       obj_map )
   in
-  let set_object_type class_name child_name obj_types =
-    match ObjTypeMap.find_opt class_name obj_types with
-    | Some child when child = child_name -> Some obj_types
-    | Some _ -> None
-    | None -> Some (ObjTypeMap.add class_name child_name obj_types)
+  let apply_ret_rule f arg field_set required_assigns required_sets obj_map prec
+      rank =
+    ( prec,
+      rank,
+      DUG.fcall_in_assign_rule_2 s field_set required_assigns required_sets f
+        arg p.tc,
+      empty_id_map,
+      obj_map )
   in
   let apply_rule_for_all rank is_receiver class_name field_set c_list =
-    let _, lst =
-      List.fold_left
-        (fun (first, lst) (prec, (f, arg)) ->
-          let child_name = Utils.get_class_name (DUG.get_func f).method_name in
-          match set_object_type class_name child_name obj_types with
-          | Some obj ->
-              if first && is_receiver then
-                (false, apply_rule f arg field_set obj prec false :: lst)
-              else (false, apply_rule f arg field_set obj prec rank :: lst)
-          | None -> (false, lst))
-        (true, []) c_list
-    in
-    lst
+    List.fold_left
+      (fun (first, lst) (prec, (f, arg)) ->
+        let child_name = Utils.get_class_name (DUG.get_func f).method_name in
+        match set_object_type class_name child_name obj_types with
+        | Some obj ->
+            if first && is_receiver then
+              (false, apply_c_rule f arg field_set obj prec false :: lst)
+            else (false, apply_c_rule f arg field_set obj prec rank :: lst)
+        | None -> (false, lst))
+      (true, []) c_list
+    |> snd
+  in
+  let apply_rule_for_ret_all rank is_receiver class_name field_set c_list =
+    List.fold_left
+      (fun (first, lst) (prec, (f, arg), required_assigns, required_sets) ->
+        let child_name = Utils.get_class_name (DUG.get_func f).method_name in
+        match set_object_type class_name child_name obj_types with
+        | Some obj ->
+            if first && is_receiver then
+              ( false,
+                apply_ret_rule f arg field_set required_assigns required_sets
+                  obj prec false
+                :: lst )
+            else
+              ( false,
+                apply_ret_rule f arg field_set required_assigns required_sets
+                  obj prec rank
+                :: lst )
+        | None -> (false, lst))
+      (true, []) c_list
+    |> snd
   in
   match s with
   | Assign (_, _, (x0, _, _, _)) ->
@@ -1120,12 +1175,19 @@ let fcall_in_assign_unroll (s : DUGIR.t) p used_args obj_types
       let c_lst = if org_c_lst = [] then c_lst else org_c_lst in
       if c_lst = [] && ret_c_lst = [] then raise Not_found_get_object
       else
-        List.rev_append
-          (get_c x0 c_lst summary m_info)
-          (get_ret_c x0 ret_c_lst summary m_info t_info c_info setter_map)
-        |> apply_rule_for_all rank
-             (is_receiver (DUG.get_vinfo x0 |> snd))
-             class_name field_set
+        let after_rule_c =
+          apply_rule_for_all rank
+            (is_receiver (DUG.get_vinfo x0 |> snd))
+            class_name field_set
+            (get_c x0 c_lst summary m_info)
+        in
+        let after_rule_ret_c =
+          apply_rule_for_ret_all rank
+            (is_receiver (DUG.get_vinfo x0 |> snd))
+            class_name field_set
+            (get_ret_c x0 ret_c_lst summary m_info t_info c_info setter_map)
+        in
+        List.rev_append after_rule_c after_rule_ret_c
   | _ -> failwith "Fail: fcall_in_assign_unroll"
 
 let recv_in_assign_unroll (prec, rank, ((s : DUGIR.t), tc), loop_ids, obj_types)
@@ -1601,11 +1663,14 @@ let rec mk_testcase used_args p_data queue =
   | [] -> []
 
 let apply_init_rule list =
-  let start_node = DUGIR.Void (0, (This NonType, None), (Id, Func, Arg [])) in
+  let start_node =
+    DUGIR.Void (0, (This NonType, None), (DUG.empty_id, Func, Arg []))
+  in
   let empty_graph = DUG.add_vertex start_node DUG.empty in
   List.fold_left
     (fun lst (_, f, arg) ->
-      DUG.fcall_in_void_rule start_node f (DUGIR.Arg arg) empty_graph :: lst)
+      DUG.fcall_in_void_rule_init start_node f (DUGIR.Arg arg) empty_graph
+      :: lst)
     [] list
 
 let init_cost tcs =
@@ -1624,7 +1689,7 @@ let mk_testcases ~is_start queue (e_method, error_summary) p_data used_args
           Logger.debug "error entry method: %s" ee;
           ( (if ee = e_method then used_args else []),
             Constant.expand_string_value ee p_info_init,
-            apply_init_rule (get_void_func DUGIR.Id ~ee ~es:ee_s p_data)
+            apply_init_rule (get_void_func DUG.empty_id ~ee ~es:ee_s p_data)
             |> init_cost |> List.rev_append init_list ))
         (find_ee e_method error_summary p_data)
         (used_args, prim_info, []))

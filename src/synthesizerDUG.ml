@@ -107,7 +107,7 @@ let loop_value_to_tc rep_input loop_id_map tc =
     LoopIdMap.fold
       (fun id _ found ->
         if str_id = (DUG.loop_id_lval_code id |> snd) then id else found)
-      loop_id_map DUGIR.Id
+      loop_id_map DUG.empty_id
   in
   List.fold_left
     (fun old_tc (id, value) ->

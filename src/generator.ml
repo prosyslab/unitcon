@@ -88,6 +88,10 @@ let explored_m = ref ExploredMethod.empty
 
 let ignored_methods = ref IgnoredMethods.empty
 
+let required_assigns = ref RequiredMethodSet.empty
+
+let required_sets = ref RequiredMethodSet.empty
+
 let z3ctx =
   Z3.mk_context [ ("model", "true"); ("proof", "true"); ("unsat_core", "true") ]
 
@@ -1931,8 +1935,12 @@ let is_ret_recv_mem_effect fld_name subtypes summary m_info ret_recv_methods =
   in
   List.fold_left
     (fun check m_name ->
-      check
-      || check_ret_recv fld_name subtypes m_name (get_fields m_name summary))
+      if check_ret_recv fld_name subtypes m_name (get_fields m_name summary)
+      then (
+        Logger.debug "add required_assigns: %s" m_name;
+        required_assigns := RequiredMethodSet.add m_name !required_assigns;
+        true)
+      else check)
     false ret_recv_methods
 
 let is_set_recv_mem_effect fld_name summary m_info set_recv_methods =
@@ -1944,9 +1952,14 @@ let is_set_recv_mem_effect fld_name summary m_info set_recv_methods =
     in
     List.fold_left
       (fun check smy ->
-        check
-        || List.mem (get_fld_symbol smy) (get_params_symbol m_name m_info smy)
-           |> not)
+        if
+          List.mem (get_fld_symbol smy) (get_params_symbol m_name m_info smy)
+          |> not
+        then (
+          Logger.debug "add required_sets: %s" m_name;
+          required_sets := RequiredMethodSet.add m_name !required_sets;
+          true)
+        else check)
       false summaries
   in
   List.fold_left
