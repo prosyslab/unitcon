@@ -43,6 +43,8 @@ let rec get_type t =
       let typ = Regexp.global_rm Regexp.any_to_all t in
       Object typ
 
+let parse_cost cost = if cost = "Inf" then Inf else Int (int_of_string cost)
+
 let parse_param param =
   let v_and_t = String.split_on_char ':' param in
   if List.length v_and_t = 1 then Var (NonType, "")

@@ -115,6 +115,8 @@ let make_summary arg_ids =
   let premem = make_premem arg_ids in
   let postmem = make_postmem arg_ids premem in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;

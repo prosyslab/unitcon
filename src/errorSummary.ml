@@ -23,6 +23,9 @@ let get_use_field pre_var pre_mem =
     pre_var UseFieldMap.M.empty
 
 let parse_summary summary =
+  let cost =
+    JsonUtil.member "Cost" summary |> JsonUtil.to_string |> Parser.parse_cost
+  in
   let relation =
     JsonUtil.member "BoItv" summary |> JsonUtil.to_string |> Parser.parse_boitv
   in
@@ -48,6 +51,7 @@ let parse_summary summary =
     |> JsonUtil.to_string |> Parser.parse_mem
   in
   {
+    cost;
     relation;
     value;
     use_field = get_use_field pre_var pre_mem;

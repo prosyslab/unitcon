@@ -1083,6 +1083,7 @@ let satisfy callee_method callee_summary call_prop m_info =
 
 let new_value_summary new_value old_summary =
   {
+    cost = old_summary.cost;
     relation = old_summary.relation;
     value = new_value;
     use_field = old_summary.use_field;
@@ -1093,6 +1094,7 @@ let new_value_summary new_value old_summary =
 
 let new_mem_summary new_mem old_summary =
   {
+    cost = old_summary.cost;
     relation = old_summary.relation;
     value = old_summary.value;
     use_field = old_summary.use_field;
@@ -1167,6 +1169,7 @@ let modify_summary id t_summary c_summary =
         (RH_Any, default_value, snd c_summary.precond, snd c_summary.postcond)
     in
     {
+      cost = c_summary.cost;
       relation = c_summary.relation;
       value =
         (if value = default_value then c_summary.value
@@ -1188,6 +1191,7 @@ let new_this_summary old_summary values =
   let new_premem = new_mem (snd old_summary.precond) in
   let new_postmem = new_mem (snd old_summary.postcond) in
   {
+    cost = old_summary.cost;
     relation = old_summary.relation;
     value =
       ValueMap.add (fst values |> fst) (fst values |> snd) old_summary.value

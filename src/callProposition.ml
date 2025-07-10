@@ -3,6 +3,9 @@ module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 
 let parse_callprop callprop =
+  let cost =
+    JsonUtil.member "Cost" callprop |> JsonUtil.to_string |> Parser.parse_cost
+  in
   let relation =
     JsonUtil.member "BoItv" callprop |> JsonUtil.to_string |> Parser.parse_boitv
   in
@@ -31,6 +34,7 @@ let parse_callprop callprop =
     JsonUtil.member "Args" callprop |> JsonUtil.to_string |> Parser.parse_args
   in
   {
+    cost;
     relation;
     value;
     use_field = UseFieldMap.M.empty;

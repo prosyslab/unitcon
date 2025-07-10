@@ -62,6 +62,9 @@ let collect_new_loc_fields lst =
   collect_for lst
 
 let parse_summary summary =
+  let cost =
+    JsonUtil.member "Cost" summary |> JsonUtil.to_string |> Parser.parse_cost
+  in
   let relation =
     JsonUtil.member "BoItv" summary |> JsonUtil.to_string |> Parser.parse_boitv
   in
@@ -87,6 +90,7 @@ let parse_summary summary =
     |> JsonUtil.to_string |> Parser.parse_mem
   in
   {
+    cost;
     relation;
     value;
     use_field = UseFieldMap.M.empty;
@@ -169,7 +173,7 @@ let mapping_summary method_summaries minfo mmap =
     JsonUtil.member "summary" method_summaries
     |> JsonUtil.to_list
     |> List.fold_left (fun lst summary -> parse_summary summary :: lst) []
-    |> List.rev
+    |> List.sort (fun s1 s2 -> compare_cost s1.cost s2.cost)
   in
   let summaries =
     if summaries = [] then ([ empty_summary ], [])

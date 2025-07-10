@@ -4,6 +4,8 @@ module JsonUtil = Yojson.Safe.Util
 
 type tc_completion = Complete | Need_Loop | Incomplete
 
+type cost = Inf | Int of int
+
 type method_name = string [@@deriving compare, equal]
 
 type class_name = string [@@deriving compare, equal]
@@ -65,6 +67,15 @@ type method_info = {
 }
 
 type class_info = { class_type : class_type }
+
+let compare_cost (c1 : cost) (c2 : cost) =
+  match (c1, c2) with
+  | Int i1, Int i2 -> compare i1 i2
+  | Int _, Inf -> -1
+  | Inf, Int _ -> 1
+  | Inf, Inf -> -1
+
+let equal_cost c1 c2 = c1 = c2
 
 let is_string = function String -> true | _ -> false
 
@@ -355,6 +366,7 @@ module UseFieldMap = struct
 end
 
 type summary = {
+  cost : cost;
   relation : RelationMap.t;
   value : ValueMap.t;
   use_field : UseFieldMap.t;
@@ -366,6 +378,7 @@ type summary = {
 
 let empty_summary =
   {
+    cost = Inf;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.empty;
@@ -608,6 +621,7 @@ let array_current_mem org_summary array =
 
 let next_summary_in_void org_summary new_mem =
   {
+    cost = org_summary.cost;
     relation = org_summary.relation;
     value = org_summary.value;
     use_field = org_summary.use_field;
@@ -618,6 +632,7 @@ let next_summary_in_void org_summary new_mem =
 
 let current_summary_in_assign org_summary new_var new_mem =
   {
+    cost = org_summary.cost;
     relation = org_summary.relation;
     value = org_summary.value;
     use_field = org_summary.use_field;

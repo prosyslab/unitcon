@@ -114,6 +114,8 @@ let three_postmem p1 p2 p3 =
 let map_put_summary =
   let map_put_var = two_var "key" "value" in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -124,6 +126,8 @@ let map_put_summary =
 
 let array_list_summary =
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -135,6 +139,8 @@ let array_list_summary =
 let file_summary =
   let file_var = one_var "file" in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -146,6 +152,8 @@ let file_summary =
 let image_summary =
   let image_var = three_var "w" "h" "t" in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -156,6 +164,8 @@ let image_summary =
 
 let image_create_summary =
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -166,6 +176,8 @@ let image_create_summary =
 
 let class_get_summary =
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -177,6 +189,8 @@ let class_get_summary =
 let print_summary =
   let print_var = one_var "file" in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -188,6 +202,8 @@ let print_summary =
 let file_input_summary =
   let file_input_var = one_var "file" in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -198,6 +214,8 @@ let file_input_summary =
 
 let ba_output_summary =
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -208,6 +226,8 @@ let ba_output_summary =
 
 let obj_summary =
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -218,6 +238,8 @@ let obj_summary =
 
 let throwable_summary =
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -228,6 +250,8 @@ let throwable_summary =
 
 let random_summary =
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -238,6 +262,8 @@ let random_summary =
 
 let stringwriter_summary =
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -249,6 +275,8 @@ let stringwriter_summary =
 let parseposition_summary =
   let parseposition_var = one_var "index" in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -260,6 +288,8 @@ let parseposition_summary =
 let bigdecimal_summary =
   let bigdecimal_var = one_var "val" in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -271,6 +301,8 @@ let bigdecimal_summary =
 let string_summary =
   let string_var = one_var "s" in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
@@ -286,6 +318,8 @@ let array_summary =
     |> ValueMap.add "v4" Value.{ from_error = false; value = Value.Ge (Int 1) }
   in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = array_value;
     use_field = UseFieldMap.M.empty;
@@ -301,6 +335,8 @@ let array_set_summary =
     |> ValueMap.add "v5" Value.{ from_error = false; value = Value.Ge (Int 0) }
   in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = array_set_value;
     use_field = UseFieldMap.M.empty;
@@ -312,6 +348,8 @@ let array_set_summary =
 let point_summary =
   let point_var = two_var "x" "y" in
   {
+    (* heuristic *)
+    cost = Int 5;
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.M.empty;
