@@ -1,15 +1,15 @@
 open Language
 
 module TailsSet = Set.Make (struct
-  type t = Condition.rh
+  type t = Ident.t
 
   let compare = compare
 end)
 
 let rec get_tail_set symbol memory tails =
-  match Condition.M.find_opt symbol memory with
+  match Memory.find_opt symbol memory with
   | Some sym ->
-      Condition.M.fold
+      Memory.fold
         (fun _ symbol set ->
           if TailsSet.mem symbol set then set
           else get_tail_set symbol memory (TailsSet.add symbol set))
@@ -17,7 +17,7 @@ let rec get_tail_set symbol memory tails =
   | None -> tails
 
 let is_tail_symbol symbol memory =
-  match Condition.M.find_opt symbol memory with Some _ -> false | None -> true
+  match Memory.find_opt symbol memory with Some _ -> false | None -> true
 
 let equal_value v1 v2 =
   let normalize v =
@@ -44,7 +44,7 @@ let equal_value v1 v2 =
   | _ -> false
 
 let get_value symbol vmap =
-  match ValueMap.find_opt (get_rh_name symbol) vmap with
+  match ValueMap.find_opt (Ident.string_of_symbol symbol) vmap with
   | Some v -> v.Value.value
   | _ -> Value.Eq NonValue
 
@@ -65,7 +65,7 @@ let equal_values set1 set2 vmap =
 
 let collect_field_set field value pre_mem post_mem vmap old_set =
   match field with
-  | Condition.RH_Var id ->
+  | Ident.Var id ->
       let pre = get_tail_set value pre_mem TailsSet.empty in
       let post = get_tail_set value post_mem TailsSet.empty in
       let compare_value = equal_values (pre, pre_mem) (post, post_mem) vmap in
@@ -76,13 +76,13 @@ let collect_field_set field value pre_mem post_mem vmap old_set =
   | _ -> old_set
 
 let get_change_field post_key pre_mem post_mem vmap field_set =
-  match Condition.M.find_opt post_key post_mem with
+  match Memory.find_opt post_key post_mem with
   | None -> field_set
   | Some value_map -> (
-      match Condition.M.find_opt post_key pre_mem with
+      match Memory.find_opt post_key pre_mem with
       | None -> field_set
       | Some _ ->
-          Condition.M.fold
+          Memory.fold
             (fun field value old_field_set ->
               collect_field_set field value pre_mem post_mem vmap old_field_set)
             value_map field_set)

@@ -365,42 +365,100 @@ module ValueMap = struct
       map ""
 end
 
-module Condition = struct
-  type rh = RH_Var of id | RH_Symbol of symbol | RH_Index of symbol | RH_Any
+module Ident = struct
+  type t = Var of id | Symbol of symbol | Index of symbol | Any
   [@@deriving compare, equal]
 
-  module M = Map.Make (struct
-    type t = rh [@@deriving compare, equal]
-  end)
+  let string_of = function
+    | Var id -> "Var (" ^ id ^ ")"
+    | Symbol sym -> "Symbol (" ^ sym ^ ")"
+    | Index idx -> "Index [" ^ idx ^ "]"
+    | Any -> "Any *"
 
-  type var = rh M.t (* symbol -> variable *) [@@deriving compare, equal]
+  let string_of_var = function Var id -> id | _ -> ""
 
-  type mem = rh M.t M.t [@@deriving compare, equal]
+  let string_of_symbol = function Symbol sym -> sym | _ -> ""
+end
 
-  type t = var * mem [@@deriving compare, equal]
+module VariableMap = struct
+  module M = Map.Make (Ident)
 
-  let string_of_rh = function
-    | RH_Var id -> "RH_Var (" ^ id ^ ")"
-    | RH_Symbol sym -> "RH_Sym (" ^ sym ^ ")"
-    | RH_Index sym -> "RH_Index [" ^ sym ^ "]"
-    | RH_Any -> "RH_Any *"
+  (* symbol name -> variable name *)
+  type t = Ident.t M.t [@@deriving compare, equal]
 
-  let string_of_map var value = string_of_rh var ^ " -> " ^ string_of_rh value
+  let empty = M.empty
 
-  let string_of_var var =
-    M.fold (fun var value acc -> acc ^ "\n" ^ string_of_map var value) var ""
+  let add = M.add
+
+  let remove = M.remove
+
+  let mem = M.mem
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let iter = M.iter
+
+  let fold = M.fold
+
+  let merge = M.merge
+
+  let string_of map =
+    M.fold
+      (fun var value acc ->
+        acc ^ "\n" ^ Ident.string_of var ^ " -> " ^ Ident.string_of value)
+      map ""
+end
+
+module Memory = struct
+  module M = Map.Make (Ident)
+
+  type t = Ident.t M.t M.t [@@deriving compare, equal]
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let remove = M.remove
+
+  let is_empty = M.is_empty
+
+  let mem = M.mem
+
+  let exists = M.exists
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let iter = M.iter
+
+  let fold = M.fold
+
+  let merge = M.merge
+
+  let cardinal = M.cardinal
+
+  let filter = M.filter
+
+  let string_of_outer var = "outer var: " ^ Ident.string_of var ^ "!"
+
+  let string_of_inner mem =
+    M.fold
+      (fun var value acc ->
+        acc ^ "  " ^ Ident.string_of var ^ "->" ^ Ident.string_of value ^ "\n")
+      mem ""
 
   let string_of mem =
     M.fold
       (fun var inner_mem acc ->
-        let outer = "outer var: " ^ string_of_rh var ^ "!" in
-        let inner =
-          M.fold
-            (fun var value acc -> acc ^ "\n  " ^ string_of_map var value)
-            inner_mem ""
-        in
-        acc ^ "\n" ^ outer ^ "\n" ^ inner)
+        acc ^ "\n" ^ string_of_outer var ^ "\n" ^ string_of_inner inner_mem)
       mem ""
+end
+
+module State = struct
+  type t = VariableMap.t * Memory.t [@@deriving compare, equal]
 end
 
 module Field = struct
@@ -412,7 +470,7 @@ module RequiredMethodSet = Set.Make (String)
 
 module UseFieldMap = struct
   module M = Map.Make (struct
-    type t = Condition.rh [@@deriving compare, equal]
+    type t = Ident.t [@@deriving compare, equal]
   end)
 
   type t = FieldSet.t M.t [@@deriving compare, equal]
@@ -435,8 +493,8 @@ type summary = {
   relation : RelationMap.t;
   value : ValueMap.t;
   use_field : UseFieldMap.t;
-  precond : Condition.t;
-  postcond : Condition.t;
+  precond : State.t;
+  postcond : State.t;
   args : symbol list;
 }
 [@@deriving compare, equal]
@@ -447,8 +505,8 @@ let empty_summary =
     relation = RelationMap.empty;
     value = ValueMap.empty;
     use_field = UseFieldMap.empty;
-    precond = (Condition.M.empty, Condition.M.empty);
-    postcond = (Condition.M.empty, Condition.M.empty);
+    precond = (VariableMap.empty, Memory.empty);
+    postcond = (VariableMap.empty, Memory.empty);
     args = [];
   }
 
@@ -569,33 +627,25 @@ module PrimitiveInfo = struct
   type t = const list ClassMap.t TypeMap.t
 end
 
-let get_rh_name ?(is_var = false) rh =
-  if is_var then match rh with Condition.RH_Var v -> v | _ -> ""
-  else match rh with Condition.RH_Symbol s -> s | _ -> ""
-
 let get_next_symbol symbol memory =
-  match Condition.M.find_opt symbol memory with
+  match Memory.find_opt symbol memory with
   | Some sym -> (
-      match Condition.M.find_opt Condition.RH_Any sym with
-      | Some s -> s
-      | None -> symbol)
+      match Memory.find_opt Ident.Any sym with Some s -> s | None -> symbol)
   | None -> symbol
 
 let get_id_symbol vars id =
-  Condition.M.fold
+  VariableMap.fold
     (fun symbol symbol_id find ->
-      match symbol_id with
-      | Condition.RH_Var v when v = id -> symbol
-      | _ -> find)
-    vars Condition.RH_Any
+      match symbol_id with Ident.Var v when v = id -> symbol | _ -> find)
+    vars Ident.Any
 
 let rec get_tail_symbol field_name symbol memory =
-  match Condition.M.find_opt symbol memory with
+  match Memory.find_opt symbol memory with
   | Some sym -> (
-      match Condition.M.find_opt (Condition.RH_Var field_name) sym with
+      match Memory.find_opt (Ident.Var field_name) sym with
       | Some s -> get_tail_symbol field_name s memory
       | None -> (
-          match Condition.M.find_opt Condition.RH_Any sym with
+          match Memory.find_opt Ident.Any sym with
           | Some any_sym -> get_tail_symbol field_name any_sym memory
           | None -> symbol))
   | None -> symbol
@@ -608,38 +658,38 @@ let get_index_value (v : Value.t) : Field.t =
       { used_in_error = v.from_error; name = string_of_int (i + 1) }
   | _ -> { used_in_error = false; name = "" }
 
-let org_symbol id { precond = pre_var, pre_mem; _ } =
-  let id_symbol = get_id_symbol pre_var id |> get_rh_name in
-  Condition.M.fold
+let org_symbol id (pre_var, pre_mem) =
+  let id_symbol = get_id_symbol pre_var id |> Ident.string_of_symbol in
+  Memory.fold
     (fun symbol symbol_trace find_variable ->
-      let symbol = get_rh_name symbol in
+      let symbol = Ident.string_of_symbol symbol in
       if symbol = id_symbol then
-        Condition.M.fold
+        Memory.fold
           (fun _ tail trace_find_var ->
-            match tail with Condition.RH_Symbol s -> s | _ -> trace_find_var)
+            match tail with Ident.Symbol s -> s | _ -> trace_find_var)
           symbol_trace find_variable
       else find_variable)
     pre_mem ""
 
-let get_array_index array summary =
-  let _, memory = summary.precond in
-  let array_symbol = org_symbol array summary in
-  let values = summary.value in
+let get_array_index array { precond = pre_var, pre_mem; value; _ } =
+  let array_symbol = org_symbol array (pre_var, pre_mem) in
   let find_value s =
     ValueMap.fold
       (fun symbol value find_value -> if symbol = s then value else find_value)
-      values
+      value
       { from_error = false; value = Value.Eq NonValue }
   in
-  match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
+  match Memory.find_opt (Ident.Symbol array_symbol) pre_mem with
   | Some x ->
-      Condition.M.fold
+      Memory.fold
         (fun sym v ((idx, idx_value), (elem, elem_value)) ->
           match sym with
-          | Condition.RH_Index s when idx = "" ->
+          | Ident.Index s when idx = "" ->
               ( (s, find_value s),
-                ( get_rh_name v,
-                  find_value (get_tail_symbol "" v memory |> get_rh_name) ) )
+                ( Ident.string_of_symbol v,
+                  find_value
+                    (get_tail_symbol "" v pre_mem |> Ident.string_of_symbol) )
+              )
           | _ -> ((idx, idx_value), (elem, elem_value)))
         x
         ( ("", { from_error = false; value = Value.Ge (Int 0) }),
@@ -648,41 +698,35 @@ let get_array_index array summary =
       ( ("", { from_error = false; value = Value.Ge (Int 0) }),
         ("", { from_error = false; value = Value.Eq NonValue }) )
 
-let remove_array_index array idx summary =
-  let _, memory = summary.precond in
-  let array_symbol = org_symbol array summary in
-  match Condition.M.find_opt (Condition.RH_Symbol array_symbol) memory with
+let remove_array_index array idx { precond = pre_var, pre_mem; _ } =
+  let array_symbol = org_symbol array (pre_var, pre_mem) in
+  match Memory.find_opt (Ident.Symbol array_symbol) pre_mem with
   | Some x ->
       let array_new_mem =
-        Condition.M.fold
+        Memory.fold
           (fun sym _ new_mem ->
             match sym with
-            | Condition.RH_Index i when idx = i ->
-                Condition.M.remove sym new_mem
+            | Ident.Index i when idx = i -> Memory.remove sym new_mem
             | _ -> new_mem)
           x x
       in
-      Condition.M.add (Condition.RH_Symbol array_symbol) array_new_mem memory
-  | None -> memory
+      Memory.add (Ident.Symbol array_symbol) array_new_mem pre_mem
+  | None -> pre_mem
 
 let array_field_var org_summary array =
-  Condition.M.add
-    (Condition.RH_Symbol (fst array |> fst))
-    (Condition.RH_Var "index") (fst org_summary.precond)
-  |> Condition.M.add
-       (Condition.RH_Symbol (snd array |> fst))
-       (Condition.RH_Var "elem")
+  Memory.add
+    (Ident.Symbol (fst array |> fst))
+    (Ident.Var "index") (fst org_summary.precond)
+  |> Memory.add (Ident.Symbol (snd array |> fst)) (Ident.Var "elem")
 
 let array_current_mem org_summary array =
-  Condition.M.add (Condition.RH_Symbol "v5")
-    (Condition.M.add (Condition.RH_Var "index")
-       (Condition.RH_Symbol (fst array |> fst))
-       Condition.M.empty)
+  Memory.add (Ident.Symbol "v5")
+    (Memory.add (Ident.Var "index")
+       (Ident.Symbol (fst array |> fst))
+       Memory.empty)
     (snd org_summary.precond)
-  |> Condition.M.add (Condition.RH_Var "elem")
-       (Condition.M.add Condition.RH_Any
-          (Condition.RH_Symbol (snd array |> fst))
-          Condition.M.empty)
+  |> Memory.add (Ident.Var "elem")
+       (Memory.add Ident.Any (Ident.Symbol (snd array |> fst)) Memory.empty)
 
 let next_summary_in_void org_summary new_mem =
   {

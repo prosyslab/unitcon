@@ -49,64 +49,54 @@ let make_arg_id arg_list =
 
 let make_var arg_list =
   let init =
-    Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
-      Condition.M.empty
+    VariableMap.add (Ident.Symbol "v1") (Ident.Var "this") VariableMap.empty
   in
   List.fold_left
     (fun (num, cond) p ->
       let escape_dollar = Regexp.global_rm Regexp.dollar p in
       ( num + 1,
-        Condition.M.add
-          (Condition.RH_Symbol ("v" ^ string_of_int num))
-          (Condition.RH_Var escape_dollar) cond ))
+        VariableMap.add
+          (Ident.Symbol ("v" ^ string_of_int num))
+          (Ident.Var escape_dollar) cond ))
     (2, init) arg_list
   |> snd
 
 let make_any_to_symbol_mem s_num =
-  let symbol = Condition.RH_Symbol ("v" ^ string_of_int s_num) in
-  Condition.M.add Condition.RH_Any symbol Condition.M.empty
+  let symbol = Ident.Symbol ("v" ^ string_of_int s_num) in
+  Memory.add Ident.Any symbol Memory.empty
 
 let make_var_to_symbol_mem var s_num mem =
-  Condition.M.add (Condition.RH_Var var)
-    (Condition.RH_Symbol ("v" ^ string_of_int s_num))
-    mem
+  Memory.add (Ident.Var var) (Ident.Symbol ("v" ^ string_of_int s_num)) mem
 
 let make_premem arg_list =
   let incr = List.length arg_list + 1 in
   let init =
-    Condition.M.add (Condition.RH_Symbol "v1")
+    Memory.add (Ident.Symbol "v1")
       (make_any_to_symbol_mem (1 + incr))
-      Condition.M.empty
+      Memory.empty
   in
   let _, init_mem =
     List.fold_left
       (fun (num, cond) _ ->
         let mem = make_any_to_symbol_mem (num + incr) in
-        ( num + 1,
-          Condition.M.add
-            (Condition.RH_Symbol ("v" ^ string_of_int num))
-            mem cond ))
+        (num + 1, Memory.add (Ident.Symbol ("v" ^ string_of_int num)) mem cond))
       (2, init) arg_list
   in
   let _, arg_mem =
     List.fold_left
       (fun (num, cond) p -> (num + 1, make_var_to_symbol_mem p num cond))
-      (1 + (2 * incr), Condition.M.empty)
+      (1 + (2 * incr), Memory.empty)
       arg_list
   in
   (* this's any symbol -> arg_mem *)
-  Condition.M.add
-    (Condition.RH_Symbol ("v" ^ (1 + incr |> string_of_int)))
-    arg_mem init_mem
+  Memory.add (Ident.Symbol ("v" ^ (1 + incr |> string_of_int))) arg_mem init_mem
 
 let make_postmem arg_list premem =
   let decr = List.length arg_list in
   List.fold_left
     (fun (num, cond) _ ->
       let mem = make_any_to_symbol_mem (num - decr) in
-      ( num + 1,
-        Condition.M.add (Condition.RH_Symbol ("v" ^ string_of_int num)) mem cond
-      ))
+      (num + 1, Memory.add (Ident.Symbol ("v" ^ string_of_int num)) mem cond))
     (1 + (2 * (decr + 1)), premem)
     arg_list
   |> snd

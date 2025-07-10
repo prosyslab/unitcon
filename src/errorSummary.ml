@@ -3,10 +3,10 @@ module Json = Yojson.Safe
 module JsonUtil = Yojson.Safe.Util
 
 let add_use_field value_map field_set =
-  Condition.M.fold
+  Memory.fold
     (fun field _ field_set ->
       match field with
-      | Condition.RH_Var id ->
+      | Ident.Var id ->
           FieldSet.add { used_in_error = true; name = id } field_set
       | _ -> field_set)
     value_map field_set
@@ -14,9 +14,9 @@ let add_use_field value_map field_set =
 (* map the fields used when executing the error method
    from the parameters of the error method into a set of fields. *)
 let get_use_field pre_var pre_mem =
-  Condition.M.fold
+  VariableMap.fold
     (fun sym _ ufset ->
-      match Condition.M.find_opt (get_next_symbol sym pre_mem) pre_mem with
+      match Memory.find_opt (get_next_symbol sym pre_mem) pre_mem with
       | Some value_map ->
           UseFieldMap.M.add sym (add_use_field value_map FieldSet.empty) ufset
       | _ -> ufset)

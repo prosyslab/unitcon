@@ -99,11 +99,11 @@ let solver = Z3.Solver.mk_solver z3ctx None
 
 let mk_some x = Some x
 
-let mk_var x = Condition.RH_Var x
+let mk_var x = Ident.Var x
 
-let mk_symbol x = Condition.RH_Symbol x
+let mk_symbol x = Ident.Symbol x
 
-let mk_index x = Condition.RH_Index x
+let mk_index x = Ident.Index x
 
 let get_type v = match v with This typ -> typ | Var (typ, _) -> typ
 
@@ -185,7 +185,7 @@ let special_class_list =
 
 let get_symbol_num symbol =
   match
-    Regexp.first_rm Regexp.symbol_prefix (get_rh_name symbol)
+    Regexp.first_rm Regexp.symbol_prefix (Ident.string_of_symbol symbol)
     |> int_of_string_opt
   with
   | Some i -> i
@@ -200,44 +200,42 @@ let rec find_relation given_symbol relation =
 
 let get_target_symbol id { precond = pre_var, pre_mem; _ } =
   let get_target_id_symbol mem =
-    match Condition.M.find_opt (mk_var id) mem with
+    match Memory.find_opt (mk_var id) mem with
     | Some field_symbol -> field_symbol
     | None -> get_id_symbol pre_var id
   in
   let id_symbol = get_id_symbol pre_var id in
   let id_next_symbol = get_next_symbol id_symbol pre_mem in
-  match Condition.M.find_opt id_next_symbol pre_mem with
+  match Memory.find_opt id_next_symbol pre_mem with
   | None -> (
       let this_symbol = get_id_symbol pre_var "this" in
       let this_next_symbol = get_next_symbol this_symbol pre_mem in
-      match Condition.M.find_opt this_next_symbol pre_mem with
+      match Memory.find_opt this_next_symbol pre_mem with
       | None -> this_symbol
       | Some mem -> get_target_id_symbol mem)
   | Some _ -> id_next_symbol
 
 let find_variable head_symbol variables =
-  match Condition.M.find_opt (mk_symbol head_symbol) variables with
-  | Some var -> get_rh_name ~is_var:true var
+  match VariableMap.find_opt (mk_symbol head_symbol) variables with
+  | Some var -> Ident.string_of_var var
   | None -> ""
 
 let more_find_head_symbol head_symbol _ memory =
   let is_head_symbol _ value =
-    match value with
-    | Condition.RH_Symbol s when head_symbol = s -> true
-    | _ -> false
+    match value with Ident.Symbol s when head_symbol = s -> true | _ -> false
   in
-  Condition.M.exists is_head_symbol memory
+  Memory.exists is_head_symbol memory
 
 let fold_map map num =
   let get_gt_num n1 n2 = if n1 > n2 then n1 else n2 in
   let fold_mem mem num =
-    Condition.M.fold
+    Memory.fold
       (fun _ value n ->
         let new_num = get_symbol_num value in
         get_gt_num new_num n)
       mem num
   in
-  Condition.M.fold
+  Memory.fold
     (fun sym mem n ->
       let new_num = get_symbol_num sym in
       let new_num = fold_mem mem new_num in
@@ -255,39 +253,38 @@ let get_symbol_list values =
 
 let rec find_real_head head_symbol memory =
   let exist_head_symbol =
-    Condition.M.filter (more_find_head_symbol head_symbol) memory
+    Memory.filter (more_find_head_symbol head_symbol) memory
   in
   let find_head_symbol head _ found =
-    match head with Condition.RH_Symbol s -> s | _ -> found
+    match head with Ident.Symbol s -> s | _ -> found
   in
-  let exist_head_symbol =
-    Condition.M.fold find_head_symbol exist_head_symbol ""
-  in
+  let exist_head_symbol = Memory.fold find_head_symbol exist_head_symbol "" in
   if exist_head_symbol = "" then head_symbol
   else find_real_head exist_head_symbol memory
 
 (* (symbol, value, head)
-   value is set only when the symbol is RH_Index *)
+   value is set only when the symbol is Ident.Index *)
 let get_head_symbol symbol mem =
   let get_heads real_head head traces lst =
     match head with
-    | Condition.RH_Index i when symbol = i ->
-        (symbol, get_next_symbol traces mem |> get_rh_name |> mk_some, real_head)
+    | Ident.Index i when symbol = i ->
+        ( symbol,
+          get_next_symbol traces mem |> Ident.string_of_symbol |> mk_some,
+          real_head )
         :: lst
     | _ -> lst
   in
-  Condition.M.fold
+  Memory.fold
     (fun hd_symbol trace hd_list ->
-      let hd = find_real_head (get_rh_name hd_symbol) mem in
-      Condition.M.fold
+      let hd = find_real_head (Ident.string_of_symbol hd_symbol) mem in
+      Memory.fold
         (fun trace_hd trace_tl hd_list ->
           match trace_tl with
-          | Condition.RH_Symbol s when symbol = s -> [ (symbol, None, hd) ]
+          | Ident.Symbol s when symbol = s -> [ (symbol, None, hd) ]
           | _ -> get_heads hd trace_hd trace_tl hd_list)
         trace hd_list)
     mem []
 
-(* memory: Condition.mem *)
 (* return: (callee_actual_symbol * head_symbol) list *)
 (* if head = "" then this symbol can be any value *)
 let get_head_symbol_list (_, memory) symbols =
@@ -299,27 +296,28 @@ let get_head_symbol_list (_, memory) symbols =
     [] symbols
 
 (* (symbol, value, head)
-   value is set only when the symbol is RH_Index *)
+   value is set only when the symbol is Ident.Index *)
 let get_prev_head_symbol symbol mem =
   let get_heads real_head head traces lst =
     match head with
-    | Condition.RH_Index i when symbol = i ->
-        (symbol, get_next_symbol traces mem |> get_rh_name |> mk_some, real_head)
+    | Ident.Index i when symbol = i ->
+        ( symbol,
+          get_next_symbol traces mem |> Ident.string_of_symbol |> mk_some,
+          real_head )
         :: lst
     | _ -> lst
   in
-  Condition.M.fold
+  Memory.fold
     (fun hd_symbol trace hd_list ->
-      let hd = get_rh_name hd_symbol in
-      Condition.M.fold
+      let hd = Ident.string_of_symbol hd_symbol in
+      Memory.fold
         (fun trace_hd trace_tl hd_list ->
           match trace_tl with
-          | Condition.RH_Symbol s when symbol = s -> [ (symbol, None, hd) ]
+          | Ident.Symbol s when symbol = s -> [ (symbol, None, hd) ]
           | _ -> get_heads hd trace_hd trace_tl hd_list)
         trace hd_list)
     mem []
 
-(* memory: Condition.mem *)
 (* return: (callee_actual_symbol * head_symbol) list *)
 (* if head = "" then this symbol can be any value *)
 let get_prev_head_symbol_list (_, memory) symbols =
@@ -355,7 +353,7 @@ let mk_param_pair callee_sym value head_sym variables formal_params =
       (callee_sym, head_sym, idx)
   | _ -> (callee_sym, head_sym, -1)
 
-(* variables: Condition.var *)
+(* variables: VariableMap *)
 (* return: (callee_actual_symbol * head_symbol * param_index) list *)
 (* if param_index = -1 then this symbol can be any value *)
 let get_param_index_list head_symbol_list (variables, _) formal_params =
@@ -386,7 +384,9 @@ let mk_new_uf method_name from_s to_s m_info =
   in
   UseFieldMap.fold
     (fun sym field_set new_ufset ->
-      let idx = get_param_index (get_rh_name sym) (fst from_s.precond) params in
+      let idx =
+        get_param_index (Ident.string_of_symbol sym) (fst from_s.precond) params
+      in
       if idx = -1 then new_ufset
       else
         let head_symbol = List.nth to_s.args idx in
@@ -395,7 +395,7 @@ let mk_new_uf method_name from_s to_s m_info =
     from_s.use_field UseFieldMap.empty
 
 let get_field_symbol id symbol mem =
-  get_tail_symbol (get_rh_name ~is_var:true id) symbol mem
+  get_tail_symbol (Ident.string_of_var id) symbol mem
 
 let get_params_symbol m_name m_info { precond = pre_var, pre_mem; _ } =
   let params = get_formal_params m_name m_info in
@@ -410,18 +410,20 @@ let get_params_symbol m_name m_info { precond = pre_var, pre_mem; _ } =
 
 let get_value_symbol key sym c c_mem t_mem =
   let get_indirect_sym mem =
-    match Condition.M.find_opt Condition.RH_Any mem with
+    match Memory.find_opt Ident.Any mem with
     | Some s -> s
-    | None -> Condition.RH_Any (* fail to match *)
+    | None -> Ident.Any (* fail to match *)
   in
   let c_sym =
-    match Condition.M.find_opt key c with
-    | Some s -> s
-    | None -> get_indirect_sym c
+    match Memory.find_opt key c with Some s -> s | None -> get_indirect_sym c
   in
-  let field_name = get_rh_name ~is_var:true key in
-  let tail_t_symbol = get_tail_symbol field_name sym t_mem |> get_rh_name in
-  let tail_c_symbol = get_tail_symbol field_name c_sym c_mem |> get_rh_name in
+  let field_name = Ident.string_of_var key in
+  let tail_t_symbol =
+    get_tail_symbol field_name sym t_mem |> Ident.string_of_symbol
+  in
+  let tail_c_symbol =
+    get_tail_symbol field_name c_sym c_mem |> Ident.string_of_symbol
+  in
   Logger.debug "get_value_symbol: tail_c (%s), tail_t (%s)" tail_c_symbol
     tail_t_symbol;
   (tail_c_symbol, tail_t_symbol)
@@ -429,8 +431,8 @@ let get_value_symbol key sym c c_mem t_mem =
 let get_matched_value_symbol c_id c_symbol c_mem t_id t_symbol t_mem =
   let t_symbol = get_field_symbol t_id (mk_symbol t_symbol) t_mem in
   let c_symbol = get_field_symbol c_id (mk_symbol c_symbol) c_mem in
-  let c_t_mem = Condition.M.find_opt t_symbol t_mem in
-  let c_c_mem = Condition.M.find_opt c_symbol c_mem in
+  let c_t_mem = Memory.find_opt t_symbol t_mem in
+  let c_c_mem = Memory.find_opt c_symbol c_mem in
   match (c_c_mem, c_t_mem) with
   | None, None -> []
   | None, _ -> []
@@ -439,7 +441,7 @@ let get_matched_value_symbol c_id c_symbol c_mem t_id t_symbol t_mem =
       let get_value_symbols key sym lst =
         get_value_symbol key sym c c_mem t_mem :: lst
       in
-      Condition.M.fold get_value_symbols t []
+      Memory.fold get_value_symbols t []
 
 let get_value_symbol_list ~is_init c_summary t_summary vs_list =
   if is_init then
@@ -449,8 +451,8 @@ let get_value_symbol_list ~is_init c_summary t_summary vs_list =
     else
       let t_var, t_mem = t_summary.precond in
       let c_var, c_mem = c_summary.precond in
-      let c_t_mem = Condition.M.find_opt (mk_symbol t_symbol) t_var in
-      let c_c_mem = Condition.M.find_opt (mk_symbol c_symbol) c_var in
+      let c_t_mem = VariableMap.find_opt (mk_symbol t_symbol) t_var in
+      let c_c_mem = VariableMap.find_opt (mk_symbol c_symbol) c_var in
       match (c_c_mem, c_t_mem) with
       | None, _ | _, None -> [ (c_symbol, t_symbol) ]
       | Some c_id, Some t_id ->
@@ -476,9 +478,9 @@ let vmap_maker symbol target_vmap from_error =
 
 let get_array_size array summary =
   let _, memory = summary.precond in
-  let array_symbol = org_symbol array summary in
-  match Condition.M.find_opt (mk_symbol array_symbol) memory with
-  | Some x -> (true, Condition.M.fold (fun _ _ size -> size + 1) x 0)
+  let array_symbol = org_symbol array summary.precond in
+  match Memory.find_opt (mk_symbol array_symbol) memory with
+  | Some x -> (true, Memory.fold (fun _ _ size -> size + 1) x 0)
   | None -> (false, 1)
 
 let get_predef_value_list typ p_info =
@@ -880,17 +882,15 @@ let get_z3_result (op : Value.op) id =
         ]
 
 let find_target_var sym_trace find_var =
-  Condition.M.fold
+  Memory.fold
     (fun trace_hd _ trace_find_var ->
-      match trace_hd with
-      | Condition.RH_Var var -> mk_some var
-      | _ -> trace_find_var)
+      match trace_hd with Ident.Var var -> mk_some var | _ -> trace_find_var)
     sym_trace find_var
 
 let get_target_var t_sym mem =
-  Condition.M.fold
+  Memory.fold
     (fun symbol symbol_trace find_variable ->
-      if get_rh_name symbol = t_sym then
+      if Ident.string_of_symbol symbol = t_sym then
         find_target_var symbol_trace find_variable
       else find_variable)
     mem None
@@ -904,23 +904,21 @@ let find_value_from_variable value target_variable =
     Value.{ from_error = false; value = Value.Eq NonValue }
 
 let check_target_symbol default_var symbol =
-  match symbol with Condition.RH_Symbol s -> s | _ -> default_var
+  match symbol with Ident.Symbol s -> s | _ -> default_var
 
 let find_target_variable_from_mem id mem =
-  Condition.M.fold
+  Memory.fold
     (fun symbol value find_variable ->
       match symbol with
-      | Condition.RH_Var var when var = id ->
-          check_target_symbol find_variable value
+      | Ident.Var var when var = id -> check_target_symbol find_variable value
       | _ -> find_variable)
     mem ""
 
 let find_target_variable_from_var id var =
-  Condition.M.fold
+  VariableMap.fold
     (fun symbol variable find_variable ->
       match variable with
-      | Condition.RH_Var var when var = id ->
-          check_target_symbol find_variable symbol
+      | Ident.Var var when var = id -> check_target_symbol find_variable symbol
       | _ -> find_variable)
     var ""
 
@@ -929,7 +927,7 @@ let find_target_value ~from_setter id { precond = pre_var, pre_mem; value; _ } =
   if from_setter then
     let this_var = get_id_symbol pre_var "this" in
     let this_next_symbol = get_next_symbol this_var pre_mem in
-    (match Condition.M.find_opt this_next_symbol pre_mem with
+    (match Memory.find_opt this_next_symbol pre_mem with
     | Some mem -> find_target_variable_from_mem id mem
     | _ -> "")
     |> find_value_from_variable value
@@ -938,7 +936,9 @@ let find_target_value ~from_setter id { precond = pre_var, pre_mem; value; _ } =
 
 let find_target_value_from_this _id { precond = pre_var, pre_mem; value; _ } =
   let this_var = get_id_symbol pre_var "this" in
-  let this_next_symbol = get_next_symbol this_var pre_mem |> get_rh_name in
+  let this_next_symbol =
+    get_next_symbol this_var pre_mem |> Ident.string_of_symbol
+  in
   find_value_from_variable value this_next_symbol
 
 let get_p_value ~from_setter p s =
@@ -947,19 +947,19 @@ let get_p_value ~from_setter p s =
   | _ -> failwith "Fail: find the target value"
 
 let n_forward n start start_map =
-  let key_compare (k1 : Condition.rh) (k2 : Condition.rh) =
+  let key_compare (k1 : Ident.t) (k2 : Ident.t) =
     match (k1, k2) with
-    | RH_Symbol _, RH_Symbol _ -> get_symbol_num k1 < get_symbol_num k2
+    | Symbol _, Symbol _ -> get_symbol_num k1 < get_symbol_num k2
     | _ -> false
   in
   let collect_key org_key map =
-    Condition.M.fold
+    Memory.fold
       (fun field k lst ->
         if key_compare org_key k then (org_key, field, k) :: lst else lst)
       map []
   in
   let find_key key map =
-    match Condition.M.find_opt key map with
+    match Memory.find_opt key map with
     | Some value -> collect_key key value
     | _ -> []
   in
@@ -978,27 +978,30 @@ let n_forward n start start_map =
 
 let exist_field_value field value vmap memory =
   match
-    ValueMap.find_opt (get_field_symbol field value memory |> get_rh_name) vmap
+    ValueMap.find_opt
+      (get_field_symbol field value memory |> Ident.string_of_symbol)
+      vmap
   with
   | Some _ -> true
   | _ -> false
 
 let exist_any_field_value mem vmap memory =
-  Condition.M.fold
+  Memory.fold
     (fun field value check ->
       let chk = exist_field_value field value vmap memory in
       if chk then true else check)
     mem false
 
 let check_new_value symbol vmap memory =
-  match Condition.M.find_opt symbol memory with
+  match Memory.find_opt symbol memory with
   | Some x -> exist_any_field_value x vmap memory
   | _ -> false
 
 let rename_values renamed_symbol value_map =
   Logger.debug "Value Map!";
   List.map
-    (fun (old, renamed) -> (get_rh_name old, get_rh_name renamed))
+    (fun (old, renamed) ->
+      (Ident.string_of_symbol old, Ident.string_of_symbol renamed))
     renamed_symbol
   |> List.fold_left
        (fun value_map (old_sym, renamed_sym) ->
@@ -1012,19 +1015,19 @@ let rename_values renamed_symbol value_map =
 let rename_memory renamed_symbol memory =
   List.fold_left
     (fun map_mem (old_sym, renamed_sym) ->
-      Condition.M.fold
+      Memory.fold
         (fun sym map mem ->
           let new_map =
-            Condition.M.fold
+            Memory.fold
               (fun field_sym value_sym map ->
                 if value_sym = old_sym then
-                  Condition.M.remove field_sym map
-                  |> Condition.M.add field_sym renamed_sym
+                  Memory.remove field_sym map
+                  |> Memory.add field_sym renamed_sym
                 else map)
               map map
           in
           if sym = old_sym then
-            Condition.M.remove sym mem |> Condition.M.add renamed_sym new_map
+            Memory.remove sym mem |> Memory.add renamed_sym new_map
           else mem)
         map_mem map_mem)
     memory renamed_symbol
@@ -1134,15 +1137,15 @@ let check_intersect ~is_init caller_prop callee_summary vs_list =
    callee_sym_list: (symbol, value, head) list --> value is set only when symbol is index *)
 let combine_memory { precond = _, pre_mem; _ } value_sym_list callee_sym_list =
   let combine r s value trace org_mem =
-    Condition.M.add (mk_symbol r)
-      (Condition.M.add (mk_index s) (mk_symbol value) trace)
+    Memory.add (mk_symbol r)
+      (Memory.add (mk_index s) (mk_symbol value) trace)
       org_mem
   in
   let combine_memory r s value head mem =
-    match Condition.M.find_opt (mk_symbol r) mem with
+    match Memory.find_opt (mk_symbol r) mem with
     | Some m when find_real_head r pre_mem = head -> combine r s value m mem
     | None when find_real_head r pre_mem = head ->
-        combine r s value Condition.M.empty mem
+        combine r s value Memory.empty mem
     | _ -> mem
   in
   let iter_callee r mem =
@@ -1176,38 +1179,34 @@ let combine_statement_memory { precond = _, pre_mem; postcond = _, post_mem; _ }
         Some new_symbol
   in
   let add_head org_sym org_mem head target_mem =
-    let from_org_mem = Condition.M.find_opt org_sym org_mem in
-    let from_target_mem = Condition.M.find_opt head target_mem in
+    let from_org_mem = Memory.find_opt org_sym org_mem in
+    let from_target_mem = Memory.find_opt head target_mem in
     match (from_org_mem, from_target_mem) with
     | Some _, None -> org_mem
     | Some org_m, Some target_m ->
-        Condition.M.add org_sym
-          (Condition.M.merge merge_func org_m target_m)
-          org_mem
+        Memory.add org_sym (Memory.merge merge_func org_m target_m) org_mem
     | None, Some target_m ->
-        Condition.M.add org_sym
-          (Condition.M.merge merge_func Condition.M.empty target_m)
+        Memory.add org_sym
+          (Memory.merge merge_func Memory.empty target_m)
           org_mem
     | None, None -> org_mem
   in
   let add_target_sym org_sym org_mem target_sym target_mem =
-    let from_org_mem = Condition.M.find_opt org_sym org_mem in
-    let from_target_mem = Condition.M.find_opt target_sym target_mem in
+    let from_org_mem = Memory.find_opt org_sym org_mem in
+    let from_target_mem = Memory.find_opt target_sym target_mem in
     match (from_org_mem, from_target_mem) with
     | Some _, None -> org_mem
     | Some org_m, Some target_m ->
         Logger.debug "merge target sym! target_sym: %s"
-          (Condition.string_of_rh target_sym);
-        Condition.M.add target_sym
-          (Condition.M.merge merge_func org_m target_m)
-          org_mem
+          (Ident.string_of target_sym);
+        Memory.add target_sym (Memory.merge merge_func org_m target_m) org_mem
     | None, Some target_m ->
         Logger.debug "add org of target sym! org_sym: %s target_sym: %s"
-          (Condition.string_of_rh org_sym)
-          (Condition.string_of_rh target_sym);
+          (Ident.string_of org_sym)
+          (Ident.string_of target_sym);
         renamed_symbol := (target_sym, org_sym) :: !renamed_symbol;
-        Condition.M.add org_sym
-          (Condition.M.merge merge_func Condition.M.empty target_m)
+        Memory.add org_sym
+          (Memory.merge merge_func Memory.empty target_m)
           org_mem
     | None, None -> org_mem
   in
@@ -1239,17 +1238,16 @@ let combine_statement_memory { precond = _, pre_mem; postcond = _, post_mem; _ }
           "renamed head target!: org head (%s), org target (%s), new head \
            (%s), new target (%s)"
           head target_sym
-          (Condition.string_of_rh renamed_head_sym)
-          (Condition.string_of_rh renamed_target_sym);
+          (Ident.string_of renamed_head_sym)
+          (Ident.string_of renamed_target_sym);
         let mem =
           add_target_sym renamed_target_sym mem (mk_symbol target_sym)
             target_mem
         in
         if renamed_head_sym = renamed_target_sym then mem
         else
-          Condition.M.add renamed_head_sym
-            (Condition.M.add Condition.RH_Any renamed_target_sym
-               Condition.M.empty)
+          Memory.add renamed_head_sym
+            (Memory.add Ident.Any renamed_target_sym Memory.empty)
             mem)
       mem callee_sym_list
   in
@@ -1271,12 +1269,12 @@ let combine_post_memory { postcond = _, post_mem; _ } target_mem =
     | Some _, _ -> s1
     | None, Some _ -> s2
   in
-  Condition.M.fold
+  Memory.fold
     (fun head value acc ->
-      match Condition.M.find_opt head post_mem with
+      match Memory.find_opt head post_mem with
       | Some post_m ->
-          Condition.M.add head (Condition.M.merge merge_func post_m value) acc
-      | None -> Condition.M.add head value acc)
+          Memory.add head (Memory.merge merge_func post_m value) acc
+      | None -> Memory.add head value acc)
     target_mem post_mem
 
 let combine_value ~is_matched base_value vc_list =
@@ -1362,23 +1360,21 @@ let new_mem_summary new_mem new_post_mem old_summary =
   }
 
 let add_new_mmap f1 f2 org_key field map =
-  match Condition.M.find_opt org_key map with
+  match Memory.find_opt org_key map with
   | Some x ->
-      Condition.M.add org_key
-        (Condition.M.add (get_rh_name ~is_var:true field |> mk_var) f1 x)
+      Memory.add org_key
+        (Memory.add (Ident.string_of_var field |> mk_var) f1 x)
         map
-      |> Condition.M.add f1 (Condition.M.add RH_Any f2 Condition.M.empty)
+      |> Memory.add f1 (Memory.add Ident.Any f2 Memory.empty)
   | _ ->
-      Condition.M.add org_key
-        (Condition.M.add
-           (get_rh_name ~is_var:true field |> mk_var)
-           f1 Condition.M.empty)
+      Memory.add org_key
+        (Memory.add (Ident.string_of_var field |> mk_var) f1 Memory.empty)
         map
-      |> Condition.M.add f1 (Condition.M.add RH_Any f2 Condition.M.empty)
+      |> Memory.add f1 (Memory.add Ident.Any f2 Memory.empty)
 
 let mk_new_memory org_key t_key_lst t_summary new_mem =
   let func (sym, value, new_pre_mem, new_post_mem) (_, field, key) =
-    let field_name = get_rh_name ~is_var:true field in
+    let field_name = Ident.string_of_var field in
     if field_name = "" then (sym, value, new_pre_mem, new_post_mem)
     else
       let fn1 = get_fresh_num 1 in
@@ -1386,7 +1382,10 @@ let mk_new_memory org_key t_key_lst t_summary new_mem =
       let fv1 = string_of_int fn1 |> String.cat "u" |> mk_symbol in
       let fv2 = string_of_int fn2 |> String.cat "u" |> mk_symbol in
       let new_value =
-        let s = get_tail_symbol "" key (snd t_summary.precond) |> get_rh_name in
+        let s =
+          get_tail_symbol "" key (snd t_summary.precond)
+          |> Ident.string_of_symbol
+        in
         match ValueMap.find_opt s t_summary.value with
         | Some v -> v
         | None -> value
@@ -1416,22 +1415,22 @@ let rec forward count var_symbol this_symbol t_summary c_summary new_memory =
 
 let modify_summary id t_summary c_summary =
   let id = if id = "con_recv" then "this" else id in
-  let var_symbol = org_symbol id t_summary |> mk_symbol in
-  let this_symbol = org_symbol "this" c_summary |> mk_symbol in
+  let var_symbol = org_symbol id t_summary.precond |> mk_symbol in
+  let this_symbol = org_symbol "this" c_summary.precond |> mk_symbol in
   if check_new_value var_symbol t_summary.value (snd t_summary.precond) |> not
   then c_summary
   else
     let default_value = Value.{ from_error = false; value = Eq NonValue } in
     let symbol, value, pre_mem, post_mem =
       forward 1 var_symbol this_symbol t_summary c_summary
-        (RH_Any, default_value, snd c_summary.precond, snd c_summary.postcond)
+        (Ident.Any, default_value, snd c_summary.precond, snd c_summary.postcond)
     in
     {
       cost = c_summary.cost;
       relation = c_summary.relation;
       value =
         (if value = default_value then c_summary.value
-         else ValueMap.add (get_rh_name symbol) value c_summary.value);
+         else ValueMap.add (Ident.string_of_symbol symbol) value c_summary.value);
       use_field = c_summary.use_field;
       precond = (fst c_summary.precond, pre_mem);
       postcond = (fst c_summary.postcond, post_mem);
@@ -1439,10 +1438,10 @@ let modify_summary id t_summary c_summary =
     }
 
 let new_this_summary old_summary values =
-  let this_symbol = org_symbol "this" old_summary |> mk_symbol in
+  let this_symbol = org_symbol "this" old_summary.precond |> mk_symbol in
   let new_mem mem =
-    Condition.M.find this_symbol mem
-    |> Condition.M.add
+    Memory.find this_symbol mem
+    |> Memory.add
          (fst values |> fst |> mk_index)
          (snd values |> fst |> mk_symbol)
   in
@@ -1457,10 +1456,10 @@ let new_this_summary old_summary values =
     use_field = old_summary.use_field;
     precond =
       ( fst old_summary.precond,
-        Condition.M.add this_symbol new_premem (snd old_summary.precond) );
+        Memory.add this_symbol new_premem (snd old_summary.precond) );
     postcond =
       ( fst old_summary.postcond,
-        Condition.M.add this_symbol new_postmem (snd old_summary.postcond) );
+        Memory.add this_symbol new_postmem (snd old_summary.postcond) );
     args = old_summary.args;
   }
 
@@ -1468,7 +1467,7 @@ let modify_array_summary id t_summary a_summary =
   let from_error, value = get_array_size id t_summary in
   let new_value =
     ValueMap.add
-      (org_symbol "size" a_summary)
+      (org_symbol "size" a_summary.precond)
       Value.{ from_error; value = Value.Ge (Int value) }
       a_summary.value
   in
@@ -1672,16 +1671,14 @@ let get_usable_types c_name (c_info, ig) =
   else [ c_name ]
 
 let all_equal std op =
-  Condition.M.fold
+  Memory.fold
     (fun k v eq ->
-      match Condition.M.find_opt k op with
-      | Some v2 when v = v2 -> eq
-      | _ -> false)
+      match Memory.find_opt k op with Some v2 when v = v2 -> eq | _ -> false)
     std true
 
 let is_same_summary s1 s2 =
   let equal v1 v2 = all_equal v1 v2 && all_equal v2 v1 in
-  if Condition.M.equal equal (snd s1.postcond) (snd s2.postcond) then true
+  if Memory.M.equal equal (snd s1.postcond) (snd s2.postcond) then true
   else false
 
 let rec check_param p1 p2 =
@@ -1785,14 +1782,14 @@ let is_recursive_param parent_class method_name m_info =
 
 let contains_symbol symbol memory =
   let inner_contains_symbol mem =
-    Condition.M.fold
+    Memory.fold
       (fun _ hd check -> if hd = symbol then true else check)
       mem false
   in
-  match Condition.M.find_opt symbol memory with
+  match Memory.find_opt symbol memory with
   | Some _ -> true
   | _ ->
-      Condition.M.fold
+      Memory.fold
         (fun _ hd check -> check || inner_contains_symbol hd)
         memory false
 
@@ -1838,39 +1835,39 @@ let is_null symbol summary =
 
 let is_new_loc x summary =
   match x with
-  | Condition.RH_Symbol _
-    when is_null (get_rh_name x) summary |> not
+  | Ident.Symbol _
+    when is_null (Ident.string_of_symbol x) summary |> not
          && contains_symbol x (snd summary.precond) |> not ->
       true
   | _ -> false
 
 let is_new_loc_mem m summary =
-  Condition.M.fold
+  Memory.fold
     (fun _ x check -> if check || is_new_loc x summary then true else check)
     m false
 
 let is_new_loc_field field summary =
   let post_var, post_mem = summary.postcond in
   let field_var = get_id_symbol post_var field in
-  match Condition.M.find_opt field_var post_mem with
+  match Memory.find_opt field_var post_mem with
   | None -> false
   | Some m -> is_new_loc_mem m summary
 
 let ret_fld_name_of summary =
   let get_field field symbol mem acc =
     match field with
-    | Condition.RH_Var v -> (v, get_tail_symbol "" symbol mem) :: acc
+    | Ident.Var v -> (v, get_tail_symbol "" symbol mem) :: acc
     | _ -> acc
   in
   let collect_field mem full_mem =
-    Condition.M.fold
+    Memory.fold
       (fun field symbol acc_lst -> get_field field symbol full_mem acc_lst)
       mem []
   in
   let pre_var, pre_mem = summary.precond in
   let this_var = get_id_symbol pre_var "this" in
   let candidate_fields =
-    match Condition.M.find_opt (get_next_symbol this_var pre_mem) pre_mem with
+    match Memory.find_opt (get_next_symbol this_var pre_mem) pre_mem with
     | Some m -> collect_field m pre_mem
     | _ -> []
   in
@@ -1887,7 +1884,7 @@ let ret_fld_name_of summary =
 
 let is_getter_with_memory_effect m_summary fld_name =
   (* If the memory is empty, then it should not be pruned for safety. *)
-  if fld_name = "" && Condition.M.is_empty (m_summary.postcond |> snd) then true
+  if fld_name = "" && Memory.is_empty (m_summary.postcond |> snd) then true
   else
     let new_loc = is_new_loc_field "return" m_summary in
     Logger.debug "field_name (%s), new_loc (%b)" fld_name new_loc;
@@ -1973,7 +1970,7 @@ let value_symbol_list target_symbol m_summary c_summary =
   let this_symbol = get_id_symbol (fst c_summary.postcond) "this" in
   let this_next_symbol = get_next_symbol this_symbol (snd c_summary.postcond) in
   [
-    ( this_next_symbol |> get_rh_name,
+    ( this_next_symbol |> Ident.string_of_symbol,
       find_relation target_symbol m_summary.relation );
   ]
 
@@ -1988,16 +1985,16 @@ let check_sat target_symbol m_summary lst (check_summary, c_summary) =
         (value_symbol_list target_symbol m_summary c_summary)
         target_head_symbols
     in
-    Logger.debug "target_mem: %s" (Condition.string_of (snd m_summary.precond));
-    Logger.debug "org_mem: %s" (Condition.string_of (snd c_summary.precond));
-    Logger.debug "new_mem: %s" (Condition.string_of new_mem);
+    Logger.debug "target_mem: %s" (Memory.string_of (snd m_summary.precond));
+    Logger.debug "org_mem: %s" (Memory.string_of (snd c_summary.precond));
+    Logger.debug "new_mem: %s" (Memory.string_of new_mem);
     let renamed_new_mem = rename_memory renamed_symbols new_mem in
     let renamed_new_post_mem =
       combine_post_memory c_summary new_mem |> rename_memory renamed_symbols
     in
-    Logger.debug "renamed_new_mem: %s\n" (Condition.string_of renamed_new_mem);
+    Logger.debug "renamed_new_mem: %s\n" (Memory.string_of renamed_new_mem);
     Logger.debug "renamed_new_post_mem: %s\n"
-      (Condition.string_of renamed_new_post_mem);
+      (Memory.string_of renamed_new_post_mem);
     if List.filter (fun (_, c) -> c = TRUE) check_summary = [] then (
       Logger.debug "DONT_MATTER";
       ( DONT_MATTER,
@@ -2028,7 +2025,7 @@ let satisfied_c m_summary id candidate_constructor summary =
   let c_summaries = get_summaries candidate_constructor summary in
   let target_symbol =
     get_target_symbol (if is_receiver id then "this" else id) m_summary
-    |> get_rh_name
+    |> Ident.string_of_symbol
   in
   if target_symbol = "" then [ (DONT_MATTER, List.hd c_summaries) ]
   else
@@ -2111,11 +2108,11 @@ let is_arg_constant symbol value =
   | None -> false
 
 let is_arg_not_found symbol (_, premem) =
-  match Condition.M.find_opt symbol premem with Some _ -> false | None -> true
+  match Memory.find_opt symbol premem with Some _ -> false | None -> true
 
 let is_arg_passing symbol (_, premem) =
-  match Condition.M.find_opt symbol premem with
-  | Some value -> Condition.M.is_empty value
+  match Memory.find_opt symbol premem with
+  | Some value -> Memory.is_empty value
   | None -> false
 
 (* if arg is constant then arg should not be found in precondition,

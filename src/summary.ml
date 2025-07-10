@@ -5,14 +5,14 @@ module JsonUtil = Yojson.Safe.Util
 (* calculate memory effect for method *)
 let contains_symbol symbol memory =
   let inner_contains_symbol mem =
-    Condition.M.fold
+    Memory.fold
       (fun _ hd check -> if hd = symbol then true else check)
       mem false
   in
-  match Condition.M.find_opt symbol memory with
+  match Memory.find_opt symbol memory with
   | Some _ -> true
   | _ ->
-      Condition.M.fold
+      Memory.fold
         (fun _ hd check -> check || inner_contains_symbol hd)
         memory false
 
@@ -24,15 +24,15 @@ let is_new_loc_field field summary =
   in
   let _, post_mem = summary.postcond in
   let field_var = get_tail_symbol "" field post_mem in
-  match Condition.M.find_opt field_var post_mem with
+  match Memory.find_opt field_var post_mem with
   | None -> false
   | Some m ->
-      Condition.M.fold
+      Memory.fold
         (fun _ x check ->
           match x with
-          | Condition.RH_Symbol _ ->
+          | Ident.Symbol _ ->
               if
-                is_null (get_rh_name x) |> not
+                is_null (Ident.string_of_symbol x) |> not
                 && contains_symbol x (snd summary.precond) |> not
               then true
               else check
@@ -42,13 +42,13 @@ let is_new_loc_field field summary =
 let collect_new_loc_field summary =
   let post_var, post_mem = summary.postcond in
   let post_this = get_next_symbol (get_id_symbol post_var "this") post_mem in
-  match Condition.M.find_opt post_this post_mem with
+  match Memory.find_opt post_this post_mem with
   | None -> []
   | Some value_map ->
-      Condition.M.fold
+      Memory.fold
         (fun fld sym fld_lst ->
           match fld with
-          | Condition.RH_Var id ->
+          | Ident.Var id ->
               if is_new_loc_field sym summary then id :: fld_lst else fld_lst
           | _ -> fld_lst)
         value_map []

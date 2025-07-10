@@ -470,10 +470,10 @@ module DUG = struct
 
   let get_field_from_ufmap target var ufmap =
     let symbol =
-      Condition.M.fold
+      VariableMap.fold
         (fun sym id find ->
-          match id with Condition.RH_Var i when i = target -> sym | _ -> find)
-        var Condition.RH_Any
+          match id with Ident.Var i when i = target -> sym | _ -> find)
+        var Ident.Any
     in
     match UseFieldMap.M.find_opt symbol ufmap with
     | Some f -> f
@@ -568,10 +568,10 @@ module DUG = struct
   (* 4 *)
   let get_field_from_ufmap target var ufmap =
     let symbol =
-      Condition.M.fold
+      VariableMap.fold
         (fun sym id find ->
-          match id with Condition.RH_Var i when i = target -> sym | _ -> find)
-        var Condition.RH_Any
+          match id with Ident.Var i when i = target -> sym | _ -> find)
+        var Ident.Any
     in
     match UseFieldMap.M.find_opt symbol ufmap with
     | Some f -> f

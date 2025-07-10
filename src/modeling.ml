@@ -8,108 +8,106 @@ module CI = ClassInfoMap
 
 (* # of formal parameters is 0 *)
 let zero_var =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+  VariableMap.empty |> VariableMap.add (Ident.Symbol "v1") (Ident.Var "this")
 
 (* # of formal parameters is 1
    p is parameter's name *)
 let one_var p =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var p)
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+  VariableMap.empty
+  |> VariableMap.add (Ident.Symbol "v2") (Ident.Var p)
+  |> VariableMap.add (Ident.Symbol "v1") (Ident.Var "this")
 
 (* # of formal parameters is 2
    p1 is first parameter's name
    p2 is second parameter's name *)
 let two_var p1 p2 =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var p2)
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var p1)
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+  VariableMap.empty
+  |> VariableMap.add (Ident.Symbol "v3") (Ident.Var p2)
+  |> VariableMap.add (Ident.Symbol "v2") (Ident.Var p1)
+  |> VariableMap.add (Ident.Symbol "v1") (Ident.Var "this")
 
 (* # of formal parameters is 3
    p1 is first parameter's name
    p2 is second parameter's name
    p3 is third parameter's name *)
 let three_var p1 p2 p3 =
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v4") (Condition.RH_Var p3)
-  |> Condition.M.add (Condition.RH_Symbol "v3") (Condition.RH_Var p2)
-  |> Condition.M.add (Condition.RH_Symbol "v2") (Condition.RH_Var p1)
-  |> Condition.M.add (Condition.RH_Symbol "v1") (Condition.RH_Var "this")
+  VariableMap.empty
+  |> VariableMap.add (Ident.Symbol "v4") (Ident.Var p3)
+  |> VariableMap.add (Ident.Symbol "v3") (Ident.Var p2)
+  |> VariableMap.add (Ident.Symbol "v2") (Ident.Var p1)
+  |> VariableMap.add (Ident.Symbol "v1") (Ident.Var "this")
 
 (* when # of formal parameters is 0, post_mem is same to pre_mem *)
 let zero_mem =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v2") value_map)
+  let value_map = Memory.empty in
+  Memory.empty
+  |> Memory.add (Ident.Symbol "v1")
+       (Memory.add Ident.Any (Ident.Symbol "v2") value_map)
 
 let one_premem p =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v3") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (value_map
-       |> Condition.M.add (Condition.RH_Var p) (Condition.RH_Symbol "v5"))
+  let value_map = Memory.empty in
+  Memory.empty
+  |> Memory.add (Ident.Symbol "v1")
+       (Memory.add Ident.Any (Ident.Symbol "v3") value_map)
+  |> Memory.add (Ident.Symbol "v2")
+       (Memory.add Ident.Any (Ident.Symbol "v4") value_map)
+  |> Memory.add (Ident.Symbol "v3")
+       (value_map |> Memory.add (Ident.Var p) (Ident.Symbol "v5"))
 
 let one_postmem p =
-  let value_map = Condition.M.empty in
+  let value_map = Memory.empty in
   one_premem p
-  |> Condition.M.add (Condition.RH_Symbol "v5")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
+  |> Memory.add (Ident.Symbol "v5")
+       (Memory.add Ident.Any (Ident.Symbol "v4") value_map)
 
 let two_premem p1 p2 =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v4") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v4")
+  let value_map = Memory.empty in
+  Memory.empty
+  |> Memory.add (Ident.Symbol "v1")
+       (Memory.add Ident.Any (Ident.Symbol "v4") value_map)
+  |> Memory.add (Ident.Symbol "v2")
+       (Memory.add Ident.Any (Ident.Symbol "v5") value_map)
+  |> Memory.add (Ident.Symbol "v3")
+       (Memory.add Ident.Any (Ident.Symbol "v6") value_map)
+  |> Memory.add (Ident.Symbol "v4")
        (value_map
-       |> Condition.M.add (Condition.RH_Var p1) (Condition.RH_Symbol "v7")
-       |> Condition.M.add (Condition.RH_Var p2) (Condition.RH_Symbol "v8"))
+       |> Memory.add (Ident.Var p1) (Ident.Symbol "v7")
+       |> Memory.add (Ident.Var p2) (Ident.Symbol "v8"))
 
 let two_postmem p1 p2 =
-  let value_map = Condition.M.empty in
+  let value_map = Memory.empty in
   two_premem p1 p2
-  |> Condition.M.add (Condition.RH_Symbol "v7")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v8")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
+  |> Memory.add (Ident.Symbol "v7")
+       (Memory.add Ident.Any (Ident.Symbol "v5") value_map)
+  |> Memory.add (Ident.Symbol "v8")
+       (Memory.add Ident.Any (Ident.Symbol "v6") value_map)
 
 let three_premem p1 p2 p3 =
-  let value_map = Condition.M.empty in
-  Condition.M.empty
-  |> Condition.M.add (Condition.RH_Symbol "v1")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v5") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v2")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v3")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v7") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v4")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v8") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v5")
+  let value_map = Memory.empty in
+  Memory.empty
+  |> Memory.add (Ident.Symbol "v1")
+       (Memory.add Ident.Any (Ident.Symbol "v5") value_map)
+  |> Memory.add (Ident.Symbol "v2")
+       (Memory.add Ident.Any (Ident.Symbol "v6") value_map)
+  |> Memory.add (Ident.Symbol "v3")
+       (Memory.add Ident.Any (Ident.Symbol "v7") value_map)
+  |> Memory.add (Ident.Symbol "v4")
+       (Memory.add Ident.Any (Ident.Symbol "v8") value_map)
+  |> Memory.add (Ident.Symbol "v5")
        (value_map
-       |> Condition.M.add (Condition.RH_Var p1) (Condition.RH_Symbol "v9")
-       |> Condition.M.add (Condition.RH_Var p2) (Condition.RH_Symbol "v10")
-       |> Condition.M.add (Condition.RH_Var p3) (Condition.RH_Symbol "v11"))
+       |> Memory.add (Ident.Var p1) (Ident.Symbol "v9")
+       |> Memory.add (Ident.Var p2) (Ident.Symbol "v10")
+       |> Memory.add (Ident.Var p3) (Ident.Symbol "v11"))
 
 let three_postmem p1 p2 p3 =
-  let value_map = Condition.M.empty in
+  let value_map = Memory.empty in
   three_premem p1 p2 p3
-  |> Condition.M.add (Condition.RH_Symbol "v9")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v6") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v10")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v7") value_map)
-  |> Condition.M.add (Condition.RH_Symbol "v11")
-       (Condition.M.add Condition.RH_Any (Condition.RH_Symbol "v8") value_map)
+  |> Memory.add (Ident.Symbol "v9")
+       (Memory.add Ident.Any (Ident.Symbol "v6") value_map)
+  |> Memory.add (Ident.Symbol "v10")
+       (Memory.add Ident.Any (Ident.Symbol "v7") value_map)
+  |> Memory.add (Ident.Symbol "v11")
+       (Memory.add Ident.Any (Ident.Symbol "v8") value_map)
 
 let map_put_summary =
   let map_put_var = two_var "key" "value" in

@@ -392,10 +392,10 @@ let find_all_global_var_list c_name i_info =
         [] info
 
 let compare_global_var c_name t_var s_trace =
-  Condition.M.fold
+  Memory.fold
     (fun head _ gvar ->
       match head with
-      | Condition.RH_Var var when var = t_var -> c_name ^ "." ^ var |> mk_some
+      | Ident.Var var when var = t_var -> c_name ^ "." ^ var |> mk_some
       | _ -> gvar)
     s_trace None
 
@@ -405,7 +405,7 @@ let find_target_global_var c_name t_var mem summary common_gvs =
     (is_from_error false (List.hd summaries), DUGIR.GlobalConstant gv)
   in
   let get_compared_global_var v init_summary =
-    (Condition.M.fold (fun _ s_trace found_gv ->
+    (Memory.fold (fun _ s_trace found_gv ->
          match compare_global_var c_name v s_trace with
          | Some gv ->
              if List.mem (0, DUGIR.GlobalConstant gv) common_gvs then
@@ -425,14 +425,14 @@ let global_var_list class_name t_summary summary i_info =
   let get_gv_symbol var symbol found =
     (* e.g., var: c.Class, class_name: a.b.c.Class *)
     match var with
-    | Condition.RH_Var var
+    | Ident.Var var
       when Str.string_match (".*\\." ^ var |> Str.regexp) class_name 0 ->
-        get_rh_name symbol |> mk_some
+        Ident.string_of_symbol symbol |> mk_some
     | _ -> found
   in
   let vars, mem = t_summary.precond in
   let t_var =
-    Condition.M.fold
+    VariableMap.fold
       (fun symbol var find_var -> get_gv_symbol var symbol find_var)
       vars None
   in
@@ -451,14 +451,14 @@ let global_var_list class_name t_summary summary i_info =
 let modify_id_to_this ?(is_s = false) id vars =
   if is_s then vars
   else
-    Condition.M.fold
+    VariableMap.fold
       (fun symbol symbol_id new_vars ->
         match symbol_id with
-        | Condition.RH_Var v when v = id ->
-            Condition.M.add symbol (mk_var "this") new_vars
-        | Condition.RH_Var v when v = "this" -> new_vars
-        | _ -> Condition.M.add symbol symbol_id new_vars)
-      vars Condition.M.empty
+        | Ident.Var v when v = id ->
+            VariableMap.add symbol (mk_var "this") new_vars
+        | Ident.Var v when v = "this" -> new_vars
+        | _ -> VariableMap.add symbol symbol_id new_vars)
+      vars VariableMap.empty
 
 let get_param ~is_s ?(is_error_entry = false) v summary =
   let get_field id =
@@ -826,8 +826,12 @@ let get_cname f = DUGIR.ClassName (DUG.get_func f).DUGIR.typ
 let is_matched_variable already_var new_var =
   let summary1 = (DUG.get_v already_var).summary in
   let summary2 = (DUG.get_v new_var).summary in
-  let this_sym1 = get_id_symbol (fst summary1.precond) "this" |> get_rh_name in
-  let this_sym2 = get_id_symbol (fst summary2.precond) "this" |> get_rh_name in
+  let this_sym1 =
+    get_id_symbol (fst summary1.precond) "this" |> Ident.string_of_symbol
+  in
+  let this_sym2 =
+    get_id_symbol (fst summary2.precond) "this" |> Ident.string_of_symbol
+  in
   let check_intersect =
     check_intersect ~is_init:true summary1 summary2 [ (this_sym1, this_sym2) ]
   in

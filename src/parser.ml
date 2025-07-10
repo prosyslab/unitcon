@@ -17,12 +17,12 @@ let mk_rh_type v =
   let check_symbol v = Str.string_match Regexp.symbol v 0 in
   let check_index v = Str.string_match Regexp.index v 0 in
   let check_any_value v = Str.string_match Regexp.any v 0 in
-  if check_symbol v then Condition.RH_Symbol v
+  if check_symbol v then Ident.Symbol v
   else if check_index v then
-    Condition.RH_Index
+    Ident.Index
       (Regexp.first_rm Regexp.open_bk v |> Regexp.first_rm Regexp.end_bk)
-  else if check_any_value v then Condition.RH_Any
-  else Condition.RH_Var v
+  else if check_any_value v then Ident.Any
+  else Ident.Var v
 
 let rec get_type t =
   match t with
@@ -182,10 +182,10 @@ let parse_value is_err v mmap =
 
 let make_init_value is_err this mem =
   let implied_value = value_maker is_err (Value.Neq Null) in
-  Condition.M.fold
+  Memory.fold
     (fun head tail val_map ->
-      if Condition.M.cardinal tail > 1 && this <> head then
-        ValueMap.add (get_rh_name head) implied_value val_map
+      if Memory.cardinal tail > 1 && this <> head then
+        ValueMap.add (Ident.string_of_symbol head) implied_value val_map
       else val_map)
     mem ValueMap.empty
 
@@ -201,7 +201,7 @@ let parse_citv is_err pre_var mem citv =
       init_value value_list
 
 let parse_var var =
-  if var = "[{ }]" then Condition.M.empty
+  if var = "[{ }]" then VariableMap.empty
   else
     let var_list =
       Regexp.global_rm Regexp.open_bk var
@@ -217,8 +217,8 @@ let parse_var var =
         else if List.tl i_and_s = [] then mmap
         else
           let symbol = List.tl i_and_s |> List.hd |> Regexp.rm_space in
-          Condition.M.add (mk_rh_type symbol) (Condition.RH_Var id) mmap)
-      Condition.M.empty var_list
+          VariableMap.add (mk_rh_type symbol) (Ident.Var id) mmap)
+      VariableMap.empty var_list
 
 let rec mk_ref_map ref_trace mmap =
   match ref_trace with
@@ -229,7 +229,7 @@ let rec mk_ref_map ref_trace mmap =
         try
           let field = List.hd ref |> Regexp.rm_space |> mk_rh_type in
           let value = List.tl ref |> List.hd |> Regexp.rm_space |> mk_rh_type in
-          Condition.M.add field value mmap |> mk_ref_map tl
+          Memory.add field value mmap |> mk_ref_map tl
         with _ -> mk_ref_map tl mmap)
   | [] -> mmap
 
@@ -250,11 +250,11 @@ let parse_ref_mem ref mmap =
       |> Regexp.rm_space
     in
     let trace = List.tl ref_trace |> List.cons partial_tl in
-    let trace = mk_ref_map trace Condition.M.empty in
-    Condition.M.add (mk_rh_type head) trace mmap
+    let trace = mk_ref_map trace Memory.empty in
+    Memory.add (mk_rh_type head) trace mmap
 
 let parse_mem mem =
-  if mem = "[{ }]" then Condition.M.empty
+  if mem = "[{ }]" then Memory.empty
   else
     let mem =
       Regexp.global_rm Regexp.remain_symbol2 mem
@@ -263,9 +263,7 @@ let parse_mem mem =
       |> Regexp.global_rm Regexp.o_bk
       |> Regexp.rm_space |> Str.split Regexp.c_bk
     in
-    List.fold_left
-      (fun mmap ref -> parse_ref_mem ref mmap)
-      Condition.M.empty mem
+    List.fold_left (fun mmap ref -> parse_ref_mem ref mmap) Memory.empty mem
 
 let parse_args args =
   let arg_list = Str.split Regexp.space args in
