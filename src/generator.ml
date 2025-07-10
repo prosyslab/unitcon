@@ -120,6 +120,11 @@ let get_formal_params m_name map =
   | Some info -> info.formal_params
   | None -> []
 
+let get_filename m_name map =
+  match MethodInfoMap.find_opt m_name map with
+  | Some f -> f.filename
+  | None -> ""
+
 let get_setters c_name map =
   match SetterMap.M.find_opt c_name map with Some lst -> lst | None -> []
 
@@ -174,6 +179,16 @@ let special_class_list =
     "java.lang.Class";
   ]
 
+let get_symbol_num symbol =
+  match
+    Regexp.first_rm Regexp.symbol_prefix (get_rh_name symbol)
+    |> int_of_string_opt
+  with
+  | Some i -> i
+  | _ -> 0
+
+let get_fresh_num prev_num = prev_num + 1
+
 let rec find_relation given_symbol relation =
   match RelationMap.find_opt given_symbol relation with
   | Some find_symbol -> find_relation find_symbol relation
@@ -185,11 +200,16 @@ let get_target_symbol id { precond = pre_var, pre_mem; _ } =
     | Some field_symbol -> field_symbol
     | None -> get_id_symbol pre_var id
   in
-  let this_symbol = get_id_symbol pre_var "this" in
-  let this_tail_symbol = get_tail_symbol "this" this_symbol pre_mem in
-  match Condition.M.find_opt this_tail_symbol pre_mem with
-  | None -> this_symbol
-  | Some mem -> get_target_id_symbol mem
+  let id_symbol = get_id_symbol pre_var id in
+  let id_next_symbol = get_next_symbol id_symbol pre_mem in
+  match Condition.M.find_opt id_next_symbol pre_mem with
+  | None -> (
+      let this_symbol = get_id_symbol pre_var "this" in
+      let this_next_symbol = get_next_symbol this_symbol pre_mem in
+      match Condition.M.find_opt this_next_symbol pre_mem with
+      | None -> this_symbol
+      | Some mem -> get_target_id_symbol mem)
+  | Some _ -> id_next_symbol
 
 let find_variable head_symbol variables =
   match Condition.M.find_opt (mk_symbol head_symbol) variables with
@@ -203,6 +223,28 @@ let more_find_head_symbol head_symbol _ memory =
     | _ -> false
   in
   Condition.M.exists is_head_symbol memory
+
+let fold_map map num =
+  let get_gt_num n1 n2 = if n1 > n2 then n1 else n2 in
+  let fold_mem mem num =
+    Condition.M.fold
+      (fun _ value n ->
+        let new_num = get_symbol_num value in
+        get_gt_num new_num n)
+      mem num
+  in
+  Condition.M.fold
+    (fun sym mem n ->
+      let new_num = get_symbol_num sym in
+      let new_num = fold_mem mem new_num in
+      get_gt_num new_num n)
+    map num
+
+let get_new_symbol_num num mem =
+  let num = fold_map mem num in
+  num + 1
+
+let get_new_symbol num = mk_symbol ("v" ^ string_of_int num)
 
 let get_symbol_list values =
   ValueMap.fold (fun symbol _ symbol_list -> symbol :: symbol_list) values []
@@ -248,6 +290,39 @@ let get_head_symbol_list (_, memory) symbols =
   List.fold_left
     (fun list symbol ->
       let head_sym_list = get_head_symbol symbol memory in
+      if head_sym_list = [] then (symbol, None, "") :: list
+      else List.fold_left (fun list elem -> elem :: list) list head_sym_list)
+    [] symbols
+
+(* (symbol, value, head)
+   value is set only when the symbol is RH_Index *)
+let get_prev_head_symbol symbol mem =
+  let get_heads real_head head traces lst =
+    match head with
+    | Condition.RH_Index i when symbol = i ->
+        (symbol, get_next_symbol traces mem |> get_rh_name |> mk_some, real_head)
+        :: lst
+    | _ -> lst
+  in
+  Condition.M.fold
+    (fun hd_symbol trace hd_list ->
+      let hd = get_rh_name hd_symbol in
+      Condition.M.fold
+        (fun trace_hd trace_tl hd_list ->
+          match trace_tl with
+          | Condition.RH_Symbol s when symbol = s -> [ (symbol, None, hd) ]
+          | _ -> get_heads hd trace_hd trace_tl hd_list)
+        trace hd_list)
+    mem []
+
+(* memory: Condition.mem *)
+(* return: (callee_actual_symbol * head_symbol) list *)
+(* if head = "" then this symbol can be any value *)
+let get_prev_head_symbol_list (_, memory) symbols =
+  List.fold_left
+    (fun list symbol ->
+      Logger.debug "get_prev_head_symbol_list symbol: %s" symbol;
+      let head_sym_list = get_prev_head_symbol symbol memory in
       if head_sym_list = [] then (symbol, None, "") :: list
       else List.fold_left (fun list elem -> elem :: list) list head_sym_list)
     [] symbols
@@ -329,7 +404,7 @@ let get_params_symbol m_name m_info { precond = pre_var, pre_mem; _ } =
           :: lst)
     [] params
 
-let get_value_symbol key sym c t_mem c_mem =
+let get_value_symbol key sym c c_mem t_mem =
   let get_indirect_sym mem =
     match Condition.M.find_opt Condition.RH_Any mem with
     | Some s -> s
@@ -343,36 +418,39 @@ let get_value_symbol key sym c t_mem c_mem =
   let field_name = get_rh_name ~is_var:true key in
   let tail_t_symbol = get_tail_symbol field_name sym t_mem |> get_rh_name in
   let tail_c_symbol = get_tail_symbol field_name c_sym c_mem |> get_rh_name in
-  (tail_t_symbol, tail_c_symbol)
+  Logger.debug "get_value_symbol: tail_c (%s), tail_t (%s)" tail_c_symbol
+    tail_t_symbol;
+  (tail_c_symbol, tail_t_symbol)
 
-let get_matched_value_symbol t_id t_symbol t_mem c_id c_symbol c_mem =
+let get_matched_value_symbol c_id c_symbol c_mem t_id t_symbol t_mem =
   let t_symbol = get_field_symbol t_id (mk_symbol t_symbol) t_mem in
   let c_symbol = get_field_symbol c_id (mk_symbol c_symbol) c_mem in
   let c_t_mem = Condition.M.find_opt t_symbol t_mem in
   let c_c_mem = Condition.M.find_opt c_symbol c_mem in
-  match (c_t_mem, c_c_mem) with
+  match (c_c_mem, c_t_mem) with
+  | None, None -> []
   | None, _ -> []
   | _, None -> []
-  | Some t, Some c ->
+  | Some c, Some t ->
       let get_value_symbols key sym lst =
-        get_value_symbol key sym c t_mem c_mem :: lst
+        get_value_symbol key sym c c_mem t_mem :: lst
       in
       Condition.M.fold get_value_symbols t []
 
-let get_value_symbol_list ~is_init t_summary c_summary vs_list =
+let get_value_symbol_list ~is_init c_summary t_summary vs_list =
   if is_init then
     (* this, this *)
-    let t_symbol, c_symbol = List.hd vs_list in
+    let c_symbol, t_symbol = List.hd vs_list in
     if c_symbol = "" then []
     else
       let t_var, t_mem = t_summary.precond in
       let c_var, c_mem = c_summary.precond in
       let c_t_mem = Condition.M.find_opt (mk_symbol t_symbol) t_var in
       let c_c_mem = Condition.M.find_opt (mk_symbol c_symbol) c_var in
-      match (c_t_mem, c_c_mem) with
-      | None, _ | _, None -> [ (t_symbol, c_symbol) ]
-      | Some t_id, Some c_id ->
-          get_matched_value_symbol t_id t_symbol t_mem c_id c_symbol c_mem
+      match (c_c_mem, c_t_mem) with
+      | None, _ | _, None -> [ (c_symbol, t_symbol) ]
+      | Some c_id, Some t_id ->
+          get_matched_value_symbol c_id c_symbol c_mem t_id t_symbol t_mem
   else vs_list
 
 let is_from_error from_func summary =
@@ -390,9 +468,7 @@ let contains_used_in_error base_set target_set =
 
 let vmap_maker symbol target_vmap from_error =
   let value = ValueMap.find symbol target_vmap in
-  ValueMap.add symbol
-    Value.{ from_error; value = value.Value.value }
-    target_vmap
+  ValueMap.add symbol Value.{ value with from_error } target_vmap
 
 let get_array_size array summary =
   let _, memory = summary.precond in
@@ -815,65 +891,55 @@ let get_target_var t_sym mem =
       else find_variable)
     mem None
 
-let get_symbol_num symbol =
-  match
-    Regexp.first_rm Regexp.symbol (get_rh_name symbol) |> int_of_string_opt
-  with
-  | Some i -> i
-  | _ -> 0
-
-let get_fresh_num prev_num = prev_num + 1
-
-let find_value_from_variable memory value target_variable =
-  let get_tail_symbol _ trace found =
-    match trace with Condition.RH_Symbol s -> s | _ -> found
-  in
-  let target_variable =
-    Condition.M.fold
-      (fun symbol symbol_trace find_variable ->
-        let symbol = get_rh_name symbol in
-        if symbol = target_variable then
-          Condition.M.fold get_tail_symbol symbol_trace find_variable
-        else find_variable)
-      memory target_variable
-  in
+let find_value_from_variable value target_variable =
+  Logger.debug "org target_variable (%s)" target_variable;
   ValueMap.fold
     (fun symbol value find_value ->
       if symbol = target_variable then value else find_value)
     value
     Value.{ from_error = false; value = Value.Eq NonValue }
 
-let find_target_value id { precond = pre_var, pre_mem; value; _ } =
+let check_target_symbol default_var symbol =
+  match symbol with Condition.RH_Symbol s -> s | _ -> default_var
+
+let find_target_variable_from_mem id mem =
+  Condition.M.fold
+    (fun symbol value find_variable ->
+      match symbol with
+      | Condition.RH_Var var when var = id ->
+          check_target_symbol find_variable value
+      | _ -> find_variable)
+    mem ""
+
+let find_target_variable_from_var id var =
   Condition.M.fold
     (fun symbol variable find_variable ->
       match variable with
-      | Condition.RH_Var var when var = id -> (
-          match symbol with Condition.RH_Symbol s -> s | _ -> find_variable)
+      | Condition.RH_Var var when var = id ->
+          check_target_symbol find_variable symbol
       | _ -> find_variable)
-    pre_var ""
-  |> find_value_from_variable pre_mem value
+    var ""
 
-let find_target_value_from_this id summary =
-  let get_directed_field_symbol field symbol found =
-    match field with
-    | Condition.RH_Var v when v = id -> get_rh_name symbol
-    | _ -> found
-  in
-  let this_sym default =
-    match
-      Condition.M.find_opt
-        (org_symbol "this" summary |> mk_symbol)
-        (snd summary.precond)
-    with
-    | Some this_mem ->
-        Condition.M.fold get_directed_field_symbol this_mem default
-    | _ -> default
-  in
-  this_sym "" |> find_value_from_variable (snd summary.precond) summary.value
+let find_target_value ~from_setter id { precond = pre_var, pre_mem; value; _ } =
+  Logger.debug "find_target_value id: %s" id;
+  if from_setter then
+    let this_var = get_id_symbol pre_var "this" in
+    let this_next_symbol = get_next_symbol this_var pre_mem in
+    (match Condition.M.find_opt this_next_symbol pre_mem with
+    | Some mem -> find_target_variable_from_mem id mem
+    | _ -> "")
+    |> find_value_from_variable value
+  else
+    find_target_variable_from_var id pre_var |> find_value_from_variable value
 
-let get_p_value p s =
+let find_target_value_from_this _id { precond = pre_var, pre_mem; value; _ } =
+  let this_var = get_id_symbol pre_var "this" in
+  let this_next_symbol = get_next_symbol this_var pre_mem |> get_rh_name in
+  find_value_from_variable value this_next_symbol
+
+let get_p_value ~from_setter p s =
   match p with
-  | Var (_, id) -> find_target_value id s
+  | Var (_, id) -> find_target_value ~from_setter id s
   | _ -> failwith "Fail: find the target value"
 
 let n_forward n start start_map =
@@ -925,11 +991,52 @@ let check_new_value symbol vmap memory =
   | Some x -> exist_any_field_value x vmap memory
   | _ -> false
 
+let rename_values renamed_symbol value_map =
+  Logger.debug "Value Map!";
+  List.map
+    (fun (old, renamed) -> (get_rh_name old, get_rh_name renamed))
+    renamed_symbol
+  |> List.fold_left
+       (fun value_map (old_sym, renamed_sym) ->
+         Logger.debug "old_sym: %s, renamed_sym: %s" old_sym renamed_sym;
+         match ValueMap.find_opt old_sym value_map with
+         | Some v ->
+             ValueMap.remove old_sym value_map |> ValueMap.add renamed_sym v
+         | _ -> value_map)
+       value_map
+
+let rename_memory renamed_symbol memory =
+  List.fold_left
+    (fun map_mem (old_sym, renamed_sym) ->
+      Condition.M.fold
+        (fun sym map mem ->
+          let new_map =
+            Condition.M.fold
+              (fun field_sym value_sym map ->
+                if value_sym = old_sym then
+                  Condition.M.remove field_sym map
+                  |> Condition.M.add field_sym renamed_sym
+                else map)
+              map map
+          in
+          if sym = old_sym then
+            Condition.M.remove sym mem |> Condition.M.add renamed_sym new_map
+          else mem)
+        map_mem map_mem)
+    memory renamed_symbol
+
 let check_intersect_one caller_sym callee_sym caller_prop callee_summary =
+  Logger.debug "check_intersect_one: caller_symbol (%s), callee_symbol (%s)"
+    caller_sym callee_sym;
+  Logger.debug "caller_summary: %s" (ValueMap.string_of caller_prop.value);
+  Logger.debug "callee_summary: %s" (ValueMap.string_of callee_summary.value);
   let caller_value_opt = ValueMap.find_opt caller_sym caller_prop.value in
   let callee_value_opt = ValueMap.find_opt callee_sym callee_summary.value in
   match (caller_value_opt, callee_value_opt) with
   | Some caller_value, Some callee_value -> (
+      Logger.debug "both caller_value (%s), callee_value (%s) "
+        (Value.string_of caller_value)
+        (Value.string_of callee_value);
       let return_caller check =
         match check with
         | TRUE | DONT_MATTER ->
@@ -998,13 +1105,15 @@ let check_intersect_one caller_sym callee_sym caller_prop callee_summary =
       | _, Neq _ ->
           return_caller TRUE)
   | None, Some callee_value ->
-      ( ValueMap.add caller_sym callee_value caller_prop.value
-        |> ValueMap.add callee_sym callee_value,
-        DONT_MATTER )
+      Logger.debug "only callee_value (%s)" (Value.string_of callee_value);
+      (ValueMap.add caller_sym callee_value callee_summary.value, DONT_MATTER)
   | Some caller_value, None ->
       (* constructor prop propagation *)
-      (ValueMap.add callee_sym caller_value callee_summary.value, DONT_MATTER)
-  | None, None -> (caller_prop.value, DONT_MATTER)
+      Logger.debug "only caller_value (%s)" (Value.string_of caller_value);
+      (ValueMap.add caller_sym caller_value callee_summary.value, DONT_MATTER)
+  | None, None ->
+      Logger.debug "not found...";
+      (callee_summary.value, DONT_MATTER)
 
 let check_intersect ~is_init caller_prop callee_summary vs_list =
   let vs_list =
@@ -1042,12 +1151,154 @@ let combine_memory { precond = _, pre_mem; _ } value_sym_list callee_sym_list =
   in
   List.fold_left (fun mem (r, _) -> iter_callee r mem) pre_mem value_sym_list
 
-let combine_value base_value vc_list =
-  let merge_f _ v1 v2 =
-    match (v1, v2) with
+(* value_sym_list: (caller, callee) list
+   callee_sym_list: (symbol, value, head) list --> if head is "" then do not combine memory
+   if org_mem (pre_mem) don't contain the memory of head or target, add memory of head or target
+*)
+let combine_statement_memory { precond = _, pre_mem; postcond = _, post_mem; _ }
+    { precond = _, target_mem; _ } value_sym_list callee_sym_list =
+  let renamed_symbol = ref [] in
+  let init_new_symbol =
+    ref (get_new_symbol_num (get_new_symbol_num 1 post_mem) target_mem)
+  in
+  let merge_func _sym s1 s2 =
+    match (s1, s2) with
     | None, None -> None
-    | Some _, _ -> v1
-    | None, Some _ -> v2
+    | Some _s, _ -> s1
+    | None, Some s ->
+        let new_symbol = get_new_symbol !init_new_symbol in
+        renamed_symbol := (s, new_symbol) :: !renamed_symbol;
+        incr init_new_symbol;
+        Some new_symbol
+  in
+  let add_head org_sym org_mem head target_mem =
+    let from_org_mem = Condition.M.find_opt org_sym org_mem in
+    let from_target_mem = Condition.M.find_opt head target_mem in
+    match (from_org_mem, from_target_mem) with
+    | Some _, None -> org_mem
+    | Some org_m, Some target_m ->
+        Condition.M.add org_sym
+          (Condition.M.merge merge_func org_m target_m)
+          org_mem
+    | None, Some target_m ->
+        Condition.M.add org_sym
+          (Condition.M.merge merge_func Condition.M.empty target_m)
+          org_mem
+    | None, None -> org_mem
+  in
+  let add_target_sym org_sym org_mem target_sym target_mem =
+    let from_org_mem = Condition.M.find_opt org_sym org_mem in
+    let from_target_mem = Condition.M.find_opt target_sym target_mem in
+    match (from_org_mem, from_target_mem) with
+    | Some _, None -> org_mem
+    | Some org_m, Some target_m ->
+        Logger.debug "merge target sym! target_sym: %s"
+          (Condition.string_of_rh target_sym);
+        Condition.M.add target_sym
+          (Condition.M.merge merge_func org_m target_m)
+          org_mem
+    | None, Some target_m ->
+        Logger.debug "add org of target sym! org_sym: %s target_sym: %s"
+          (Condition.string_of_rh org_sym)
+          (Condition.string_of_rh target_sym);
+        renamed_symbol := (target_sym, org_sym) :: !renamed_symbol;
+        Condition.M.add org_sym
+          (Condition.M.merge merge_func Condition.M.empty target_m)
+          org_mem
+    | None, None -> org_mem
+  in
+  let iter_target org_sym mem =
+    List.fold_left
+      (fun mem (target_sym, _, head) ->
+        let head_of_caller = find_real_head org_sym pre_mem |> mk_symbol in
+        let mem =
+          if head_of_caller = mk_symbol "" then target_mem
+          else add_head head_of_caller mem (mk_symbol head) target_mem
+        in
+        let renamed_target_sym =
+          List.fold_left
+            (fun renamed_sym (org_sym, new_sym) ->
+              if org_sym = mk_symbol target_sym then new_sym else renamed_sym)
+            (mk_symbol target_sym) !renamed_symbol
+        in
+        let renamed_head_sym =
+          List.fold_left
+            (fun renamed_sym (org_sym, new_sym) ->
+              if org_sym = mk_symbol head then new_sym else renamed_sym)
+            (mk_symbol head) !renamed_symbol
+        in
+        let renamed_target_sym =
+          if renamed_head_sym = mk_symbol org_sym then renamed_head_sym
+          else renamed_target_sym
+        in
+        Logger.debug
+          "renamed head target!: org head (%s), org target (%s), new head \
+           (%s), new target (%s)"
+          head target_sym
+          (Condition.string_of_rh renamed_head_sym)
+          (Condition.string_of_rh renamed_target_sym);
+        let mem =
+          add_target_sym renamed_target_sym mem (mk_symbol target_sym)
+            target_mem
+        in
+        if renamed_head_sym = renamed_target_sym then mem
+        else
+          Condition.M.add renamed_head_sym
+            (Condition.M.add Condition.RH_Any renamed_target_sym
+               Condition.M.empty)
+            mem)
+      mem callee_sym_list
+  in
+  ( !renamed_symbol,
+    List.fold_left
+      (fun mem (org_sym, _) ->
+        Logger.debug "org_sym: %s" org_sym;
+        if org_sym = "" then mem else iter_target org_sym mem)
+      pre_mem value_sym_list )
+
+(* value_sym_list: (caller, callee) list
+   callee_sym_list: (symbol, value, head) list --> if head is "" then do not combine memory
+   if org_mem (pre_mem) don't contain the memory of head or target, add memory of head or target
+*)
+let combine_post_memory { postcond = _, post_mem; _ } target_mem =
+  let merge_func _sym s1 s2 =
+    match (s1, s2) with
+    | None, None -> None
+    | Some _, _ -> s1
+    | None, Some _ -> s2
+  in
+  Condition.M.fold
+    (fun head value acc ->
+      match Condition.M.find_opt head post_mem with
+      | Some post_m ->
+          Condition.M.add head (Condition.M.merge merge_func post_m value) acc
+      | None -> Condition.M.add head value acc)
+    target_mem post_mem
+
+let combine_value ~is_matched base_value vc_list =
+  let merge_f _sym v1 v2 =
+    Logger.debug "symbol: %s" _sym;
+    match (v1, v2) with
+    | Some value1, Some value2 ->
+        Logger.debug "combine both value: base (%s), callee (%s)"
+          (Value.string_of value1) (Value.string_of value2);
+        if is_matched then
+          Some
+            Value.
+              {
+                value1 with
+                from_error = value1.from_error || value2.from_error;
+              }
+        else Some Value.{ value1 with from_error = false }
+    | Some value, None ->
+        Logger.debug "combine base value: %s" (Value.string_of value);
+        if is_matched then v1 else Some Value.{ value with from_error = false }
+    | None, Some value ->
+        Logger.debug "combine new value: %s" (Value.string_of value);
+        if is_matched then v2 else Some Value.{ value with from_error = false }
+    | None, None ->
+        Logger.debug "combine value: none";
+        None
   in
   List.fold_left
     (fun prop_values (prop_value, _) ->
@@ -1067,19 +1318,22 @@ let satisfy callee_method callee_summary call_prop m_info =
   let caller_new_mem =
     combine_memory call_prop value_symbol_list callee_head_symbols
   in
-  let intersect_value, true_check, false_check =
+  let check, intersect_value =
     let values_and_check =
       check_intersect ~is_init:false call_prop callee_summary value_symbol_list
     in
-    ( combine_value call_prop.value values_and_check,
-      List.filter (fun (_, c) -> c = TRUE) values_and_check,
-      List.filter (fun (_, c) -> c = FALSE) values_and_check )
+    let true_check = List.filter (fun (_, c) -> c = TRUE) values_and_check in
+    let false_check = List.filter (fun (_, c) -> c = FALSE) values_and_check in
+    match (true_check, false_check) with
+    | [], [] ->
+        ( DONT_MATTER,
+          combine_value ~is_matched:true call_prop.value values_and_check )
+    | _, [] ->
+        (TRUE, combine_value ~is_matched:true call_prop.value values_and_check)
+    | _, _ ->
+        (FALSE, combine_value ~is_matched:false call_prop.value values_and_check)
   in
-  if false_check = [] then
-    ( intersect_value,
-      caller_new_mem,
-      if true_check = [] then DONT_MATTER else TRUE )
-  else (intersect_value, caller_new_mem, FALSE)
+  (intersect_value, caller_new_mem, check)
 
 let new_value_summary new_value old_summary =
   {
@@ -1092,14 +1346,14 @@ let new_value_summary new_value old_summary =
     args = old_summary.args;
   }
 
-let new_mem_summary new_mem old_summary =
+let new_mem_summary new_mem new_post_mem old_summary =
   {
     cost = old_summary.cost;
     relation = old_summary.relation;
     value = old_summary.value;
     use_field = old_summary.use_field;
     precond = (fst old_summary.precond, new_mem);
-    postcond = (fst old_summary.postcond, new_mem);
+    postcond = (fst old_summary.postcond, new_post_mem);
     args = old_summary.args;
   }
 
@@ -1221,9 +1475,9 @@ let modify_array_summary id t_summary a_summary =
       let new_mem = remove_array_index id (fst tmp |> fst) summary in
       mk_new_summary
         (new_this_summary new_summary tmp)
-        (new_mem_summary new_mem summary)
+        (new_mem_summary new_mem new_mem summary)
   in
-  mk_new_summary (new_value_summary new_value a_summary) t_summary |> fst
+  mk_new_summary { a_summary with value = new_value } t_summary |> fst
 
 let is_receiver id = if id = "con_recv" || id = "con_outer" then true else false
 
@@ -1380,10 +1634,8 @@ let match_return_object class_name method_name m_info =
   let is_recursive_obj =
     String.equal cname_of_method return && not (is_static method_name m_info)
   in
-  (* heuristic for unknown bug detection *)
-  if !Cmdline.unknown_bug then
-    (not is_recursive_obj) && String.equal class_name return
-  else String.equal class_name return
+  (* heuristic *)
+  (not is_recursive_obj) && String.equal class_name return
 
 let is_available_method m_name m_info =
   (is_public m_name m_info || is_usable_default m_name m_info)
@@ -1555,6 +1807,20 @@ let get_m_lst_from_one_c c_name m_name m_info c_info ig tgt_c_lst
 let summary_filtering name m_info list =
   List.filter (fun (_, c, _) -> is_recursive_param name c m_info |> not) list
 
+let filter_modeling_method m_info lst =
+  (* If the filename is "", then this method is modeling method.
+     So we use only one method among these methods. *)
+  List.fold_left
+    (fun (first_check, l) (i, c, s) ->
+      let filename = get_filename c m_info in
+      if first_check && filename = "" then (
+        Logger.debug "Chosen modeling method: %s" c;
+        (false, (i, c, s) :: l))
+      else if filename = "" then (first_check, l)
+      else (first_check, (i, c, s) :: l))
+    (true, []) lst
+  |> snd |> List.rev
+
 let get_setter_list summary s_lst =
   List.fold_left
     (fun lst (s, fields) -> (s, fields, get_first_summary s summary) :: lst)
@@ -1616,10 +1882,12 @@ let ret_fld_name_of summary =
   field_name
 
 let is_getter_with_memory_effect m_summary fld_name =
-  (* If the field name is empty, it indicates that the method doesn't return its field,
-     so it should not be pruned for safety *)
-  let new_loc = is_new_loc_field "return" m_summary in
-  (fld_name = "" && not new_loc) || new_loc
+  (* If the memory is empty, then it should not be pruned for safety. *)
+  if fld_name = "" && Condition.M.is_empty (m_summary.postcond |> snd) then true
+  else
+    let new_loc = is_new_loc_field "return" m_summary in
+    Logger.debug "field_name (%s), new_loc (%b)" fld_name new_loc;
+    new_loc
 
 let calc_ret_recv_mem_effect fld_name subtypes summary m_info ret_recv_methods =
   let check_ret_recv fld_name subtypes m_name effect_fld_lst =
@@ -1688,6 +1956,61 @@ let is_set_recv_mem_effect fld_name summary m_info set_recv_methods =
          && check_set_recv fld_name m_name (get_summaries m_name summary))
     false set_recv_methods
 
+let value_symbol_list target_symbol m_summary c_summary =
+  let this_symbol = get_id_symbol (fst c_summary.postcond) "this" in
+  let this_next_symbol = get_next_symbol this_symbol (snd c_summary.postcond) in
+  [
+    ( this_next_symbol |> get_rh_name,
+      find_relation target_symbol m_summary.relation );
+  ]
+
+let check_sat target_symbol m_summary lst (check_summary, c_summary) =
+  let target_head_symbols =
+    get_symbol_list m_summary.value
+    |> get_prev_head_symbol_list m_summary.precond
+  in
+  if List.filter (fun (_, c) -> c = FALSE) check_summary = [] then (
+    let renamed_symbols, new_mem =
+      combine_statement_memory c_summary m_summary
+        (value_symbol_list target_symbol m_summary c_summary)
+        target_head_symbols
+    in
+    Logger.debug "target_mem: %s" (Condition.string_of (snd m_summary.precond));
+    Logger.debug "org_mem: %s" (Condition.string_of (snd c_summary.precond));
+    Logger.debug "new_mem: %s" (Condition.string_of new_mem);
+    let renamed_new_mem = rename_memory renamed_symbols new_mem in
+    let renamed_new_post_mem =
+      combine_post_memory c_summary new_mem |> rename_memory renamed_symbols
+    in
+    Logger.debug "renamed_new_mem: %s\n" (Condition.string_of renamed_new_mem);
+    Logger.debug "renamed_new_post_mem: %s\n"
+      (Condition.string_of renamed_new_post_mem);
+    if List.filter (fun (_, c) -> c = TRUE) check_summary = [] then (
+      Logger.debug "DONT_MATTER";
+      ( DONT_MATTER,
+        {
+          c_summary with
+          value =
+            combine_value ~is_matched:true c_summary.value check_summary
+            |> rename_values renamed_symbols;
+        }
+        |> new_mem_summary renamed_new_mem renamed_new_post_mem )
+      :: lst)
+    else (
+      Logger.debug "TRUE";
+      ( TRUE,
+        {
+          c_summary with
+          value =
+            combine_value ~is_matched:true c_summary.value check_summary
+            |> rename_values renamed_symbols;
+        }
+        |> new_mem_summary renamed_new_mem renamed_new_post_mem )
+      :: lst))
+  else (
+    Logger.debug "FALSE";
+    (FALSE, c_summary) :: lst)
+
 let satisfied_c m_summary id candidate_constructor summary =
   let c_summaries = get_summaries candidate_constructor summary in
   let target_symbol =
@@ -1697,36 +2020,19 @@ let satisfied_c m_summary id candidate_constructor summary =
   if target_symbol = "" then [ (DONT_MATTER, List.hd c_summaries) ]
   else
     let meet lst c_summary =
-      ( [
-          ( find_relation target_symbol m_summary.relation,
-            get_id_symbol (fst c_summary.postcond) "this" |> get_rh_name );
-        ]
-        |> check_intersect ~is_init:true m_summary c_summary,
+      ( value_symbol_list target_symbol m_summary c_summary
+        |> check_intersect ~is_init:(is_receiver id) c_summary m_summary,
         c_summary )
       :: lst
     in
-    let sat lst (check_summary, c_summary) =
-      if List.filter (fun (_, c) -> c = FALSE) check_summary = [] then
-        if List.filter (fun (_, c) -> c = TRUE) check_summary = [] then
-          ( DONT_MATTER,
-            c_summary
-            |> new_value_summary (combine_value c_summary.value check_summary)
-          )
-          :: lst
-        else
-          ( TRUE,
-            c_summary
-            |> new_value_summary (combine_value c_summary.value check_summary)
-          )
-          :: lst
-      else (FALSE, c_summary) :: lst
-    in
-    List.fold_left meet [] c_summaries |> List.fold_left sat []
+    List.fold_left meet [] c_summaries
+    |> List.fold_left (check_sat target_symbol m_summary) []
 
 let check_satisfied_c id const_name t_summary init sat_lst =
   let get_new_summary smy =
     if Utils.is_array_init const_name then modify_array_summary id t_summary smy
-    else modify_summary id t_summary smy
+    else (* modify_summary id t_summary smy *)
+      smy
   in
   List.fold_left
     (fun pick (check, smy) ->
@@ -1819,6 +2125,20 @@ let check_prop ({ args; _ } as prop) =
 let are_duplicated_props props =
   List.fold_left (fun check prop -> check && check_prop prop) true props
 
+let is_only_calling_usable_method m_info callees =
+  let is_usable_modifier (modifier : modifier) =
+    match modifier with
+    | Private -> false
+    | Default | Protected -> if !Cmdline.extension = "" then false else true
+    | Public -> true
+  in
+  List.fold_left
+    (fun check callee ->
+      match MethodInfoMap.find_opt callee m_info with
+      | Some m_info -> check && is_usable_modifier m_info.modifier
+      | None -> check)
+    true callees
+
 let get_overriding_method caller callee (_, ig) =
   let child_class = Utils.get_class_name caller in
   let parent_class = Utils.get_class_name callee in
@@ -1847,19 +2167,23 @@ let is_eligible_for_check caller callee m_info c_info =
     && (is_usable_method_for_check callee m_info c_info
        || is_usable_method_for_check overriding_method m_info c_info)
 
-let get_methods_to_do_not_ignore m_info c_info cp_map =
+let get_methods_to_do_not_ignore m_info c_info cg cp_map =
   CallPropMap.fold
     (fun ((caller : string), callee) props methods ->
+      let callee_of_caller =
+        try CG.pred cg caller with Invalid_argument _ -> []
+      in
       if
         List.mem caller methods
         || is_eligible_for_check caller callee m_info c_info
            && are_duplicated_props props
+           && is_only_calling_usable_method m_info callee_of_caller
       then methods
       else caller :: methods)
     cp_map []
 
-let set_methods_to_ignore m_info c_info cp_map =
-  let not_ignore = get_methods_to_do_not_ignore m_info c_info cp_map in
+let set_methods_to_ignore m_info c_info cg cp_map =
+  let not_ignore = get_methods_to_do_not_ignore m_info c_info cg cp_map in
   CallPropMap.iter
     (fun ((caller : string), _) _ ->
       if not (List.mem caller not_ignore) then (

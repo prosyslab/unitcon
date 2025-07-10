@@ -88,9 +88,7 @@ let is_lowest_rank ~is_error_entry prev_rank var used_args =
   else
     let vname = DUG.get_vinfo var |> snd in
     let vname = if is_receiver vname then "this" else vname in
-    (if !Cmdline.debug then
-       let check = not (List.mem vname used_args) in
-       Logger.info "Is %s lowest rank: %b" vname check);
+    Logger.debug "Is %s lowest rank: %b" vname (not (List.mem vname used_args));
     if List.mem vname used_args then false else true
 
 let get_m_lst x0 m_info (c_info, ig) =
@@ -232,7 +230,8 @@ let calc_value id value default =
           calc_value_list value.Value.from_error
             [ (prec, DUGIR.Primitive (S s)) ]
             default
-      | Null -> [ (prec, DUGIR.Null) ]
+      | Null ->
+          calc_value_list value.Value.from_error [ (prec, DUGIR.Null) ] default
       | _ -> failwith "not implemented eq")
   | Neq v -> (
       match v with
@@ -316,29 +315,41 @@ let calc_value id value default =
 let get_value v p_info =
   let typ, id = DUG.get_vinfo v in
   let typ = convert_special_primitive_type typ in
-  let find_value1 = find_target_value id (DUG.get_v v).summary in
+  let find_value1 =
+    find_target_value ~from_setter:false id (DUG.get_v v).summary
+  in
   let find_value2 = find_target_value_from_this id (DUG.get_v v).summary in
   let default = default_value_list typ (DUG.get_v v).import p_info in
   let found_value =
-    if not_found_value find_value1 then
-      if not_found_value find_value2 then
+    match (not_found_value find_value1, not_found_value find_value2) with
+    | false, false ->
+        Logger.debug "get_value false (%s), false (%s)"
+          (Value.string_of find_value1)
+          (Value.string_of find_value2);
+        calc_value id find_value1 default
+    | false, true ->
+        Logger.debug "get_value false (%s), true" (Value.string_of find_value1);
+        calc_value id find_value1 default
+    | true, false ->
+        Logger.debug "get_value true, false (%s)" (Value.string_of find_value2);
+        calc_value id find_value2 default
+    | true, true ->
+        Logger.debug "get_value true, true";
         let default_value =
           List.fold_left (fun lst x -> (0, x) :: lst) [] default
         in
         if typ = Int then filter_size id default_value else default_value
-      else calc_value id find_value2 default
-    else calc_value id find_value1 default
   in
   found_value
 
-let mk_new_set summary params p =
+let mk_new_set ~from_setter summary params p =
   let get_type p = match p with Var (t, _) -> t | _ -> NonType in
   let equal_value (v1 : Value.t) (v2 : Value.t) =
     if not_found_value v1 || not_found_value v2 then true else v1 = v2
   in
   let is_same_precond p op_p =
-    let p_val = get_p_value p summary in
-    let op_p_val = get_p_value op_p summary in
+    let p_val = get_p_value ~from_setter p summary in
+    let op_p_val = get_p_value ~from_setter op_p summary in
     equal_value p_val op_p_val
   in
   let t1 = get_type p in
@@ -351,10 +362,10 @@ let mk_new_set summary params p =
       (VarSet.add p VarSet.empty)
       params
 
-let get_same_params_set summary params =
+let get_same_params_set ~from_setter summary params =
   List.fold_left
     (fun sets p ->
-      let new_set = mk_new_set summary params p in
+      let new_set = mk_new_set ~from_setter summary params p in
       if VarSet.cardinal new_set < 2 then sets else VarSets.add new_set sets)
     VarSets.empty params
 
@@ -432,7 +443,19 @@ let global_var_list class_name t_summary summary i_info =
       | Some gv -> gv :: common
       | None -> common)
 
-let get_param ?(is_error_entry = false) v summary =
+let modify_id_to_this ?(is_s = false) id vars =
+  if is_s then vars
+  else
+    Condition.M.fold
+      (fun symbol symbol_id new_vars ->
+        match symbol_id with
+        | Condition.RH_Var v when v = id ->
+            Condition.M.add symbol (mk_var "this") new_vars
+        | Condition.RH_Var v when v = "this" -> new_vars
+        | _ -> Condition.M.add symbol symbol_id new_vars)
+      vars Condition.M.empty
+
+let get_param ~is_s ?(is_error_entry = false) v summary =
   let get_field id =
     DUG.get_field_from_ufmap id (fst summary.precond) summary.use_field
   in
@@ -443,7 +466,16 @@ let get_param ?(is_error_entry = false) v summary =
         import = get_package_from_v v;
         variable = (v, mk_some !new_var);
         field = get_field id;
-        summary;
+        summary =
+          {
+            summary with
+            precond =
+              ( modify_id_to_this ~is_s id (fst summary.precond),
+                snd summary.precond );
+            postcond =
+              ( modify_id_to_this ~is_s id (fst summary.postcond),
+                snd summary.postcond );
+          };
       }
   in
   match v with
@@ -455,10 +487,10 @@ let get_param ?(is_error_entry = false) v summary =
       incr new_var;
       make_new_var id |> mk_some
 
-let get_org_params_list ~is_error_entry summary org_param =
+let get_org_params_list ~is_s ~is_error_entry summary org_param =
   List.fold_left
     (fun params v ->
-      match get_param ~is_error_entry v summary with
+      match get_param ~is_s ~is_error_entry v summary with
       | Some p -> p :: params
       | _ -> params)
     [] org_param
@@ -489,8 +521,10 @@ let get_param_list param std_param curr_param_list =
       (fun acc list -> (param :: list) :: (std_param :: list) :: acc)
       [] curr_param_list
 
-let mk_params_list ~is_error_entry summary p_set org_param =
-  let org_params_list = get_org_params_list ~is_error_entry summary org_param in
+let mk_params_list ~is_s ~is_error_entry summary p_set org_param =
+  let org_params_list =
+    get_org_params_list ~is_s ~is_error_entry summary org_param
+  in
   let rec mk_params org_params params_list =
     match org_params with
     | hd :: tl ->
@@ -502,10 +536,10 @@ let mk_params_list ~is_error_entry summary p_set org_param =
   in
   mk_params org_params_list []
 
-let mk_arg ~is_s ~is_error_entry param s =
+let mk_arg ~is_s ~is_error_entry ~from_setter param s =
   let param = if is_s then param else List.tl param in
-  let same_params_set = get_same_params_set s param in
-  mk_params_list ~is_error_entry s same_params_set param
+  let same_params_set = get_same_params_set ~from_setter s param in
+  mk_params_list ~is_s ~is_error_entry s same_params_set param
   |> List.fold_left (fun args lst -> List.rev lst :: args) []
 
 let get_field_set ret s_map =
@@ -526,7 +560,8 @@ let get_field_set ret s_map =
 let error_entry_func ee es m_info c_info =
   let param = get_formal_params ee m_info in
   let f_arg_list =
-    mk_arg ~is_s:(is_static ee m_info) ~is_error_entry:true param es
+    mk_arg ~is_s:(is_static ee m_info) ~is_error_entry:true ~from_setter:false
+      param es
   in
   let c_name = Utils.get_class_name ee in
   let typ_list = get_usable_types c_name c_info in
@@ -564,7 +599,7 @@ let is_number x = is_number (DUG.get_vinfo x |> fst)
 
 let mk_void_func (var : DUGIR.var) id class_name m_info s_lst =
   let get_arg_list s =
-    mk_arg ~is_s:(is_static s m_info) ~is_error_entry:false
+    mk_arg ~is_s:(is_static s m_info) ~is_error_entry:false ~from_setter:true
       (get_formal_params s m_info)
       var.summary
   in
@@ -613,7 +648,26 @@ let get_cfunc id constructor m_info =
   in
   let func = DUGIR.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
-    mk_arg ~is_s:(is_static c m_info) ~is_error_entry:false
+    mk_arg ~is_s:(is_static c m_info) ~is_error_entry:false ~from_setter:false
+      (get_formal_params c m_info)
+      s
+  in
+  if arg_list = [] then [ (cost, (func, DUGIR.Arg [])) ]
+  else
+    List.fold_left
+      (fun cfuncs arg -> (cost, (func, DUGIR.Arg arg)) :: cfuncs)
+      [] arg_list
+
+let get_ret_cfunc id constructor m_info =
+  let cost, c, s = constructor in
+  let t = Utils.get_class_name c in
+  let t =
+    if Utils.is_array t then DUG.get_vinfo id |> fst |> get_array_class_name
+    else t
+  in
+  let func = DUGIR.F { typ = t; method_name = c; import = t; summary = s } in
+  let arg_list =
+    mk_arg ~is_s:(is_static c m_info) ~is_error_entry:false ~from_setter:false
       (get_formal_params c m_info)
       s
   in
@@ -629,6 +683,12 @@ let get_cfuncs id list m_info =
       List.rev_append (get_cfunc id (cost, c, s) m_info) lst)
     [] list
 
+let get_ret_cfuncs id list m_info =
+  List.fold_left
+    (fun lst constructor ->
+      List.rev_append (get_ret_cfunc id constructor m_info) lst)
+    [] list
+
 let get_c ret c_lst summary m_info =
   let class_name = DUG.get_vinfo ret |> fst |> get_class_name in
   if class_name = "" then []
@@ -638,6 +698,7 @@ let get_c ret c_lst summary m_info =
       satisfied_c_list id (DUG.get_v ret).summary summary c_lst
       |> summary_filtering class_name m_info
       |> prune_dup_summary ~is_constructor:true m_info
+      |> filter_modeling_method m_info
     in
     get_cfuncs ret s_list m_info
 
@@ -666,12 +727,17 @@ let memory_effect_filtering summary m_info type_info c_info s_map smy_lst =
             if is_static c m_info then []
             else get_subtypes recv_type (snd c_info)
           in
+          Logger.debug "memory effect of c: %s" c;
           let check_getter = is_getter_with_memory_effect c_smy fld_name in
-          if subtypes = [] && check_getter then (i, c, c_smy) :: lst
+          if subtypes = [] && check_getter then (
+            Logger.debug "subtypes empty && check_getter true";
+            (i, c, c_smy) :: lst)
+          else if check_getter then (
+            Logger.debug "check_getter true";
+            (i, c, c_smy) :: lst)
           else if
-            check_getter
-            || is_ret_recv_mem_effect fld_name subtypes summary m_info
-                 ret_recv_methods
+            is_ret_recv_mem_effect fld_name subtypes summary m_info
+              ret_recv_methods
             || is_set_recv_mem_effect fld_name summary m_info set_recv_methods
           then (i, c, c_smy) :: lst
           else lst)
@@ -687,9 +753,10 @@ let get_ret_c ret ret_obj_lst summary m_info type_info c_info s_map =
       satisfied_c_list id (DUG.get_v ret).summary summary ret_obj_lst
       |> summary_filtering class_name m_info
       |> prune_dup_summary m_info
+      |> filter_modeling_method m_info
       |> memory_effect_filtering summary m_info type_info c_info s_map
     in
-    get_cfuncs ret s_list m_info
+    get_ret_cfuncs ret s_list m_info
 
 let get_inner_func f arg =
   let fname =
@@ -1440,7 +1507,9 @@ and propagation e_method e_summary caller_method caller_preconds call_prop
       | TRUE | DONT_MATTER ->
           let new_call_prop =
             {
-              (new_value_summary new_value call_prop |> new_mem_summary new_mem) with
+              (new_value_summary new_value call_prop
+              |> new_mem_summary new_mem new_mem)
+              with
               use_field = new_uf;
             }
           in
@@ -1491,7 +1560,8 @@ let rec mk_testcase used_args p_data queue =
     | Cmdline.Basic | Cmdline.Pruning -> queue
     | Cmdline.Priority | Cmdline.Full -> priority_q queue
   in
-  Logger.debug "# of test cases: %d" (List.length queue);
+  let num_of_all = List.length queue in
+  Logger.debug "# of test cases: %d" num_of_all;
   match queue with
   | p :: tl ->
       Logger.debug
@@ -1548,7 +1618,7 @@ let mk_testcases ~is_start queue (e_method, error_summary) p_data used_args
     prim_info =
   let used_args, p_info, init =
     if is_start then (
-      set_methods_to_ignore p_data.m_info p_data.c_info p_data.cp_map;
+      set_methods_to_ignore p_data.m_info p_data.c_info p_data.cg p_data.cp_map;
       ErrorEntrySet.fold
         (fun (ee, ee_s) (used_args, p_info_init, init_list) ->
           Logger.debug "error entry method: %s" ee;

@@ -54,6 +54,8 @@ let c_bk = Str.regexp "}"
 
 let symbol_prefix = Str.regexp "^[avu]"
 
+let anony_symbol_prefix = Str.regexp "v-"
+
 let symbol = Str.regexp "^[avu][0-9]+$"
 
 let index = Str.regexp "^\\[[avu][0-9]+\\]$"

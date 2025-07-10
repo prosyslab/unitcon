@@ -632,7 +632,7 @@ let run_testfile () =
         (modify_execute_command (execute_cmd !info) t_file)
     in
     let data = read_all_string ic_err in
-    if !Cmdline.debug then L.info "Single Execution error log: %s" data;
+    L.debug "Single Execution error log: %s" data;
     close_in ic_out;
     close_in ic_err;
     num_of_last_exec_tc := num_of_t_file;
@@ -676,7 +676,7 @@ let run_multi_testfile () =
       (modify_execute_command (multi_test_execute_cmd !info) mt_file)
   in
   let data = read_all_string ic_err in
-  if !Cmdline.debug then L.info "Multi Execution error log: %s" data;
+  L.debug "Multi Execution error log: %s" data;
   close_in ic_out;
   close_in ic_err;
   let found_rep_inputs =

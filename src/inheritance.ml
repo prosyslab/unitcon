@@ -54,10 +54,11 @@ let make_var arg_list =
   in
   List.fold_left
     (fun (num, cond) p ->
+      let escape_dollar = Regexp.global_rm Regexp.dollar p in
       ( num + 1,
         Condition.M.add
           (Condition.RH_Symbol ("v" ^ string_of_int num))
-          (Condition.RH_Var p) cond ))
+          (Condition.RH_Var escape_dollar) cond ))
     (2, init) arg_list
   |> snd
 

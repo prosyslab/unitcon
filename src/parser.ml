@@ -66,6 +66,7 @@ let parse_boitv boitv =
     match int_of_string_opt tail with
     | Some _ -> false
     | None when tail = "" || tail = "+inf" || tail = "-inf" -> false
+    | None when Utils.exist_regexp Regexp.anony_symbol_prefix tail -> false
     | None -> if head = tail then false else true
   in
   let parse_relation rel mmap =
@@ -179,18 +180,20 @@ let parse_value is_err v mmap =
   else if Value.is_outside tl then parse_outside_value is_err hd tl mmap
   else failwith "parse_citv error"
 
-let parse_citv is_err mem citv =
+let make_init_value is_err this mem =
+  let implied_value = value_maker is_err (Value.Neq Null) in
+  Condition.M.fold
+    (fun head tail val_map ->
+      if Condition.M.cardinal tail > 1 && this <> head then
+        ValueMap.add (get_rh_name head) implied_value val_map
+      else val_map)
+    mem ValueMap.empty
+
+let parse_citv is_err pre_var mem citv =
   let value_list = Regexp.remove_bk citv |> Str.split Regexp.bm in
-  let init_value =
-    Condition.M.fold
-      (fun head tail val_map ->
-        if Condition.M.cardinal tail > 1 then
-          ValueMap.add (get_rh_name head)
-            (Value.Neq Null |> value_maker is_err)
-            val_map
-        else val_map)
-      mem ValueMap.empty
-  in
+  let this_symbol = get_id_symbol pre_var "this" in
+  let this_next_symbol = get_next_symbol this_symbol mem in
+  let init_value = make_init_value is_err this_next_symbol mem in
   if value_list = [] then init_value
   else
     List.fold_left

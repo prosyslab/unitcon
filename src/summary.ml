@@ -79,7 +79,7 @@ let parse_summary summary =
   let value =
     JsonUtil.member "CItv" summary
     |> JsonUtil.to_string
-    |> Parser.parse_citv false pre_mem
+    |> Parser.parse_citv false pre_var pre_mem
   in
   let post_var =
     JsonUtil.member "Postcond_Stack" summary

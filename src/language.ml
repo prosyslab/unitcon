@@ -304,6 +304,38 @@ module Value = struct
     Str.string_match Regexp.in_n str 0 || Str.string_match Regexp.in_bk str 0
 
   let is_outside str = Str.string_match (Str.regexp "not_in\\[") str 0
+
+  let string_of_const = function
+    | Int i -> "int " ^ string_of_int i
+    | Long i -> "long " ^ string_of_int i
+    | Short i -> "short " ^ string_of_int i
+    | Byte i -> "byte " ^ string_of_int i
+    | Float f -> "float " ^ string_of_float f
+    | Double f -> "double " ^ string_of_float f
+    | Bool b -> "bool " ^ string_of_bool b
+    | Char c -> "char " ^ String.make 1 c
+    | String s -> "string " ^ s
+    | PlusInf -> "plus inf"
+    | MinusInf -> "minus inf"
+    | Null -> "null"
+    | NonValue -> "non-value"
+
+  let string_of_op = function
+    | Eq c -> "Eq (" ^ string_of_const c ^ ")"
+    | Neq c -> "Neq (" ^ string_of_const c ^ ")"
+    | Le c -> "Le (" ^ string_of_const c ^ ")"
+    | Lt c -> "Lt (" ^ string_of_const c ^ ")"
+    | Ge c -> "Ge (" ^ string_of_const c ^ ")"
+    | Gt c -> "Gt (" ^ string_of_const c ^ ")"
+    | Between (c1, c2) ->
+        "Between [(" ^ string_of_const c1 ^ "), (" ^ string_of_const c2 ^ ")]"
+    | Outside (c1, c2) ->
+        "Outside [(" ^ string_of_const c1 ^ "), (" ^ string_of_const c2 ^ ")]"
+
+  let string_of v =
+    "from_error: "
+    ^ string_of_bool v.from_error
+    ^ ", value: " ^ string_of_op v.value
 end
 
 module ValueMap = struct
@@ -315,13 +347,22 @@ module ValueMap = struct
 
   let add = M.add
 
+  let remove = M.remove
+
   let find = M.find
 
   let find_opt = M.find_opt
 
   let fold = M.fold
 
+  let iter = M.iter
+
   let merge = M.merge
+
+  let string_of map =
+    M.fold
+      (fun sym v acc -> acc ^ "\n" ^ sym ^ " -> " ^ Value.string_of v)
+      map ""
 end
 
 module Condition = struct
@@ -337,6 +378,29 @@ module Condition = struct
   type mem = rh M.t M.t [@@deriving compare, equal]
 
   type t = var * mem [@@deriving compare, equal]
+
+  let string_of_rh = function
+    | RH_Var id -> "RH_Var (" ^ id ^ ")"
+    | RH_Symbol sym -> "RH_Sym (" ^ sym ^ ")"
+    | RH_Index sym -> "RH_Index [" ^ sym ^ "]"
+    | RH_Any -> "RH_Any *"
+
+  let string_of_map var value = string_of_rh var ^ " -> " ^ string_of_rh value
+
+  let string_of_var var =
+    M.fold (fun var value acc -> acc ^ "\n" ^ string_of_map var value) var ""
+
+  let string_of mem =
+    M.fold
+      (fun var inner_mem acc ->
+        let outer = "outer var: " ^ string_of_rh var ^ "!" in
+        let inner =
+          M.fold
+            (fun var value acc -> acc ^ "\n  " ^ string_of_map var value)
+            inner_mem ""
+        in
+        acc ^ "\n" ^ outer ^ "\n" ^ inner)
+      mem ""
 end
 
 module Field = struct

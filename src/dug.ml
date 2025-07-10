@@ -508,7 +508,6 @@ module DUG = struct
     match s with
     | Assign (num, var, (x0, x1, _, _)) ->
         let new_x0 = Variable { (get_v x0) with field } in
-
         let s' = Assign (num, var, (new_x0, x1, f, arg)) in
         (s', add_vertex s' G.empty)
     | _ -> (s, graph)
@@ -965,7 +964,8 @@ module DUG = struct
           func_code func ^ arg_code func arg ^ ";\n"
         else recv_name_code x func ^ func_code func ^ arg_code func arg ^ ";\n"
     | Skip _ -> ""
-    | Stmt _ -> "Stmt"
+    | Stmt (_, variable) ->
+        "Stmt (" ^ var_code { empty_var with variable } ^ ")\n"
 
   let get_loop_lval v =
     match fst v |> convert_special_primitive_type with

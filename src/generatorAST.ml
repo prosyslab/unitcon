@@ -310,8 +310,12 @@ let calc_value id value default =
 let get_value v p_info =
   let typ, id = AST.get_vinfo v in
   let typ = convert_special_primitive_type typ in
-  let find_value1 = find_target_value id (AST.get_v v).summary in
-  let find_value2 = find_target_value_from_this id (AST.get_v v).summary in
+  let find_value1 =
+    find_target_value ~from_setter:false id (AST.get_v v).summary
+  in
+  let find_value2 =
+    find_target_value ~from_setter:true id (AST.get_v v).summary
+  in
   let default = default_value_list typ (AST.get_v v).import p_info in
   let found_value =
     if not_found_value find_value1 then
@@ -325,14 +329,14 @@ let get_value v p_info =
   in
   found_value
 
-let mk_new_set summary params p =
+let mk_new_set ~from_setter summary params p =
   let get_type p = match p with Var (t, _) -> t | _ -> NonType in
   let equal_value (v1 : Value.t) (v2 : Value.t) =
     if not_found_value v1 || not_found_value v2 then true else v1 = v2
   in
   let is_same_precond p op_p =
-    let p_val = get_p_value p summary in
-    let op_p_val = get_p_value op_p summary in
+    let p_val = get_p_value ~from_setter p summary in
+    let op_p_val = get_p_value ~from_setter op_p summary in
     equal_value p_val op_p_val
   in
   let t1 = get_type p in
@@ -345,10 +349,10 @@ let mk_new_set summary params p =
       (VarSet.add p VarSet.empty)
       params
 
-let get_same_params_set summary params =
+let get_same_params_set ~from_setter summary params =
   List.fold_left
     (fun sets p ->
-      let new_set = mk_new_set summary params p in
+      let new_set = mk_new_set ~from_setter summary params p in
       if VarSet.cardinal new_set < 2 then sets else VarSets.add new_set sets)
     VarSets.empty params
 
@@ -496,9 +500,9 @@ let mk_params_list ~is_error_entry summary p_set org_param =
   in
   mk_params org_param_list []
 
-let mk_arg ~is_s ~is_error_entry param s =
+let mk_arg ~is_s ~is_error_entry ~from_setter param s =
   let param = if is_s then param else List.tl param in
-  let same_params_set = get_same_params_set s param in
+  let same_params_set = get_same_params_set ~from_setter s param in
   mk_params_list ~is_error_entry s same_params_set param
   |> List.fold_left (fun args lst -> List.rev lst :: args) []
 
@@ -520,7 +524,8 @@ let get_field_set ret s_map =
 let error_entry_func ee es m_info c_info =
   let param = get_formal_params ee m_info in
   let f_arg_list =
-    mk_arg ~is_s:(is_static ee m_info) ~is_error_entry:true param es
+    mk_arg ~is_s:(is_static ee m_info) ~is_error_entry:true ~from_setter:false
+      param es
   in
   let c_name = Utils.get_class_name ee in
   let typ_list = get_usable_types c_name c_info in
@@ -533,7 +538,7 @@ let error_entry_func ee es m_info c_info =
 
 let mk_void_func (var : ASTIR.var) id class_name m_info s_lst =
   let get_arg_list s =
-    mk_arg ~is_s:(is_static s m_info) ~is_error_entry:false
+    mk_arg ~is_s:(is_static s m_info) ~is_error_entry:false ~from_setter:true
       (get_formal_params s m_info)
       var.summary
   in
@@ -582,7 +587,7 @@ let get_cfunc id constructor m_info =
   in
   let func = ASTIR.F { typ = t; method_name = c; import = t; summary = s } in
   let arg_list =
-    mk_arg ~is_s:(is_static c m_info) ~is_error_entry:false
+    mk_arg ~is_s:(is_static c m_info) ~is_error_entry:false ~from_setter:false
       (get_formal_params c m_info)
       s
   in
@@ -1352,7 +1357,9 @@ and propagation e_method e_summary caller_method caller_preconds call_prop
       | TRUE | DONT_MATTER ->
           let new_call_prop =
             {
-              (new_value_summary new_value call_prop |> new_mem_summary new_mem) with
+              (new_value_summary new_value call_prop
+              |> new_mem_summary new_mem new_mem)
+              with
               use_field = new_uf;
             }
           in
@@ -1456,7 +1463,7 @@ let mk_testcases ~is_start queue (e_method, error_summary) p_data used_args
     prim_info =
   let used_args, p_info, init =
     if is_start then (
-      set_methods_to_ignore p_data.m_info p_data.c_info p_data.cp_map;
+      set_methods_to_ignore p_data.m_info p_data.c_info p_data.cg p_data.cp_map;
       ErrorEntrySet.fold
         (fun (ee, ee_s) (used_args, p_info_init, init_list) ->
           Logger.debug "error entry method: %s" ee;
