@@ -230,19 +230,22 @@ let handle_field_constant cname fields =
       else acc)
     fields []
 
-let handle_enum_constant cname consts =
+let handle_enum_constant consts =
   Array.fold_left
     (fun acc v ->
       match v with
-      | JBasics.ConstNameAndType (name, des) -> (
-          match des with
-          | SValue vt
-            when List.mem (vt |> string_of_value_type) basic_types |> not ->
-              let item =
-                assoc_of_value ~is_enum:true "Object" (cname ^ "." ^ name)
-              in
-              (vt |> string_of_value_type, item) :: acc
-          | _ -> acc)
+      | JBasics.ConstField (cname, fs) ->
+          let fs_name = JBasics.fs_name fs in
+          let fs_type = JBasics.fs_type fs |> string_of_value_type in
+          if
+            fs_type = JBasics.cn_name cname
+            && List.mem fs_type basic_types |> not
+          then
+            let item =
+              assoc_of_value ~is_enum:true "Object" (fs_type ^ "." ^ fs_name)
+            in
+            (fs_type, item) :: acc
+          else acc
       | _ -> acc)
     [] consts
 
@@ -255,7 +258,7 @@ let handle_class c =
   let const = if is_enum then [] else handle_methods cname c.c_methods in
   let g_const =
     if is_usable_class then
-      if is_enum then handle_enum_constant cname c.c_consts
+      if is_enum then handle_enum_constant c.c_consts
       else handle_field_constant cname c.c_fields
     else []
   in
