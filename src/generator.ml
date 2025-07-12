@@ -52,6 +52,24 @@ module ObjTypeMap = struct
   let merge = M.merge
 end
 
+module RenamedMap = struct
+  module M = Map.Make (Ident)
+
+  type t = Ident.t M.t
+
+  let empty = M.empty
+
+  let add = M.add
+
+  let find = M.find
+
+  let find_opt = M.find_opt
+
+  let fold = M.fold
+
+  let iter = M.iter
+end
+
 let obj_type_merge old_types new_types =
   ObjTypeMap.merge
     (fun _ v1 v2 ->
@@ -998,39 +1016,15 @@ let check_new_value symbol vmap memory =
   | _ -> false
 
 let rename_values renamed_symbol value_map =
-  Logger.debug "Value Map!";
-  List.map
-    (fun (old, renamed) ->
-      (Ident.string_of_symbol old, Ident.string_of_symbol renamed))
-    renamed_symbol
-  |> List.fold_left
-       (fun value_map (old_sym, renamed_sym) ->
-         Logger.debug "old_sym: %s, renamed_sym: %s" old_sym renamed_sym;
-         match ValueMap.find_opt old_sym value_map with
-         | Some v ->
-             ValueMap.remove old_sym value_map |> ValueMap.add renamed_sym v
-         | _ -> value_map)
-       value_map
-
-let rename_memory renamed_symbol memory =
-  List.fold_left
-    (fun map_mem (old_sym, renamed_sym) ->
-      Memory.fold
-        (fun sym map mem ->
-          let new_map =
-            Memory.fold
-              (fun field_sym value_sym map ->
-                if value_sym = old_sym then
-                  Memory.remove field_sym map
-                  |> Memory.add field_sym renamed_sym
-                else map)
-              map map
-          in
-          if sym = old_sym then
-            Memory.remove sym mem |> Memory.add renamed_sym new_map
-          else mem)
-        map_mem map_mem)
-    memory renamed_symbol
+  RenamedMap.fold
+    (fun old_sym renamed_sym value_map ->
+      let old_str = Ident.string_of_symbol old_sym in
+      let renamed_str = Ident.string_of_symbol renamed_sym in
+      match ValueMap.find_opt old_str value_map with
+      | Some v ->
+          ValueMap.remove old_str value_map |> ValueMap.add renamed_str v
+      | _ -> value_map)
+    renamed_symbol value_map
 
 let check_intersect_one caller_sym callee_sym caller_prop callee_summary =
   Logger.debug "check_intersect_one: caller_symbol (%s), callee_symbol (%s)"
@@ -1158,112 +1152,84 @@ let combine_memory { precond = _, pre_mem; _ } value_sym_list callee_sym_list =
   in
   List.fold_left (fun mem (r, _) -> iter_callee r mem) pre_mem value_sym_list
 
-(* value_sym_list: (caller, callee) list
+(* value_sym_list: (caller (i.e., org), callee (i.e., target)) list
    callee_sym_list: (symbol, value, head) list --> if head is "" then do not combine memory
-   if org_mem (pre_mem) don't contain the memory of head or target, add memory of head or target
-*)
+   if org_mem (pre_mem) don't contain the memory of head or target, add memory of head or target *)
 let combine_statement_memory { precond = _, pre_mem; postcond = _, post_mem; _ }
     { precond = _, target_mem; _ } value_sym_list callee_sym_list =
-  let renamed_symbol = ref [] in
+  let renamed_symbol = ref RenamedMap.empty in
+  let need_connection = ref [] in
   let init_new_symbol =
     ref (get_new_symbol_num (get_new_symbol_num 1 post_mem) target_mem)
   in
-  let merge_func _sym s1 s2 =
+  let merge_f _ s1 s2 =
     match (s1, s2) with
     | None, None -> None
-    | Some _s, _ -> s1
+    | Some _, _ -> s1
     | None, Some s ->
         let new_symbol = get_new_symbol !init_new_symbol in
-        renamed_symbol := (s, new_symbol) :: !renamed_symbol;
+        renamed_symbol := RenamedMap.add s new_symbol !renamed_symbol;
+        need_connection := s :: !need_connection;
         incr init_new_symbol;
         Some new_symbol
   in
-  let add_head org_sym org_mem head target_mem =
-    let from_org_mem = Memory.find_opt org_sym org_mem in
-    let from_target_mem = Memory.find_opt head target_mem in
-    match (from_org_mem, from_target_mem) with
-    | Some _, None -> org_mem
-    | Some org_m, Some target_m ->
-        Memory.add org_sym (Memory.merge merge_func org_m target_m) org_mem
-    | None, Some target_m ->
-        Memory.add org_sym
-          (Memory.merge merge_func Memory.empty target_m)
-          org_mem
-    | None, None -> org_mem
-  in
-  let add_target_sym org_sym org_mem target_sym target_mem =
+  let add_memory ~add_head target_sym target_mem org_sym org_mem =
+    let org_sym = mk_symbol org_sym in
+    let target_sym = mk_symbol target_sym in
     let from_org_mem = Memory.find_opt org_sym org_mem in
     let from_target_mem = Memory.find_opt target_sym target_mem in
     match (from_org_mem, from_target_mem) with
-    | Some _, None -> org_mem
+    | Some _, None | None, None -> org_mem
     | Some org_m, Some target_m ->
-        Logger.debug "merge target sym! target_sym: %s"
-          (Ident.string_of target_sym);
-        Memory.add target_sym (Memory.merge merge_func org_m target_m) org_mem
-    | None, Some target_m ->
-        Logger.debug "add org of target sym! org_sym: %s target_sym: %s"
+        Logger.debug "merge memory! org (%s), target (%s)"
           (Ident.string_of org_sym)
           (Ident.string_of target_sym);
-        renamed_symbol := (target_sym, org_sym) :: !renamed_symbol;
-        Memory.add org_sym
-          (Memory.merge merge_func Memory.empty target_m)
-          org_mem
-    | None, None -> org_mem
+        Memory.add org_sym (Memory.merge merge_f org_m target_m) org_mem
+    | None, Some target_m ->
+        Logger.debug "add target's memory! org (%s), target (%s)"
+          (Ident.string_of org_sym)
+          (Ident.string_of target_sym);
+        (* Avoid adding duplicate pointer *)
+        if not add_head then
+          renamed_symbol := RenamedMap.add target_sym org_sym !renamed_symbol;
+        Memory.add org_sym (Memory.merge merge_f Memory.empty target_m) org_mem
+  in
+  let add_connection target_mem org_mem =
+    List.fold_left
+      (fun mem cons_sym ->
+        match Memory.find_opt cons_sym target_mem with
+        | Some m -> (
+            match RenamedMap.find_opt cons_sym !renamed_symbol with
+            | Some v -> Memory.add v m mem
+            | None -> Memory.add cons_sym m mem)
+        | None -> mem)
+      org_mem !need_connection
   in
   let iter_target org_sym mem =
     List.fold_left
       (fun mem (target_sym, _, head) ->
-        let head_of_caller = find_real_head org_sym pre_mem |> mk_symbol in
-        let mem =
-          if head_of_caller = mk_symbol "" then target_mem
-          else add_head head_of_caller mem (mk_symbol head) target_mem
-        in
-        let renamed_target_sym =
-          List.fold_left
-            (fun renamed_sym (org_sym, new_sym) ->
-              if org_sym = mk_symbol target_sym then new_sym else renamed_sym)
-            (mk_symbol target_sym) !renamed_symbol
-        in
-        let renamed_head_sym =
-          List.fold_left
-            (fun renamed_sym (org_sym, new_sym) ->
-              if org_sym = mk_symbol head then new_sym else renamed_sym)
-            (mk_symbol head) !renamed_symbol
-        in
-        let renamed_target_sym =
-          if renamed_head_sym = mk_symbol org_sym then renamed_head_sym
-          else renamed_target_sym
-        in
+        need_connection := [];
+        let head_of_org = find_real_head org_sym pre_mem in
         Logger.debug
-          "renamed head target!: org head (%s), org target (%s), new head \
-           (%s), new target (%s)"
-          head target_sym
-          (Ident.string_of renamed_head_sym)
-          (Ident.string_of renamed_target_sym);
-        let mem =
-          add_target_sym renamed_target_sym mem (mk_symbol target_sym)
-            target_mem
-        in
-        if renamed_head_sym = renamed_target_sym then mem
-        else
-          Memory.add renamed_head_sym
-            (Memory.add Ident.Any renamed_target_sym Memory.empty)
-            mem)
+          "org (%s), head of org (%s), target (%s), head of target (%s)" org_sym
+          head_of_org target_sym head;
+        add_memory ~add_head:true head target_mem head_of_org mem
+        |> add_memory ~add_head:false target_sym target_mem org_sym
+        |> add_connection target_mem)
       mem callee_sym_list
   in
   ( !renamed_symbol,
     List.fold_left
       (fun mem (org_sym, _) ->
-        Logger.debug "org_sym: %s" org_sym;
+        Logger.debug "origin symbol (%s)" org_sym;
         if org_sym = "" then mem else iter_target org_sym mem)
       pre_mem value_sym_list )
 
 (* value_sym_list: (caller, callee) list
    callee_sym_list: (symbol, value, head) list --> if head is "" then do not combine memory
-   if org_mem (pre_mem) don't contain the memory of head or target, add memory of head or target
-*)
+   if org_mem (pre_mem) don't contain the memory of head or target, add memory of head or target *)
 let combine_post_memory { postcond = _, post_mem; _ } target_mem =
-  let merge_func _sym s1 s2 =
+  let merge_f _sym s1 s2 =
     match (s1, s2) with
     | None, None -> None
     | Some _, _ -> s1
@@ -1272,8 +1238,7 @@ let combine_post_memory { postcond = _, post_mem; _ } target_mem =
   Memory.fold
     (fun head value acc ->
       match Memory.find_opt head post_mem with
-      | Some post_m ->
-          Memory.add head (Memory.merge merge_func post_m value) acc
+      | Some post_m -> Memory.add head (Memory.merge merge_f post_m value) acc
       | None -> Memory.add head value acc)
     target_mem post_mem
 
@@ -1853,6 +1818,20 @@ let is_new_loc_field field summary =
   | None -> false
   | Some m -> is_new_loc_mem m summary
 
+let exist_global_var mem =
+  Memory.fold
+    (fun field _ check -> match field with Ident.Var _ -> true | _ -> check)
+    mem false
+
+let is_with_gv ~is_static { postcond = post_var, post_mem; _ } =
+  (* if the method is static, then use "v1" symbol instead of "this" symbol *)
+  let this_sym =
+    if is_static then mk_symbol "v1" else get_id_symbol post_var "this"
+  in
+  match Memory.find_opt this_sym post_mem with
+  | Some m -> exist_global_var m
+  | _ -> false
+
 let ret_fld_name_of summary =
   let get_field field symbol mem acc =
     match field with
@@ -1882,13 +1861,14 @@ let ret_fld_name_of summary =
   in
   field_name
 
-let is_getter_with_memory_effect m_summary fld_name =
+let is_getter_with_memory_effect ~is_static m_summary fld_name =
   (* If the memory is empty, then it should not be pruned for safety. *)
   if fld_name = "" && Memory.is_empty (m_summary.postcond |> snd) then true
   else
     let new_loc = is_new_loc_field "return" m_summary in
-    Logger.debug "field_name (%s), new_loc (%b)" fld_name new_loc;
-    new_loc
+    let with_gv = is_with_gv ~is_static m_summary in
+    Logger.debug "field (%s), new loc (%b), gv (%b)" fld_name new_loc with_gv;
+    new_loc || with_gv
 
 let calc_ret_recv_mem_effect fld_name subtypes summary m_info ret_recv_methods =
   let check_ret_recv fld_name subtypes m_name effect_fld_lst =
@@ -1988,13 +1968,7 @@ let check_sat target_symbol m_summary lst (check_summary, c_summary) =
     Logger.debug "target_mem: %s" (Memory.string_of (snd m_summary.precond));
     Logger.debug "org_mem: %s" (Memory.string_of (snd c_summary.precond));
     Logger.debug "new_mem: %s" (Memory.string_of new_mem);
-    let renamed_new_mem = rename_memory renamed_symbols new_mem in
-    let renamed_new_post_mem =
-      combine_post_memory c_summary new_mem |> rename_memory renamed_symbols
-    in
-    Logger.debug "renamed_new_mem: %s\n" (Memory.string_of renamed_new_mem);
-    Logger.debug "renamed_new_post_mem: %s\n"
-      (Memory.string_of renamed_new_post_mem);
+    let new_post_mem = combine_post_memory c_summary new_mem in
     if List.filter (fun (_, c) -> c = TRUE) check_summary = [] then (
       Logger.debug "DONT_MATTER";
       ( DONT_MATTER,
@@ -2004,7 +1978,7 @@ let check_sat target_symbol m_summary lst (check_summary, c_summary) =
             combine_value ~is_matched:true c_summary.value check_summary
             |> rename_values renamed_symbols;
         }
-        |> new_mem_summary renamed_new_mem renamed_new_post_mem )
+        |> new_mem_summary new_mem new_post_mem )
       :: lst)
     else (
       Logger.debug "TRUE";
@@ -2015,7 +1989,7 @@ let check_sat target_symbol m_summary lst (check_summary, c_summary) =
             combine_value ~is_matched:true c_summary.value check_summary
             |> rename_values renamed_symbols;
         }
-        |> new_mem_summary renamed_new_mem renamed_new_post_mem )
+        |> new_mem_summary new_mem new_post_mem )
       :: lst))
   else (
     Logger.debug "FALSE";

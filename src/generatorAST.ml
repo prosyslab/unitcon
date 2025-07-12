@@ -636,11 +636,13 @@ let memory_effect_filtering summary m_info type_info c_info s_map smy_lst =
         (fun lst (i, c, c_smy) ->
           let fld_name = ret_fld_name_of c_smy in
           let recv_type = Utils.get_class_name c in
+          let is_static = is_static c m_info in
           let subtypes =
-            if is_static c m_info then []
-            else get_subtypes recv_type (snd c_info)
+            if is_static then [] else get_subtypes recv_type (snd c_info)
           in
-          let check_getter = is_getter_with_memory_effect c_smy fld_name in
+          let check_getter =
+            is_getter_with_memory_effect ~is_static c_smy fld_name
+          in
           if subtypes = [] && check_getter then (i, c, c_smy) :: lst
           else if
             check_getter
