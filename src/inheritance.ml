@@ -132,7 +132,7 @@ let rec get_type t =
   | "byte" -> Byte
   | "float" -> Float
   | "double" -> Double
-  | "bool" -> Bool
+  | "boolean" | "bool" -> Bool
   | "char" -> Char
   | "java.lang.String" -> String
   | "" -> NonType
