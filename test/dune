@@ -11,6 +11,22 @@
    (run ../unitcon synthesize simple --target Main.java:11 --batch-size 1)
    (system "[ -e unitcon-out/unitcon-tests/UnitconTest1.java ]"))))
 
+(rule
+ (alias runtest)
+ (deps
+  (source_tree ../deps)
+  (source_tree dup))
+ (action
+  (progn
+   (run ln -sf src/main.exe ../unitcon)
+   (run ../unitcon build dup)
+   (run ../unitcon analyze dup --target Main.java:4)
+   (run ../unitcon synthesize dup --target Main.java:4 --batch-size 1)
+   (system "[ -e unitcon-out/unitcon-tests/UnitconTest1.java ]")
+   (with-stdin-from
+    dup/unitcon-properties/expected-obj
+    (run xargs -I % grep % unitcon-out/unitcon-tests/UnitconTest1.java)))))
+
 (test
  (name unit)
- (libraries oUnit))
+ (libraries unitconLib oUnit))
