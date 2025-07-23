@@ -17,6 +17,12 @@ jobs:
         with:
           submodules: recursive
           token: ${{ secrets.ACTION_TOKEN }}
+
+      - name: Get submodule commit hash
+        id: submodule-hash
+        run: |
+          HASH=$(git rev-parse --short HEAD:unitcon-infer)
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
       
       - name: Install required apt packages
         run: |
@@ -29,21 +35,31 @@ jobs:
           distribution: 'zulu'
           java-version: '8'
 
+      - name: Cache Infer
+        id: cache-infer
+        uses: actions/cache@v4
+        with:
+          path: infer.tar
+          key: infer-tar-${{ steps.submodule-hash.outputs.hash }}
+          restore-keys: |
+            infer-tar-${{ steps.submodule-hash.outputs.hash }}
+            infer-tar-
+
       - name: Set up OCaml
+        if: steps.cache-infer.outputs.cache-hit != 'true'
         uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: ocaml-variants.4.14.0+options,ocaml-option-flambda
 
       - name: Build Infer
+        if: steps.cache-infer.outputs.cache-hit != 'true'
         shell: bash
         run: |
           eval $(opam env)
           cd unitcon-infer
-          ./build-infer.sh --yes --user-opam-switch java
+          ./build-infer.sh --yes java
           cd ..
-
-      - name: Tar Infer Artifact
-        run: tar -cf infer.tar unitcon-infer
+          tar -cf infer.tar unitcon-infer
 
       - name: Upload Infer Artifact
         uses: actions/upload-artifact@v4
@@ -64,7 +80,7 @@ jobs:
       - env:
           OUTPUT1: ${{ needs.infer-build.outputs.output1 }}
         run: echo "Infer artifact-id is $OUTPUT1"
-      
+    
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -84,7 +100,6 @@ jobs:
         with:
           path: |
             ~/.opam
-            ./_opam
           key: ${{ env.cache-name }}-build-${{ hashFiles('setup.sh') }}
           restore-keys: |
             ${{ env.cache-name }}-build-${{ hashFiles('setup.sh') }}

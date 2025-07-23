@@ -2,21 +2,34 @@
 set -e
 export OPAMYES=1
 
+NCPU="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
 OCAML_VERSION="4.14.0"
 UNITCON_OPAM_SWITCH=unitcon-"$OCAML_VERSION"+flambda
 JUNIT_FILE="deps/junit-4.13.2.jar"
 HAMCREST_FILE="deps/hamcrest-core-1.3.jar"
 MODE="$1"
 
-build_infer () {
+USER_OPAM_SWITCH=no
+
+while [[ $# -gt 1 ]]; do
+  opt_key="$2"
+  case $opt_key in
+    --user-opam-switch)
+      USER_OPAM_SWITCH=yes
+      shift
+      continue
+      ;;
+  esac
+done
+
+function build_infer() {
   git submodule init
   git submodule update
   cd unitcon-infer && ./build-infer.sh java
   cd ..
 }
 
-build_unitcon () {
-  NCPU="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+function setup_opam() {
   UNITCON_OPAM_SWITCH_OPTION="--package=ocaml-variants.${OCAML_VERSION}+options,ocaml-option-flambda"
   opam init --reinit --bare -j $NCPU --no-setup
 
@@ -35,6 +48,12 @@ build_unitcon () {
   fi
 
   eval $(SHELL=bash opam env --switch=$UNITCON_OPAM_SWITCH)
+}
+
+function build_unitcon() {
+  if [ "$USER_OPAM_SWITCH" == "no" ]; then
+    setup_opam
+  fi
   opam pin add git+https://github.com/prosyslab/logger.git
   opam install -j $NCPU dune ocamlgraph ppx_compare z3 core logger ounit bisect_ppx sawja landmarks landmarks-ppx
   opam install yojson.2.2.2
