@@ -5,13 +5,13 @@ module Arg = C.Arg
 module Manpage = C.Manpage
 module Term = C.Term
 
-type command = Build | Analyze | Synthesize
+type command = Build | Analyze | Synthesize | Run
 
 type ir = AST | DUG
 
 type synthesis_mode = Basic | Pruning | Priority | Full
 
-let command = ref Synthesize
+let command = ref Run
 
 let ir = ref DUG
 
@@ -63,6 +63,8 @@ let batch_size = ref 15
 let save_temp = ref false
 
 let ignore = ref []
+
+let ignore_time = ref false
 
 let docs = Manpage.s_common_options
 
@@ -172,9 +174,15 @@ let _ignore =
     & opt (list ~sep:' ' string) []
     & info [ "ignore" ] ~doc:"Ignore methods (sep: \' \')")
 
+let _ignore_time =
+  let doc =
+    "Don't write the time in unit test cases for comparison (default: false)"
+  in
+  Arg.(value & flag & info [ "ignore-time" ] ~doc)
+
 let init _debug _quiet _target_program _out_dir =
-  Filename.mkdir _out_dir 0o755 ~exists_ok:true;
-  Filename.mkdir Filename.(_out_dir / "marshal") 0o755 ~exists_ok:true;
+  Filename.mkdir _out_dir 0o766 ~exists_ok:true;
+  Filename.mkdir Filename.(_out_dir / "marshal") 0o766 ~exists_ok:true;
   Filename.(_out_dir / "log.txt") |> L.from_file ~console_fmt:F.std_formatter;
   if _debug then L.set_level L.DEBUG else L.set_level L.INFO;
   L.info "%s" (String.concat " " (Array.to_list Sys.argv));
@@ -196,7 +204,7 @@ module Build = struct
   let cmd =
     let name = "build" in
     let doc =
-      "build the program and preprocess the information of the program"
+      "Build the program and preprocess the information of the program"
     in
     let man = [ `S Manpage.s_description ] in
     let info = Cmd.info name ~doc ~man in
@@ -227,7 +235,7 @@ end
 
 module Synthesize = struct
   let opt _copt _target _synthesis_mode _ir _time_out _unknown_bug _mock
-      _extension _batch_size _save_temp _ignore =
+      _extension _batch_size _save_temp _ignore _ignore_time =
     command := Synthesize;
     target := _target;
     synthesis_mode := _synthesis_mode;
@@ -239,7 +247,8 @@ module Synthesize = struct
     extension := _extension;
     batch_size := _batch_size;
     save_temp := _save_temp;
-    ignore := _ignore
+    ignore := _ignore;
+    ignore_time := _ignore_time
 
   let cmd =
     let name = "synthesize" in
@@ -249,7 +258,43 @@ module Synthesize = struct
     Cmd.v info
       Term.(
         const opt $ common_opt $ _target $ _synthesis_mode $ _ir $ _time_out
-        $ _unknown_bug $ _mock $ _extension $ _batch_size $ _save_temp $ _ignore)
+        $ _unknown_bug $ _mock $ _extension $ _batch_size $ _save_temp $ _ignore
+        $ _ignore_time)
+end
+
+module Run = struct
+  let opt _copt _target _keep_going _interproc _skip_procedures _java_version
+      _synthesis_mode _ir _time_out _unknown_bug _mock _extension _batch_size
+      _save_temp _ignore _ignore_time =
+    command := Run;
+    target := _target;
+    keep_going := _keep_going;
+    interproc := _interproc;
+    skip_procedures := _skip_procedures;
+    java_version := _java_version;
+    synthesis_mode := _synthesis_mode;
+    ir := _ir;
+    time_out := _time_out;
+    margin := if _time_out / 60 >= 10 then 10 else _time_out / 60;
+    unknown_bug := _unknown_bug;
+    mock := _mock;
+    extension := _extension;
+    batch_size := _batch_size;
+    save_temp := _save_temp;
+    ignore := _ignore;
+    ignore_time := _ignore_time
+
+  let cmd =
+    let name = "run" in
+    let doc = "Run all process of UnitCon" in
+    let man = [ `S Manpage.s_description ] in
+    let info = Cmd.info name ~doc ~man in
+    Cmd.v info
+      Term.(
+        const opt $ common_opt $ _target $ _keep_going $ _interproc
+        $ _skip_procedures $ _java_version $ _synthesis_mode $ _ir $ _time_out
+        $ _unknown_bug $ _mock $ _extension $ _batch_size $ _save_temp $ _ignore
+        $ _ignore_time)
 end
 
 let main_cmd =
@@ -257,7 +302,7 @@ let main_cmd =
   let doc = "A test case synthesizer" in
   let man = [ `S Manpage.s_description ] in
   let info = Cmd.info name ~version:"0.0.1" ~doc ~man in
-  Cmd.group info [ Build.cmd; Analyze.cmd; Synthesize.cmd ]
+  Cmd.group info [ Build.cmd; Analyze.cmd; Synthesize.cmd; Run.cmd ]
 
 let parse () =
   match Cmd.eval_value main_cmd with

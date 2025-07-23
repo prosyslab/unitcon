@@ -432,7 +432,7 @@ let insert_test oc (file_num, tc, time) =
     get_package !Cmdline.extension |> output_string oc;
     (* if package is needed, add package keyword. Cmdline.extension does not contain the class name *)
     get_imports i_set ^ "import org.junit.Test;\n\n" |> output_string oc;
-    output_string oc time;
+    if !Cmdline.ignore_time then () else output_string oc time;
     "public class UnitconTest" ^ string_of_int file_num ^ " {\n"
     |> output_string oc;
     start ^ "try {\n" ^ m_bodies

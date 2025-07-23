@@ -1,0 +1,18 @@
+import example.Checker;
+import org.junit.Test;
+
+public class UnitconTest1 {
+@Test
+public void test() {
+try {
+String string1 = "a";
+int expectedLength2 = 97;
+Checker con_recv0 = new Checker();
+con_recv0.setExpectedLength(expectedLength2);
+con_recv0.checkAlphabet(string1);
+}
+catch(Exception e) {
+e.printStackTrace();
+}
+}
+}

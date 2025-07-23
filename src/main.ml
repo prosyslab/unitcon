@@ -38,6 +38,11 @@ let main () =
   | Cmdline.Analyze -> analyze ()
   | Cmdline.Synthesize ->
       ignore (Unix.alarm (!Cmdline.time_out - !Cmdline.margin));
+      synthesize ()
+  | Cmdline.Run ->
+      build ();
+      analyze ();
+      ignore (Unix.alarm (!Cmdline.time_out - !Cmdline.margin));
       synthesize ());
   finalize t0
 

@@ -1,0 +1,16 @@
+import org.junit.Test;
+
+public class UnitconTest1 {
+@Test
+public void test() {
+try {
+int i2 = 48;
+Dup dup1 = new Dup2(i2, i2, i2, i2);
+Main con_recv0 = new Main();
+con_recv0.checkDup(dup1, i2);
+}
+catch(Exception e) {
+e.printStackTrace();
+}
+}
+}

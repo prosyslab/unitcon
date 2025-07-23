@@ -1,0 +1,15 @@
+import org.junit.Test;
+
+public class UnitconTest1 {
+@Test
+public void test() {
+try {
+int k1 = 18;
+Main con_recv0 = new Main();
+con_recv0.printString(k1);
+}
+catch(Exception e) {
+e.printStackTrace();
+}
+}
+}
