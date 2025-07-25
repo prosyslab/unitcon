@@ -12,7 +12,8 @@
  (alias runtest)
  (deps
   unitcon
-  (source_tree simple))
+  simple/Main.java
+  (source_tree simple/unitcon-properties))
  (targets simple.output)
  (action
   (progn
