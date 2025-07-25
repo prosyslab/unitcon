@@ -7,7 +7,7 @@ module Manpage = C.Manpage
 module Term = C.Term
 
 let build () =
-  L.info "Start building %s" !Cmdline.target_program;
+  Utils.print_and_log "Start building %s" !Cmdline.target_program;
   if !Cmdline.command_maker then CommandMaker.run !Cmdline.target_program
   else if !Cmdline.class_info then ClassInfo.run !Cmdline.out_dir
   else if !Cmdline.constant_info then ConstantInfo.run !Cmdline.out_dir
@@ -17,17 +17,17 @@ let build () =
     ConstantInfo.run !Cmdline.out_dir)
 
 let analyze () =
-  L.info "Start analyzing for %s" !Cmdline.target_program;
+  Utils.print_and_log "Start analyzing for %s" !Cmdline.target_program;
   Analyzer.run !Cmdline.target_program !Cmdline.out_dir
 
 let synthesize () =
-  L.info "Start synthesizing for %s" !Cmdline.target_program;
+  Utils.print_and_log "Start synthesizing for %s" !Cmdline.target_program;
   match !Cmdline.ir with
   | Cmdline.AST -> SynthesizerAST.run !Cmdline.target_program !Cmdline.out_dir
   | Cmdline.DUG -> SynthesizerDUG.run !Cmdline.target_program !Cmdline.out_dir
 
 let finalize t0 =
-  L.info "Unitcon completes: %fs" (Unix.gettimeofday () -. t0);
+  Utils.print_and_log "Unitcon completes: %fs" (Unix.gettimeofday () -. t0);
   L.finalize ()
 
 let main () =

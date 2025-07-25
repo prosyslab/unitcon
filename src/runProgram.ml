@@ -695,13 +695,13 @@ let normal_exit curr_time =
     !num_of_success (curr_time -. !time);
   L.info "First Success Test: %s" !first_success_tc;
   L.info "Last Success Test: %s" !last_success_tc;
+  print_and_log "";
   print_and_log "======================= Result =======================";
-  print_and_log "Location of test: %s"
+  print_and_log "Location of test: %s.java"
     Filename.(!info.test_dir / !first_success_tc);
   if !first_success_tc <> "" then (
-    print_and_log "You can try running the test with the following command";
-    print_and_log "----------------------------------------------";
-    print_and_log "Command: %s"
+    print_and_log "You can reproduce the result with the following command:";
+    print_and_log "%s"
       (modify_execute_command (absolute_execute_cmd !info) !first_success_tc))
   else print_and_log "UnitCon failed to synthesize test...";
   (* clean up useless files and directories *)
