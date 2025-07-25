@@ -2,7 +2,7 @@
  (targets unitcon)
  (deps
   ../../src/main.exe
-  (source_tree ../deps))
+  (source_tree ../../deps))
  (action
   (progn
    (system "cp -r ../../deps ./deps")
