@@ -1,0 +1,20 @@
+import java.lang.Object;
+import org.junit.Test;
+
+public class UnitconTest1 {
+@Test
+public void test() {
+try {
+int i2 = 31;
+double j3 = 0.05;
+Main con_recv0 = new Main();
+Store s1 = new Store();
+Object obj5 = new Object();
+s1.setObj(obj5);
+con_recv0.errorMethod(s1, i2, j3);
+}
+catch(Exception e) {
+e.printStackTrace();
+}
+}
+}

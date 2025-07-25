@@ -64,6 +64,146 @@
  (action
   (diff dup.expected dup.output)))
 
+(rule
+ (alias runtest)
+ (deps
+  unitcon
+  (source_tree setter1))
+ (targets setter1.output)
+ (action
+  (progn
+   (run
+    ./unitcon
+    run
+    setter1
+    --target
+    Main.java:9
+    --batch-size
+    1
+    --out-dir
+    unitcon-setter1
+    --ignore-time)
+   (with-stdout-to
+    %{targets}
+    (run cat unitcon-setter1/unitcon-tests/UnitconTest1.java)))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff setter1.expected setter1.output)))
+
+(rule
+ (alias runtest)
+ (deps
+  unitcon
+  (source_tree setter2))
+ (targets setter2.output)
+ (action
+  (progn
+   (run
+    ./unitcon
+    run
+    setter2
+    --target
+    Main.java:7
+    --batch-size
+    1
+    --out-dir
+    unitcon-setter2
+    --ignore-time)
+   (with-stdout-to
+    %{targets}
+    (run cat unitcon-setter2/unitcon-tests/UnitconTest1.java)))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff setter2.expected setter2.output)))
+
+(rule
+ (alias runtest)
+ (deps
+  unitcon
+  (source_tree getter1))
+ (targets getter1.output)
+ (action
+  (progn
+   (run
+    ./unitcon
+    run
+    getter1
+    --target
+    Main.java:4
+    --batch-size
+    1
+    --out-dir
+    unitcon-getter1
+    --ignore-time)
+   (with-stdout-to
+    %{targets}
+    (run cat unitcon-getter1/unitcon-tests/UnitconTest3.java)))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff getter1.expected getter1.output)))
+
+(rule
+ (alias runtest)
+ (deps
+  unitcon
+  (source_tree getter2))
+ (targets getter2.output)
+ (action
+  (progn
+   (run
+    ./unitcon
+    run
+    getter2
+    --target
+    Main.java:4
+    --batch-size
+    1
+    --out-dir
+    unitcon-getter2
+    --ignore-time)
+   (with-stdout-to
+    %{targets}
+    (run cat unitcon-getter1/unitcon-tests/UnitconTest3.java)))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff getter2.expected getter2.output)))
+
+(rule
+ (alias runtest)
+ (deps
+  unitcon
+  (source_tree getter3))
+ (targets getter3.output)
+ (action
+  (progn
+   (run
+    ./unitcon
+    run
+    getter3
+    --target
+    Main.java:4
+    --batch-size
+    1
+    --out-dir
+    unitcon-getter3
+    --ignore-time)
+   (with-stdout-to
+    %{targets}
+    (run cat unitcon-getter3/unitcon-tests/UnitconTest2.java)))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff getter3.expected getter3.output)))
+
 (test
  (name unit)
  (libraries unitconLib oUnit))

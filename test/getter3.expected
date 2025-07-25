@@ -1,0 +1,17 @@
+import org.junit.Test;
+
+public class UnitconTest2 {
+@Test
+public void test() {
+try {
+String s10 = "root";
+Main con_recv0 = new Main();
+ReturnConstructor con_recv1 = new ReturnConstructor();
+Constructor c1 = con_recv1.getConstructor(s10);
+con_recv0.errorMethod(c1);
+}
+catch(Exception e) {
+e.printStackTrace();
+}
+}
+}
