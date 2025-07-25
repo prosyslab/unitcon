@@ -1,18 +1,22 @@
 (rule
  (targets unitcon)
+ (deps ../src/main.exe)
+ (action
+  (system "ln -sf ../src/main.exe ./unitcon")))
+
+(rule
+ (targets deps)
  (deps
-  ../src/main.exe
   (source_tree ../deps))
  (action
-  (progn
-   (system "cp -r ../deps ./deps")
-   (system "ln -sf ../src/main.exe ./unitcon"))))
+  (system "cp -r ../deps ./deps")))
 
 (rule
  (alias runtest)
  (deps
   unitcon
-  simple/Main.java
+  deps
+  (glob_files simple/*.java)
   (source_tree simple/unitcon-properties))
  (targets simple.output)
  (action
@@ -29,9 +33,7 @@
      --out-dir
      unitcon-simple
      --ignore-time))
-   (with-stdout-to
-    %{targets}
-    (run cat unitcon-simple/unitcon-tests/UnitconTest1.java)))))
+   (run cp unitcon-simple/unitcon-tests/UnitconTest1.java %{targets}))))
 
 (rule
  (alias runtest)
@@ -42,7 +44,9 @@
  (alias runtest)
  (deps
   unitcon
-  (source_tree dup))
+  deps
+  (glob_files dup/*.java)
+  (source_tree dup/unitcon-properties))
  (targets dup.output)
  (action
   (progn
@@ -58,9 +62,7 @@
      --out-dir
      unitcon-dup
      --ignore-time))
-   (with-stdout-to
-    %{targets}
-    (run cat unitcon-dup/unitcon-tests/UnitconTest1.java)))))
+   (run cp unitcon-dup/unitcon-tests/UnitconTest1.java %{targets}))))
 
 (rule
  (alias runtest)
@@ -71,7 +73,9 @@
  (alias runtest)
  (deps
   unitcon
-  (source_tree setter1))
+  deps
+  (glob_files setter1/*.java)
+  (source_tree setter1/unitcon-properties))
  (targets setter1.output)
  (action
   (progn
@@ -87,9 +91,7 @@
      --out-dir
      unitcon-setter1
      --ignore-time))
-   (with-stdout-to
-    %{targets}
-    (run cat unitcon-setter1/unitcon-tests/UnitconTest1.java)))))
+   (run cp unitcon-setter1/unitcon-tests/UnitconTest1.java %{targets}))))
 
 (rule
  (alias runtest)
@@ -100,7 +102,9 @@
  (alias runtest)
  (deps
   unitcon
-  (source_tree setter2))
+  deps
+  (glob_files setter2/*.java)
+  (source_tree setter2/unitcon-properties))
  (targets setter2.output)
  (action
   (progn
@@ -116,9 +120,7 @@
      --out-dir
      unitcon-setter2
      --ignore-time))
-   (with-stdout-to
-    %{targets}
-    (run cat unitcon-setter2/unitcon-tests/UnitconTest1.java)))))
+   (run cp unitcon-setter2/unitcon-tests/UnitconTest1.java %{targets}))))
 
 (rule
  (alias runtest)
@@ -129,7 +131,9 @@
  (alias runtest)
  (deps
   unitcon
-  (source_tree getter1))
+  deps
+  (glob_files getter1/*.java)
+  (source_tree getter1/unitcon-properties))
  (targets getter1.output)
  (action
   (progn
@@ -145,9 +149,7 @@
      --out-dir
      unitcon-getter1
      --ignore-time))
-   (with-stdout-to
-    %{targets}
-    (run cat unitcon-getter1/unitcon-tests/UnitconTest3.java)))))
+   (run cp unitcon-getter1/unitcon-tests/UnitconTest3.java %{targets}))))
 
 (rule
  (alias runtest)
@@ -158,7 +160,9 @@
  (alias runtest)
  (deps
   unitcon
-  (source_tree getter2))
+  deps
+  (glob_files getter2/*.java)
+  (source_tree getter2/unitcon-properties))
  (targets getter2.output)
  (action
   (progn
@@ -174,9 +178,7 @@
      --out-dir
      unitcon-getter2
      --ignore-time))
-   (with-stdout-to
-    %{targets}
-    (run cat unitcon-getter1/unitcon-tests/UnitconTest3.java)))))
+   (run cp unitcon-getter1/unitcon-tests/UnitconTest3.java %{targets}))))
 
 (rule
  (alias runtest)
@@ -187,7 +189,9 @@
  (alias runtest)
  (deps
   unitcon
-  (source_tree getter3))
+  deps
+  (glob_files getter3/*.java)
+  (source_tree getter3/unitcon-properties))
  (targets getter3.output)
  (action
   (progn
@@ -203,14 +207,42 @@
      --out-dir
      unitcon-getter3
      --ignore-time))
-   (with-stdout-to
-    %{targets}
-    (run cat unitcon-getter3/unitcon-tests/UnitconTest2.java)))))
+   (run cp unitcon-getter3/unitcon-tests/UnitconTest2.java %{targets}))))
 
 (rule
  (alias runtest)
  (action
   (diff getter3.expected getter3.output)))
+
+(rule
+ (alias runtest)
+ (deps
+  unitcon
+  deps
+  mvn/pom.xml
+  (source_tree mvn/src)
+  (source_tree mvn/unitcon-properties))
+ (targets mvn.output)
+ (action
+  (progn
+   (ignore-stdout
+    (run
+     ./unitcon
+     run
+     mvn
+     --target
+     src/main/java/example/Checker.java:25
+     --batch-size
+     1
+     --out-dir
+     unitcon-mvn
+     --ignore-time))
+   (run cp unitcon-mvn/unitcon-tests/UnitconTest1.java %{targets}))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff mvn.expected mvn.output)))
 
 (test
  (name unit)
