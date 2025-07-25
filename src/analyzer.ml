@@ -31,7 +31,7 @@ let target_loc target =
     | [ file; line ] when is_int line -> (file, int_of_string line)
     | _ -> failwith ("Invalid target location: " ^ target)
 
-let execute_command run_type command =
+let execute_command ?(quite = false) run_type command =
   match run_type with
   | Capture (infer_bin, out_dir) ->
       let set_out_dir = "--results-dir " ^ out_dir in
@@ -39,10 +39,10 @@ let execute_command run_type command =
       let command =
         infer_bin ^ " capture " ^ " --java-version "
         ^ string_of_int !Cmdline.java_version
-        ^ " " ^ set_out_dir ^ " " ^ no_pb ^ " -- " ^ command
+        ^ " " ^ set_out_dir ^ " " ^ no_pb ^ " > /dev/null 2>&1 -- " ^ command
       in
       L.info "Capturing step!";
-      execute command
+      execute ~quite command
   | Analyze (infer_bin, out_dir, (t_file, t_line)) ->
       let set_out_dir = "--results-dir " ^ out_dir in
       let no_pb = "--no-progress-bar" in
@@ -65,7 +65,7 @@ let execute_command run_type command =
         ^ set_target_line ^ keep_going ^ interproc ^ skip_procedures
       in
       L.info "Analyzing step!";
-      execute command
+      execute ~quite command
   | Summary (infer_bin, out_dir) ->
       let set_out_dir = "--results-dir " ^ out_dir in
       let command =
@@ -73,13 +73,13 @@ let execute_command run_type command =
         ^ " --procedures --procedures-summary-json"
       in
       L.info "Extracting step!";
-      execute command
-  | Normal -> execute command
+      execute ~quite command
+  | Normal -> execute ~quite command
 
 let simple_compiler program_dir run_type command =
   let current_dir = Unix.getcwd () in
   Sys.chdir program_dir;
-  let ret = execute_command run_type command in
+  let ret = execute_command ~quite:true run_type command in
   Sys.chdir current_dir;
   if ret <> 0 then
     failwith ("Failed to " ^ run_type_to_str run_type ^ " Step ...")

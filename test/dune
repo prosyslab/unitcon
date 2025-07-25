@@ -44,17 +44,18 @@
  (targets dup.output)
  (action
   (progn
-   (run
-    ./unitcon
-    run
-    dup
-    --target
-    Main.java:4
-    --batch-size
-    1
-    --out-dir
-    unitcon-dup
-    --ignore-time)
+   (ignore-stdout
+    (run
+     ./unitcon
+     run
+     dup
+     --target
+     Main.java:4
+     --batch-size
+     1
+     --out-dir
+     unitcon-dup
+     --ignore-time))
    (with-stdout-to
     %{targets}
     (run cat unitcon-dup/unitcon-tests/UnitconTest1.java)))))
@@ -72,17 +73,18 @@
  (targets setter1.output)
  (action
   (progn
-   (run
-    ./unitcon
-    run
-    setter1
-    --target
-    Main.java:9
-    --batch-size
-    1
-    --out-dir
-    unitcon-setter1
-    --ignore-time)
+   (ignore-stdout
+    (run
+     ./unitcon
+     run
+     setter1
+     --target
+     Main.java:9
+     --batch-size
+     1
+     --out-dir
+     unitcon-setter1
+     --ignore-time))
    (with-stdout-to
     %{targets}
     (run cat unitcon-setter1/unitcon-tests/UnitconTest1.java)))))
@@ -128,17 +130,18 @@
  (targets getter1.output)
  (action
   (progn
-   (run
-    ./unitcon
-    run
-    getter1
-    --target
-    Main.java:4
-    --batch-size
-    1
-    --out-dir
-    unitcon-getter1
-    --ignore-time)
+   (ignore-stdout
+    (run
+     ./unitcon
+     run
+     getter1
+     --target
+     Main.java:4
+     --batch-size
+     1
+     --out-dir
+     unitcon-getter1
+     --ignore-time))
    (with-stdout-to
     %{targets}
     (run cat unitcon-getter1/unitcon-tests/UnitconTest3.java)))))
@@ -156,17 +159,18 @@
  (targets getter2.output)
  (action
   (progn
-   (run
-    ./unitcon
-    run
-    getter2
-    --target
-    Main.java:4
-    --batch-size
-    1
-    --out-dir
-    unitcon-getter2
-    --ignore-time)
+   (ignore-stdout
+    (run
+     ./unitcon
+     run
+     getter2
+     --target
+     Main.java:4
+     --batch-size
+     1
+     --out-dir
+     unitcon-getter2
+     --ignore-time))
    (with-stdout-to
     %{targets}
     (run cat unitcon-getter1/unitcon-tests/UnitconTest3.java)))))
@@ -184,17 +188,18 @@
  (targets getter3.output)
  (action
   (progn
-   (run
-    ./unitcon
-    run
-    getter3
-    --target
-    Main.java:4
-    --batch-size
-    1
-    --out-dir
-    unitcon-getter3
-    --ignore-time)
+   (ignore-stdout
+    (run
+     ./unitcon
+     run
+     getter3
+     --target
+     Main.java:4
+     --batch-size
+     1
+     --out-dir
+     unitcon-getter3
+     --ignore-time))
    (with-stdout-to
     %{targets}
     (run cat unitcon-getter3/unitcon-tests/UnitconTest2.java)))))

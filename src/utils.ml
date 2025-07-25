@@ -14,8 +14,9 @@ let read_all_string in_chan =
   in
   loop ()
 
-let execute command =
+let execute ?(quite = false) command =
   L.info "Current working directory: %s" (Unix.getcwd ());
+  let command = if quite then command ^ " > /dev/null 2>&1" else command in
   L.info "Running command: %s" command;
   Sys.command command
 
