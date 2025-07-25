@@ -16,17 +16,18 @@
  (targets example.output)
  (action
   (progn
-   (run
-    ./unitcon
-    run
-    example
-    --target
-    src/main/java/example/Checker.java:25
-    --batch-size
-    1
-    --out-dir
-    unitcon-example
-    --ignore-time)
+   (ignore-stdout
+    (run
+     ./unitcon
+     run
+     example
+     --target
+     src/main/java/example/Checker.java:25
+     --batch-size
+     1
+     --out-dir
+     unitcon-example
+     --ignore-time))
    (with-stdout-to
     %{targets}
     (run cat unitcon-example/unitcon-tests/UnitconTest1.java)))))

@@ -16,17 +16,18 @@
  (targets simple.output)
  (action
   (progn
-   (run
-    ./unitcon
-    run
-    simple
-    --target
-    Main.java:11
-    --batch-size
-    1
-    --out-dir
-    unitcon-simple
-    --ignore-time)
+   (ignore-stdout
+    (run
+     ./unitcon
+     run
+     simple
+     --target
+     Main.java:11
+     --batch-size
+     1
+     --out-dir
+     unitcon-simple
+     --ignore-time))
    (with-stdout-to
     %{targets}
     (run cat unitcon-simple/unitcon-tests/UnitconTest1.java)))))
@@ -102,17 +103,18 @@
  (targets setter2.output)
  (action
   (progn
-   (run
-    ./unitcon
-    run
-    setter2
-    --target
-    Main.java:7
-    --batch-size
-    1
-    --out-dir
-    unitcon-setter2
-    --ignore-time)
+   (ignore-stdout
+    (run
+     ./unitcon
+     run
+     setter2
+     --target
+     Main.java:7
+     --batch-size
+     1
+     --out-dir
+     unitcon-setter2
+     --ignore-time))
    (with-stdout-to
     %{targets}
     (run cat unitcon-setter2/unitcon-tests/UnitconTest1.java)))))
