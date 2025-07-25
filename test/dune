@@ -32,7 +32,8 @@
      1
      --out-dir
      unitcon-simple
-     --ignore-time))
+     --ignore-time
+     --ignore-stdlib))
    (run cp unitcon-simple/unitcon-tests/UnitconTest1.java %{targets}))))
 
 (rule
@@ -61,7 +62,8 @@
      1
      --out-dir
      unitcon-dup
-     --ignore-time))
+     --ignore-time
+     --ignore-stdlib))
    (run cp unitcon-dup/unitcon-tests/UnitconTest1.java %{targets}))))
 
 (rule
@@ -90,7 +92,8 @@
      1
      --out-dir
      unitcon-setter1
-     --ignore-time))
+     --ignore-time
+     --ignore-stdlib))
    (run cp unitcon-setter1/unitcon-tests/UnitconTest1.java %{targets}))))
 
 (rule
@@ -119,7 +122,8 @@
      1
      --out-dir
      unitcon-setter2
-     --ignore-time))
+     --ignore-time
+     --ignore-stdlib))
    (run cp unitcon-setter2/unitcon-tests/UnitconTest1.java %{targets}))))
 
 (rule
@@ -148,7 +152,8 @@
      1
      --out-dir
      unitcon-getter1
-     --ignore-time))
+     --ignore-time
+     --ignore-stdlib))
    (run cp unitcon-getter1/unitcon-tests/UnitconTest3.java %{targets}))))
 
 (rule
@@ -177,7 +182,8 @@
      1
      --out-dir
      unitcon-getter2
-     --ignore-time))
+     --ignore-time
+     --ignore-stdlib))
    (run cp unitcon-getter1/unitcon-tests/UnitconTest3.java %{targets}))))
 
 (rule
@@ -206,7 +212,8 @@
      1
      --out-dir
      unitcon-getter3
-     --ignore-time))
+     --ignore-time
+     --ignore-stdlib))
    (run cp unitcon-getter3/unitcon-tests/UnitconTest2.java %{targets}))))
 
 (rule
@@ -236,7 +243,8 @@
      1
      --out-dir
      unitcon-mvn
-     --ignore-time))
+     --ignore-time
+     --ignore-stdlib))
    (run cp unitcon-mvn/unitcon-tests/UnitconTest1.java %{targets}))))
 
 (rule

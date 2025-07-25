@@ -66,6 +66,8 @@ let ignore = ref []
 
 let ignore_time = ref false
 
+let ignore_stdlib = ref false
+
 let docs = Manpage.s_common_options
 
 let _debug =
@@ -180,6 +182,10 @@ let _ignore_time =
   in
   Arg.(value & flag & info [ "ignore-time" ] ~doc)
 
+let _ignore_stdlib =
+  let doc = "Do not use the standard library (default: false)" in
+  Arg.(value & flag & info [ "ignore-stdlib" ] ~doc)
+
 let init _debug _quiet _target_program _out_dir =
   Filename.mkdir _out_dir 0o766 ~exists_ok:true;
   Filename.mkdir Filename.(_out_dir / "marshal") 0o766 ~exists_ok:true;
@@ -235,7 +241,7 @@ end
 
 module Synthesize = struct
   let opt _copt _target _synthesis_mode _ir _time_out _unknown_bug _mock
-      _extension _batch_size _save_temp _ignore _ignore_time =
+      _extension _batch_size _save_temp _ignore _ignore_time _ignore_stdlib =
     command := Synthesize;
     target := _target;
     synthesis_mode := _synthesis_mode;
@@ -248,7 +254,8 @@ module Synthesize = struct
     batch_size := _batch_size;
     save_temp := _save_temp;
     ignore := _ignore;
-    ignore_time := _ignore_time
+    ignore_time := _ignore_time;
+    ignore_stdlib := _ignore_stdlib
 
   let cmd =
     let name = "synthesize" in
@@ -259,13 +266,13 @@ module Synthesize = struct
       Term.(
         const opt $ common_opt $ _target $ _synthesis_mode $ _ir $ _time_out
         $ _unknown_bug $ _mock $ _extension $ _batch_size $ _save_temp $ _ignore
-        $ _ignore_time)
+        $ _ignore_time $ _ignore_stdlib)
 end
 
 module Run = struct
   let opt _copt _target _keep_going _interproc _skip_procedures _java_version
       _synthesis_mode _ir _time_out _unknown_bug _mock _extension _batch_size
-      _save_temp _ignore _ignore_time =
+      _save_temp _ignore _ignore_time _ignore_stdlib =
     command := Run;
     target := _target;
     keep_going := _keep_going;
@@ -282,7 +289,8 @@ module Run = struct
     batch_size := _batch_size;
     save_temp := _save_temp;
     ignore := _ignore;
-    ignore_time := _ignore_time
+    ignore_time := _ignore_time;
+    ignore_stdlib := _ignore_stdlib
 
   let cmd =
     let name = "run" in
@@ -294,7 +302,7 @@ module Run = struct
         const opt $ common_opt $ _target $ _keep_going $ _interproc
         $ _skip_procedures $ _java_version $ _synthesis_mode $ _ir $ _time_out
         $ _unknown_bug $ _mock $ _extension $ _batch_size $ _save_temp $ _ignore
-        $ _ignore_time)
+        $ _ignore_time $ _ignore_stdlib)
 end
 
 let main_cmd =

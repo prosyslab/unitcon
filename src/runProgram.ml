@@ -130,7 +130,8 @@ let parse_class_info filename summary_map method_map =
 
 let parse_stdlib_info (ct_info, i_info) smap mmap =
   let stdlib_file = Filename.(Utils.unitcon_path / "deps/class-info.json") in
-  if not (Sys.file_exists stdlib_file) then ((ct_info, i_info), smap, mmap)
+  if !Cmdline.ignore_stdlib then ((ct_info, i_info), smap, mmap)
+  else if not (Sys.file_exists stdlib_file) then ((ct_info, i_info), smap, mmap)
   else
     Json.from_file stdlib_file
     |> Inheritance.of_stdlib_json ct_info i_info smap mmap
